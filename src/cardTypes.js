@@ -9,6 +9,11 @@
  * - Cloze: Grammar feature with blank
  */
 
+import {
+  assertValidCardIntent,
+  buildLearningIntent,
+} from './cardContent/learningDesign.js';
+
 // Task labels for each card type
 export const CARD_LABELS = {
   comprehension: '🎧 Listen',
@@ -16,6 +21,7 @@ export const CARD_LABELS = {
   production: '🗣 Say in German',
   pattern: '🧩 Pattern',
   cloze: '✳ Grammar',
+  sound: '👂 Sound',
 };
 
 export function normalizeRussianHint(text = '') {
@@ -43,6 +49,9 @@ export function generateComprehensionCard(data, sourceId, reason = 'default') {
     label: CARD_LABELS.comprehension,
     sourceId,
     reason,
+    intent: buildLearningIntent('comprehension', {
+      answer: data.german,
+    }),
     front: {
       audio: true,
       context: data.context || null,
@@ -72,6 +81,9 @@ export function generateDialogueCard(data, response, sourceId, reason = 'convers
     label: CARD_LABELS.dialogue,
     sourceId,
     reason,
+    intent: buildLearningIntent('dialogue', {
+      answer: response.german,
+    }),
     front: {
       audio: true,
       prompt: 'Ответь по-немецки',
@@ -100,6 +112,9 @@ export function generateProductionCard(data, situation, sourceId, reason = 'high
     label: CARD_LABELS.production,
     sourceId,
     reason,
+    intent: buildLearningIntent('production', {
+      answer: data.german,
+    }),
     front: {
       russian: data.russian,
       situation: normalizeRussianHint(situation),
@@ -129,6 +144,10 @@ export function generatePatternCard(data, patternFamily, examples, sourceId) {
     label: CARD_LABELS.pattern,
     sourceId,
     reason: patternFamily,
+    intent: buildLearningIntent('pattern', {
+      answer: data.german,
+      patternFamily,
+    }),
     front: {
       pattern: patternFamily,
       baseExample: data.german,
@@ -163,6 +182,10 @@ export function generateClozeCard(data, clozeTarget, clozeReason, sourceId) {
     label: CARD_LABELS.cloze,
     sourceId,
     reason: clozeReason,
+    intent: buildLearningIntent('cloze', {
+      answer: clozeTarget.word,
+      patternFamily: clozeTarget.category,
+    }),
     front: {
       sentence: blankedSentence,
       russian: data.russian,
@@ -172,6 +195,30 @@ export function generateClozeCard(data, clozeTarget, clozeReason, sourceId) {
       german: data.german,
       answer: clozeTarget.word,
       explanation: clozeReason,
+    },
+  };
+}
+
+/**
+ * Generate a sound-focused card for listening and pronunciation mapping.
+ */
+export function generateSoundCard(data, targetSound, sourceId, reason = 'sound mapping') {
+  return {
+    type: 'sound',
+    label: CARD_LABELS.sound,
+    sourceId,
+    reason,
+    intent: buildLearningIntent('sound', {
+      answer: targetSound || data.german,
+    }),
+    front: {
+      audio: true,
+      prompt: 'Hear the sound before reading',
+    },
+    back: {
+      german: data.german,
+      ipa: data.ipa,
+      targetSound,
     },
   };
 }
@@ -228,13 +275,42 @@ export function generateCards(data, selectedCards, sourceId) {
           sourceId
         ));
         break;
+
+      case 'sound':
+        cards.push(generateSoundCard(
+          data,
+          selected.data?.targetSound || null,
+          sourceId,
+          selected.reason
+        ));
+        break;
     }
   }
 
-  return cards;
+  return applySiblingStages(cards);
 }
 
-// Helper to escape regex special characters
+/**
+ * Adds sibling stage metadata and validates every generated card intent.
+ */
+function applySiblingStages(cards = []) {
+  return cards.map((card, index) => {
+    const staged = {
+      ...card,
+      siblingStage: {
+        index,
+        total: cards.length,
+        dayOffset: index,
+      },
+    };
+    assertValidCardIntent(staged);
+    return staged;
+  });
+}
+
+/**
+ * Escapes regex special characters.
+ */
 function escapeRegex(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

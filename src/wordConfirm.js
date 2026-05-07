@@ -9,6 +9,7 @@ import { pathToFileURL } from 'url';
 import { config } from './lib/config.js';
 import { escapeHtml } from './cardContent/html.js';
 import { normalizeGermanForCompare } from './cardContent/german.js';
+import { formatLexicalTypeLabel } from './cardContent/lexicalTypes.js';
 import { formatPluralLabel, getPrimaryExampleSentence, getWordLemma } from './cardContent/wordLexical.js';
 import { askReviewFeedback, playAudio } from './confirm.js';
 import { cachePreviewImages, manualLocalSelection, manualRemoteSelection } from './lib/wordSources.js';
@@ -40,10 +41,7 @@ function formatImageSelectionLabel(imageChoice) {
 }
 
 function formatLexicalType(wordData) {
-  const lexicalType = wordData.lexicalType || 'noun';
-  if (lexicalType === 'adjective') return 'adj';
-  if (lexicalType === 'adverb') return 'adv';
-  return 'noun';
+  return formatLexicalTypeLabel(wordData.lexicalType || 'noun');
 }
 
 function buildWordSummaryLine(wordData, translation, cefrLevel = null) {

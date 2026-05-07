@@ -4,6 +4,7 @@ import { formatDialogueCard } from './sentence/dialogue.js';
 import { formatPatternCard } from './sentence/pattern.js';
 import { buildProductionFront, formatProductionCard } from './sentence/production.js';
 import { buildSentenceNoteFields, buildSentenceNoteFront } from './sentence/sentenceNote.js';
+import { formatSoundCard } from './sentence/sound.js';
 
 export { buildProductionFront, buildSentenceNoteFields, buildSentenceNoteFront };
 
@@ -19,6 +20,8 @@ export function formatCardForAnki(card, audioFilename) {
       return formatPatternCard(card);
     case 'cloze':
       return formatClozeCard(card);
+    case 'sound':
+      return formatSoundCard(card, audioFilename);
     default:
       return { Front: '', Back: '' };
   }

@@ -1,14 +1,13 @@
 import { escapeHtml } from '../../cardContent/html.js';
-import { smallText } from '../shared/components.js';
 
 export function formatClozeCard(card) {
-  let front = `${escapeHtml(card.front.sentence)}<br>${smallText(card.front.russian)}`;
+  let front = escapeHtml(card.front.sentence);
   if (card.front.hint) {
     front += `<br><small><i>${escapeHtml(`(${card.front.hint})`)}</i></small>`;
   }
 
   return {
     Front: front,
-    Back: `<b>${escapeHtml(card.back.answer)}</b><br><br>${escapeHtml(card.back.german)}`,
+    Back: `<b>${escapeHtml(card.back.answer)}</b><br><br>${escapeHtml(card.back.german)}${card.front.russian ? `<br><small>${escapeHtml(card.front.russian)}</small>` : ''}`,
   };
 }

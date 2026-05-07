@@ -9,6 +9,8 @@ import { toTagSlug } from './cardContent/german.js';
 import { applyChosenSentenceGloss } from './cardContent/wordLexical.js';
 import { buildVerbMorphologyTags, resolveVerbMorphology } from './cardContent/verbMorphology.js';
 import { buildStrongVerbPackagePlan, buildVerbFormContext } from './cardContent/verbPackage.js';
+import { buildContrastHint, buildContrastTags } from './cardContent/interference.js';
+import { buildLearningIntentTags, buildSiblingStageTags } from './cardContent/learningDesign.js';
 import { formatPlainWord, formatPronunciationField } from './templates/shared/components.js';
 import { buildWordExtraInfo } from './templates/word/extraInfo.js';
 import { buildVerbFormClozeExtra, buildVerbFormClozeText } from './templates/verb/cloze.js';
@@ -315,6 +317,11 @@ async function createDictionaryFormNote(verbData, selectedMeaning, focusForm, de
       'mode-verb-dictionary',
       `lemma-${toTagSlug(verbData.infinitive)}`,
       `form-${toTagSlug(note.front)}`,
+      ...buildLearningIntentTags({
+        id: 'verb-dictionary-form',
+        trains: ['lemma-recall'],
+      }),
+      ...buildContrastTags(verbData.infinitive),
     ],
   });
 }
@@ -322,7 +329,7 @@ async function createDictionaryFormNote(verbData, selectedMeaning, focusForm, de
 /**
  * Creates the base lexical note for a strong/irregular verb package.
  */
-async function createVerbLemmaNote(verbData, selectedMeaning, audioFilename, deck, morphology) {
+async function createVerbLemmaNote(verbData, selectedMeaning, audioFilename, deck, morphology, stageTags = []) {
   return createBasicNote({
     front: verbData.infinitive,
     back: [
@@ -334,6 +341,12 @@ async function createVerbLemmaNote(verbData, selectedMeaning, audioFilename, dec
       'yt2anki',
       'mode-verb-lemma',
       `lemma-${toTagSlug(verbData.infinitive)}`,
+      ...buildLearningIntentTags({
+        id: 'verb-lemma',
+        trains: ['meaning-recall', 'sound-map'],
+      }),
+      ...stageTags,
+      ...buildContrastTags(verbData.infinitive),
       ...buildVerbMorphologyTags(morphology),
     ],
   });
@@ -342,10 +355,11 @@ async function createVerbLemmaNote(verbData, selectedMeaning, audioFilename, dec
 /**
  * Creates production and recognition notes for one selected verb form.
  */
-async function createVerbKeyFormNotes(verbData, selectedMeaning, morphology, formSpec, deck) {
+async function createVerbKeyFormNotes(verbData, selectedMeaning, morphology, formSpec, deck, productionStageTags = [], recognitionStageTags = []) {
   const sharedTags = [
     'yt2anki',
     `lemma-${toTagSlug(verbData.infinitive)}`,
+    ...buildContrastTags(verbData.infinitive),
     ...buildVerbMorphologyTags(morphology, formSpec),
   ];
 
@@ -356,6 +370,11 @@ async function createVerbKeyFormNotes(verbData, selectedMeaning, morphology, for
     tags: [
       ...sharedTags,
       'mode-verb-keyform-production',
+      ...buildLearningIntentTags({
+        id: 'verb-form-production',
+        trains: ['morphology-recall', 'active-production'],
+      }),
+      ...productionStageTags,
     ],
   });
 
@@ -366,6 +385,11 @@ async function createVerbKeyFormNotes(verbData, selectedMeaning, morphology, for
     tags: [
       ...sharedTags,
       'mode-verb-keyform-recognition',
+      ...buildLearningIntentTags({
+        id: 'verb-form-recognition',
+        trains: ['morphology-recognition'],
+      }),
+      ...recognitionStageTags,
     ],
   });
 }
@@ -373,7 +397,7 @@ async function createVerbKeyFormNotes(verbData, selectedMeaning, morphology, for
 /**
  * Creates one sentence card for a selected verb form.
  */
-async function createVerbFormSentenceNote(verbData, sentence, audioFilename, morphology, deck) {
+async function createVerbFormSentenceNote(verbData, sentence, audioFilename, morphology, deck, stageTags = []) {
   const formSpec = sentence.formSpec;
   return createNote({
     german: sentence.german,
@@ -392,6 +416,12 @@ async function createVerbFormSentenceNote(verbData, sentence, audioFilename, mor
     tags: [
       'mode-verb-sentence',
       `lemma-${toTagSlug(verbData.infinitive)}`,
+      ...buildLearningIntentTags({
+        id: 'verb-form-in-context',
+        trains: ['sound-map', 'morphology-in-context'],
+      }),
+      ...stageTags,
+      ...buildContrastTags(verbData.infinitive),
       ...buildVerbMorphologyTags(morphology, formSpec),
     ],
   });
@@ -400,7 +430,7 @@ async function createVerbFormSentenceNote(verbData, sentence, audioFilename, mor
 /**
  * Creates one Cloze note that asks for the selected finite verb form in context.
  */
-async function createVerbFormClozeNote(verbData, sentence, morphology, deck) {
+async function createVerbFormClozeNote(verbData, sentence, morphology, deck, stageTags = []) {
   const formSpec = sentence.formSpec;
   const text = buildVerbFormClozeText(sentence, formSpec, verbData.infinitive);
   if (!text.includes('{{c1::')) {
@@ -415,6 +445,12 @@ async function createVerbFormClozeNote(verbData, sentence, morphology, deck) {
       'yt2anki',
       'mode-verb-form-cloze',
       `lemma-${toTagSlug(verbData.infinitive)}`,
+      ...buildLearningIntentTags({
+        id: 'verb-form-cloze',
+        trains: ['morphology-recall', 'grammar-in-context'],
+      }),
+      ...stageTags,
+      ...buildContrastTags(verbData.infinitive),
       ...buildVerbMorphologyTags(morphology, formSpec),
     ],
   });
@@ -748,11 +784,13 @@ async function finalizePictureVerb(prepared, options, spinner) {
     meaning: selectedMeaning.russian,
     lemma: verbData.infinitive,
     lexicalType: 'verb',
+    contrast: buildContrastHint(verbData.infinitive),
   };
   const extraInfoField = buildWordExtraInfo({
     meaning: selectedMeaning.russian,
     exampleSentence: verbData.exampleSentences?.[0]?.german || null,
     dictionaryForm: buildDictionaryFormContext(verbData),
+    contrast: buildContrastHint(verbData.infinitive),
     metadata,
   });
 
@@ -797,6 +835,13 @@ async function finalizePictureVerb(prepared, options, spinner) {
     lexicalType: 'verb',
     deck: options.deck,
     modelName: DEFAULT_WORD_NOTE_TYPE,
+    extraTags: [
+      ...buildLearningIntentTags({
+        id: 'verb-meaning',
+        trains: ['meaning-recall', 'sound-map'],
+      }),
+      ...buildContrastTags(verbData.infinitive),
+    ],
   });
 
   if (confirmation.addDictionaryForm) {
@@ -894,6 +939,11 @@ async function finalizeSentenceVerb(prepared, options, spinner) {
       'mode-verb-sentence',
       `lemma-${toTagSlug(verbData.infinitive)}`,
       `verb-form-${toTagSlug(chosenSentence.focusForm || verbData.displayForm || verbData.infinitive)}`,
+      ...buildLearningIntentTags({
+        id: 'verb-sentence-context',
+        trains: ['sound-map', 'morphology-in-context'],
+      }),
+      ...buildContrastTags(verbData.infinitive),
     ],
   });
 
@@ -954,18 +1004,48 @@ async function finalizeStrongVerbPackage(prepared, options, spinner) {
 
   spinner.start('Creating verb morphology package...');
   const lemmaAudioFilename = await storeAudio(audio.audioPath);
-  await createVerbLemmaNote(verbData, selectedMeaning, lemmaAudioFilename, options.deck, morphology);
+  const totalPackageNotes = 1 + (packagePlan.forms.length * 2) + (packagePlan.sentences.length * 2);
+  let packageNoteIndex = 0;
+  await createVerbLemmaNote(
+    verbData,
+    selectedMeaning,
+    lemmaAudioFilename,
+    options.deck,
+    morphology,
+    buildSiblingStageTags(packageNoteIndex++, totalPackageNotes)
+  );
 
   for (const formSpec of packagePlan.forms) {
-    await createVerbKeyFormNotes(verbData, selectedMeaning, morphology, formSpec, options.deck);
+    await createVerbKeyFormNotes(
+      verbData,
+      selectedMeaning,
+      morphology,
+      formSpec,
+      options.deck,
+      buildSiblingStageTags(packageNoteIndex++, totalPackageNotes),
+      buildSiblingStageTags(packageNoteIndex++, totalPackageNotes)
+    );
   }
 
   for (let index = 0; index < packagePlan.sentences.length; index++) {
     const sentence = packagePlan.sentences[index];
     const sentenceAudio = sentenceAudios[index];
     const audioFilename = await storeAudio(sentenceAudio.audioPath);
-    await createVerbFormSentenceNote(verbData, sentence, audioFilename, morphology, options.deck);
-    await createVerbFormClozeNote(verbData, sentence, morphology, options.deck);
+    await createVerbFormSentenceNote(
+      verbData,
+      sentence,
+      audioFilename,
+      morphology,
+      options.deck,
+      buildSiblingStageTags(packageNoteIndex++, totalPackageNotes)
+    );
+    await createVerbFormClozeNote(
+      verbData,
+      sentence,
+      morphology,
+      options.deck,
+      buildSiblingStageTags(packageNoteIndex++, totalPackageNotes)
+    );
   }
 
   spinner.succeed(`Created verb morphology package for ${verbData.infinitive}`);

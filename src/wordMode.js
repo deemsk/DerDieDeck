@@ -7,8 +7,14 @@ import { estimateLexicalCEFR } from './cardContent/cefr.js';
 import { getWordFrequencyInfo } from './lib/wordFrequency.js';
 import { getArticleNormalizationWarning, normalizeGermanForCompare, toTagSlug } from './cardContent/german.js';
 import { applyChosenSentenceGloss, formatPluralLabel, getPrimaryExampleSentence, getWordLemma } from './cardContent/wordLexical.js';
+import { formatLexicalTypeLabel, isFunctionLexicalType } from './cardContent/lexicalTypes.js';
+import { validateLexicalClozeSentence } from './cardContent/lexicalClozeValidation.js';
+import { buildContrastHint, buildContrastTags } from './cardContent/interference.js';
+import { buildLearningIntentTags } from './cardContent/learningDesign.js';
+import { getFunctionWordPatternFamily } from './cardContent/functionWordPatterns.js';
 import { formatPronunciationField } from './templates/shared/components.js';
 import { buildWordExtraInfo } from './templates/word/extraInfo.js';
+import { buildLexicalClozeExtra, buildLexicalClozeText } from './templates/word/lexicalCloze.js';
 import { formatWordDisplay, isNounWord } from './templates/word/pictureWord.js';
 import { buildWordSentenceFrontFooter } from './templates/word/sentenceWord.js';
 import { canProceedWithWeakWordCard, enrichWord, hasStructuredWordAnalysis } from './wordEnricher.js';
@@ -16,9 +22,11 @@ import { chooseImage, chooseMeaning, chooseWordSentence, confirmSentenceWordSele
 import { resolveImageAsset, resolveWordPronunciation, searchWordImages } from './lib/wordSources.js';
 import {
   checkConnection,
+  createClozeNote,
   createNote,
   createPictureWordNote,
   ensureDeck,
+  findLexicalClozeDuplicates,
   findSimilarCards,
   findSentenceWordDuplicates,
   findWordDuplicates,
@@ -33,10 +41,7 @@ const DEFAULT_WORD_NOTE_TYPE = config.wordNoteType || '2. Picture Words';
 const SENTENCE_NOUN_PHRASE_PATTERN = /\b(der|die|das|den|dem|des|ein|eine|einen|einem|einer|eines|kein|keine|keinen|keinem|keiner|keines|mein(?:e|en|em|er|es)?|dein(?:e|en|em|er|es)?|sein(?:e|en|em|er|es)?|ihr(?:e|en|em|er|es)?|unser(?:e|en|em|er|es)?|euer(?:e|en|em|er|es)?)\s+([A-ZÄÖÜ][\p{L}-]+)/gu;
 
 function formatLexicalPreviewType(wordData = {}) {
-  const lexicalType = wordData.lexicalType || 'noun';
-  if (lexicalType === 'adjective') return 'adj';
-  if (lexicalType === 'adverb') return 'adv';
-  return 'noun';
+  return formatLexicalTypeLabel(wordData.lexicalType || 'noun');
 }
 
 function formatWordPreviewSummary(chalk, wordData, translation, cefrLevel = null) {
@@ -66,12 +71,17 @@ function buildWordMetadata(wordData, selectedMeaning, frequencyInfo) {
     lemma: frequencyInfo.lemma,
     lexicalType: wordData.lexicalType || 'noun',
     gender: wordData.gender || null,
+    contrast: buildContrastHint(wordData.canonical || wordData.lemma),
   };
 }
 
 function resolveWordRoute(wordData = {}) {
   if (isNounWord(wordData)) {
     return 'picture-word';
+  }
+
+  if (wordData.recommendedMode === 'cloze-form' || isFunctionLexicalType(wordData.lexicalType)) {
+    return 'cloze-form';
   }
 
   if (wordData.lexicalType === 'adverb') {
@@ -376,9 +386,17 @@ async function prepareWord(rawInput, options, spinner) {
     return { rejected: true };
   }
 
+  if (route === 'cloze-form' && !structuredAnalysis) {
+    spinner.warn(`Rejected: ${wordData.rejectionReason || 'not enough lexical analysis for cloze cards'}`);
+    return { rejected: true };
+  }
+
   if (route === 'sentence-form' && (!wordData.shouldCreateWordCard || !wordData.isImageable)) {
     const warning = wordData.rejectionReason || wordData.imageabilityReason || 'better learned in context';
     console.log(chalk.yellow(`Using sentence-form: ${warning}.`));
+  } else if (route === 'cloze-form') {
+    const reason = wordData.imageabilityReason || 'function word learned in context';
+    console.log(chalk.yellow(`Using cloze-form: ${reason}.`));
   } else if (recoverableWeakCandidate && (!wordData.shouldCreateWordCard || !wordData.isImageable)) {
     const warning = wordData.rejectionReason || wordData.imageabilityReason || 'weak picture candidate';
     console.log(chalk.yellow(`Weak picture candidate: ${warning}. Continuing anyway.`));
@@ -446,6 +464,64 @@ async function prepareWord(rawInput, options, spinner) {
       duplicateInfo,
       imageChoice: null,
       audio,
+    };
+  }
+
+  if (route === 'cloze-form') {
+    const chosenSentence = await chooseWordSentence(wordData, options.sentence);
+    if (!chosenSentence) {
+      console.log(chalk.yellow('Skipped: no cloze sentence selected'));
+      return { rejected: true };
+    }
+
+    if (!validateLexicalClozeSentence(chosenSentence, wordData)) {
+      console.log(chalk.yellow(`Skipped: "${chosenSentence.german}" does not use ${wordData.canonical} as a valid ${wordData.lexicalType}`));
+      return { rejected: true };
+    }
+
+    const selectedMeaning = await chooseMeaning(wordData, options.meaning, {
+      manualPrompt: `Enter the intended meaning/gloss for "${wordData.canonical}" (not an example sentence), or press Enter to skip: `,
+      editPrompt: 'Enter the intended meaning/gloss (not an example sentence): ',
+      allowBlank: true,
+    });
+
+    let duplicateInfo = { exactMatches: [], headwordMatches: [] };
+    spinner.start('Checking duplicates...');
+    try {
+      duplicateInfo = await findLexicalClozeDuplicates({
+        canonical: wordData.canonical,
+        meaning: selectedMeaning.russian,
+        lexicalType: wordData.lexicalType,
+      });
+    } catch (err) {
+      if (!options.dryRun) {
+        throw err;
+      }
+      console.log(chalk.dim(`Duplicate check skipped in dry run: ${err.message}`));
+    } finally {
+      spinner.stop();
+    }
+
+    if (duplicateInfo.exactMatches.length > 0) {
+      console.log(chalk.yellow(`Exact duplicate exists for ${wordData.canonical} (${selectedMeaning.russian})`));
+      return { rejected: true };
+    }
+
+    spinner.start('Preparing cloze sentence...');
+    const sentenceData = applyChosenSentenceGloss(
+      await enrich(chosenSentence.german),
+      chosenSentence
+    );
+    spinner.succeed(`Cloze sentence ready: ${sentenceData.german}`);
+
+    return {
+      route,
+      wordData,
+      frequencyInfo,
+      selectedMeaning,
+      duplicateInfo,
+      chosenSentence,
+      sentenceData,
     };
   }
 
@@ -549,13 +625,14 @@ async function finalizePictureWord(prepared, options, spinner) {
 
   const pluralLabel = isNounWord(wordData) ? formatPluralLabel(wordData) : null;
   const nounExample = isNounWord(wordData) ? getPrimaryExampleSentence(wordData) : { german: null, russian: null };
+  const contrastHint = wordData.opposite || buildContrastHint(wordData.canonical || getWordLemma(wordData));
   const extraInfoField = buildWordExtraInfo({
     meaning: selectedMeaning.russian,
     plainMeaning: isNounWord(wordData),
     plural: pluralLabel,
     exampleSentence: nounExample.german || wordData.anchorPhrase,
     exampleSentenceTranslation: nounExample.russian,
-    contrast: wordData.opposite,
+    contrast: contrastHint,
     metadata,
   });
 
@@ -613,10 +690,78 @@ async function finalizePictureWord(prepared, options, spinner) {
     theme: options.theme || null,
     deck: options.deck,
     modelName: DEFAULT_WORD_NOTE_TYPE,
+    extraTags: [
+      ...buildLearningIntentTags({
+        id: isNounWord(wordData) ? 'image-to-meaning' : 'lexical-meaning',
+        trains: ['meaning-recall', 'sound-map'],
+      }),
+      ...buildContrastTags(wordData.canonical || getWordLemma(wordData)),
+    ],
   });
   spinner.succeed(`Created ${wordData.canonical}`);
 
   console.log(chalk.green(`✓ Added ${wordData.canonical} (${selectedMeaning.russian})`));
+  return true;
+}
+
+/**
+ * Creates a Cloze note for function words that are best learned from context.
+ */
+async function finalizeLexicalCloze(prepared, options, spinner) {
+  const { wordData, selectedMeaning, chosenSentence, sentenceData } = prepared;
+  const text = buildLexicalClozeText({
+    ...sentenceData,
+    focusForm: chosenSentence?.focusForm,
+  }, wordData);
+  if (!text.includes('{{c1::')) {
+    console.log(chalk.yellow(`Skipped: "${sentenceData.german}" does not contain ${wordData.canonical}`));
+    return false;
+  }
+
+  const extra = buildLexicalClozeExtra({
+    wordData,
+    sentenceData,
+    selectedMeaning,
+  });
+
+  if (options.dryRun) {
+    console.log();
+    console.log(chalk.bold('Lexical cloze preview'));
+    console.log(`  ${formatWordPreviewSummary(chalk, wordData, selectedMeaning?.russian || null, sentenceData.cefr?.level || null)}`);
+    console.log(`  ${chalk.cyan('Cloze:')} ${text}`);
+    if (sentenceData.ipa) {
+      console.log(`  ${chalk.cyan('IPA:')} ${sentenceData.ipa}`);
+    }
+    if (sentenceData.russian) {
+      console.log(`  ${chalk.cyan('Russian:')} ${sentenceData.russian}`);
+    }
+    console.log(chalk.yellow('\n⚡ DRY RUN: Lexical cloze previewed'));
+    return true;
+  }
+
+  spinner.start('Creating lexical cloze note...');
+  await createClozeNote({
+    text,
+    extra,
+    deck: options.deck,
+    tags: [
+      'yt2anki',
+      'mode-lexical-cloze',
+      `word-${wordData.lexicalType || 'word'}`,
+      `lemma-${toTagSlug(getWordLemma(wordData))}`,
+      `canonical-${toTagSlug(wordData.canonical)}`,
+      ...buildLearningIntentTags({
+        id: 'lexical-cloze',
+        trains: ['function-word-recall', 'grammar-pattern'],
+        patternFamily: getFunctionWordPatternFamily(wordData),
+      }),
+      ...buildContrastTags(wordData.canonical || getWordLemma(wordData)),
+      ...(chosenSentence?.focusForm ? [`word-form-${toTagSlug(chosenSentence.focusForm)}`] : []),
+      ...(sentenceData.cefr?.level ? [`cefr-${sentenceData.cefr.level.toLowerCase()}`] : []),
+    ],
+  });
+  spinner.succeed(`Created cloze card for ${wordData.canonical}`);
+  console.log(chalk.green(`✓ Added lexical cloze for ${wordData.canonical}`));
   return true;
 }
 
@@ -711,6 +856,11 @@ async function finalizeSentenceWord(prepared, options, spinner) {
       `word-${wordData.lexicalType || 'adjective'}`,
       `lemma-${toTagSlug(getWordLemma(wordData))}`,
       `canonical-${toTagSlug(wordData.canonical)}`,
+      ...buildLearningIntentTags({
+        id: 'sentence-context',
+        trains: ['meaning-in-context', 'sound-map'],
+      }),
+      ...buildContrastTags(wordData.canonical || getWordLemma(wordData)),
       ...(chosenSentence?.focusForm ? [`word-form-${toTagSlug(chosenSentence.focusForm)}`] : []),
     ],
   });
@@ -735,6 +885,9 @@ export async function runWordWorkflow(rawInput, options = {}) {
     if (prepared.route === 'sentence-form') {
       return finalizeSentenceWord(prepared, options, spinner);
     }
+    if (prepared.route === 'cloze-form') {
+      return finalizeLexicalCloze(prepared, options, spinner);
+    }
     return finalizePictureWord(prepared, options, spinner);
   } catch (err) {
     spinner.fail(err.message);
@@ -757,7 +910,7 @@ export async function processWordBatch(options = {}) {
       output: process.stdout,
     });
 
-    console.log(chalk.bold('\nEnter German nouns, adjectives, or adverbs (one per line, empty line to finish):\n'));
+    console.log(chalk.bold('\nEnter German lexical items (one per line, empty line to finish):\n'));
 
     const words = await new Promise((resolve) => {
       const entries = [];

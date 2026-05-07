@@ -1,4 +1,4 @@
-import { createNote, ensureDerDieDeckStyling, findSimilarCards, findVerbSentenceDuplicates, migrateAdjectiveSentenceFronts, migrateProductionCardFronts, migrateSentenceVerbReverseCards, migrateSentenceWordReverseCards, migrateVerbSentenceFronts } from "../src/anki.js"
+import { createNote, createNotes, ensureDerDieDeckStyling, findSimilarCards, findVerbSentenceDuplicates, migrateAdjectiveSentenceFronts, migrateProductionCardFronts, migrateSentenceVerbReverseCards, migrateSentenceWordReverseCards, migrateVerbSentenceFronts } from "../src/anki.js"
 
 describe("anki helpers", () => {
   const originalFetch = global.fetch
@@ -91,6 +91,54 @@ describe("anki helpers", () => {
     expect(note.fields.Front).toContain("gross.jpg")
     expect(note.fields.Front).toContain("yt2anki-word-contrast")
     expect(note.fields.Front).not.toContain("Context:")
+  })
+
+  test("createNotes tags learning intent and sibling staging", async () => {
+    const requests = []
+
+    global.fetch = async (_url, options) => {
+      requests.push(JSON.parse(options.body))
+      return {
+        async json() {
+          return { result: requests.length, error: null }
+        },
+      }
+    }
+
+    await createNotes([
+      {
+        type: "comprehension",
+        intent: {
+          id: "sound-meaning",
+          trains: ["sound-map"],
+        },
+        siblingStage: { index: 0, total: 2 },
+        front: { audio: true },
+        back: { german: "Hallo.", ipa: "[haˈloː]", russian: "Привет." },
+      },
+      {
+        type: "production",
+        intent: {
+          id: "meaning-to-german",
+          trains: ["active-production"],
+        },
+        siblingStage: { index: 1, total: 2 },
+        front: { russian: "Привет." },
+        back: { german: "Hallo.", ipa: "[haˈloː]", audio: true },
+      },
+    ], "hallo.mp3", { sourceId: "src-1" })
+
+    expect(requests).toHaveLength(2)
+    expect(requests[0].params.note.tags).toEqual(expect.arrayContaining([
+      "intent-sound-meaning",
+      "trains-sound-map",
+      "sibling-stage-day-0",
+    ]))
+    expect(requests[1].params.note.tags).toEqual(expect.arrayContaining([
+      "intent-meaning-to-german",
+      "trains-active-production",
+      "sibling-stage-day-1",
+    ]))
   })
 
   test("ensureDerDieDeckStyling installs shared CSS on configured note types", async () => {

@@ -233,6 +233,19 @@ describe("word enricher retries", () => {
     ).toBe(true)
   })
 
+  test("keeps structured function-word analyses usable for cloze-form fallback", () => {
+    expect(
+      hasStructuredWordAnalysis({
+        lexicalType: "conjunction",
+        canonical: "aber",
+        lemma: "aber",
+        recommendedMode: "cloze-form",
+        meanings: [{ russian: "но", english: "but" }],
+        exampleSentences: [{ german: "Ich bin müde, aber ich komme.", russian: "Я устал, но я приду." }],
+      })
+    ).toBe(true)
+  })
+
   test("treats bare adjective normalization as enough to continue into fallback mode", () => {
     expect(
       hasStructuredWordAnalysis({

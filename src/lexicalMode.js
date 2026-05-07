@@ -3,6 +3,7 @@ import ora from 'ora';
 import chalk from 'chalk';
 import { enrichWord, hasStructuredWordAnalysis } from './wordEnricher.js';
 import { enrichVerb, hasStructuredVerbAnalysis } from './verbEnricher.js';
+import { getCuratedFunctionWordAnalysis } from './cardContent/functionWords.js';
 import { shouldCheckLexicalCorrection, suggestLexicalCorrections } from './lexicalCorrection.js';
 import { runWordWorkflow } from './wordMode.js';
 import { runVerbWorkflow } from './verbMode.js';
@@ -278,6 +279,21 @@ async function resolveLexicalInputCorrection(rawInput, { force = false } = {}) {
 async function detectLexicalRoute(rawInput, options = {}) {
   const spinner = ora('Detecting lexical type...');
   spinner.start();
+  const curatedFunctionWord = getCuratedFunctionWordAnalysis(rawInput);
+  if (curatedFunctionWord) {
+    spinner.succeed('Using word workflow');
+    return {
+      route: 'word',
+      analysisResult: curatedFunctionWord,
+      wordPlausible: true,
+      verbPlausible: false,
+      wordAnalysis: curatedFunctionWord,
+      verbAnalysis: null,
+      reason: 'curated-function-word',
+      input: rawInput,
+    };
+  }
+
   const [wordAnalysis, verbAnalysis] = await Promise.all([
     enrichWord(rawInput),
     enrichVerb(rawInput),
@@ -385,7 +401,7 @@ export async function processLexicalCommand(inputParts, options = {}) {
       return;
     }
 
-    console.log(chalk.bold('\nEnter German nouns, adjectives, adverbs, or verbs (one per line, empty line to finish):\n'));
+    console.log(chalk.bold('\nEnter German lexical items or verbs (one per line, empty line to finish):\n'));
 
     const rl = createInterface({
       input: process.stdin,

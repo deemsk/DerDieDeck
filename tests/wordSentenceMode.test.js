@@ -25,9 +25,11 @@ const mockCheckConnection = jest.fn(async () => true)
 const mockGetNoteTypes = jest.fn(async () => ["2. Picture Words", "Basic (optional reversed card)"])
 const mockEnsureDeck = jest.fn(async () => {})
 const mockFindSentenceWordDuplicates = jest.fn(async () => ({ exactMatches: [], headwordMatches: [] }))
+const mockFindLexicalClozeDuplicates = jest.fn(async () => ({ exactMatches: [], headwordMatches: [] }))
 const mockFindSimilarCards = jest.fn(async () => [])
 const mockStoreAudio = jest.fn(async () => "word-sentence.mp3")
 const mockStoreMedia = jest.fn(async () => "word-sentence-image.jpg")
+const mockCreateClozeNote = jest.fn(async () => 456)
 const mockCreateNote = jest.fn(async () => 123)
 const mockGenerateSpeech = jest.fn(async () => {})
 const mockResolveImageAsset = jest.fn(async () => "/tmp/gross.jpg")
@@ -65,9 +67,11 @@ jest.unstable_mockModule("../src/wordConfirm.js", () => ({
 
 jest.unstable_mockModule("../src/anki.js", () => ({
   checkConnection: mockCheckConnection,
+  createClozeNote: mockCreateClozeNote,
   createNote: mockCreateNote,
   createPictureWordNote: jest.fn(),
   ensureDeck: mockEnsureDeck,
+  findLexicalClozeDuplicates: mockFindLexicalClozeDuplicates,
   findSimilarCards: mockFindSimilarCards,
   findSentenceWordDuplicates: mockFindSentenceWordDuplicates,
   findWordDuplicates: jest.fn(),
@@ -111,6 +115,8 @@ describe("word mode sentence flow", () => {
       russian: "большой",
       english: "big",
     })
+    mockFindLexicalClozeDuplicates.mockResolvedValue({ exactMatches: [], headwordMatches: [] })
+    mockCreateClozeNote.mockResolvedValue(456)
     mockChooseWordSentence.mockResolvedValue({
       german: "Das Haus ist groß.",
       russian: "Дом большой.",
@@ -219,6 +225,194 @@ describe("word mode sentence flow", () => {
     expect(payload.metadata.lexicalType).toBe("adverb")
     expect(payload.tags).toContain("word-adverb")
     expect(payload.frontFooterHtml).toBe(null)
+  })
+
+  test("runWordWorkflow creates cloze notes for lexical function words", async () => {
+    mockChooseMeaning.mockResolvedValue({
+      russian: "но",
+      english: "but",
+    })
+    mockChooseWordSentence.mockResolvedValue({
+      german: "Ich bin müde, aber ich komme.",
+      russian: "Я устал, но я приду.",
+      focusForm: "aber",
+    })
+    mockEnrich.mockResolvedValue({
+      german: "Ich bin müde, aber ich komme.",
+      ipa: "[ɪç bɪn ˈmyːdə ˈaːbɐ ɪç ˈkɔmə]",
+      russian: "Я устал, но я приду.",
+      cefr: { level: "A1" },
+    })
+
+    const added = await runWordWorkflow("aber", {
+      analysisResult: {
+        shouldCreateWordCard: true,
+        isImageable: false,
+        imageabilityReason: "function word; learned through sentence context",
+        recommendedMode: "cloze-form",
+        lexicalType: "conjunction",
+        canonical: "aber",
+        lemma: "aber",
+        clozeHint: "contrast connector",
+        meanings: [{ russian: "но", english: "but" }],
+        exampleSentences: [{ german: "Ich bin müde, aber ich komme.", russian: "Я устал, но я приду.", focusForm: "aber" }],
+      },
+      meaning: "но",
+      sentence: "Ich bin müde, aber ich komme.",
+      deck: "German::Test",
+      skipHeader: true,
+    })
+
+    expect(added).toBe(true)
+    expect(mockCreateNote).not.toHaveBeenCalled()
+    expect(mockSearchWordImages).not.toHaveBeenCalled()
+    expect(mockCreateClozeNote).toHaveBeenCalledWith(expect.objectContaining({
+      text: "Ich bin müde, {{c1::aber::contrast connector}} ich komme.",
+      deck: "German::Test",
+      tags: expect.arrayContaining([
+        "mode-lexical-cloze",
+        "word-conjunction",
+        "lemma-aber",
+        "canonical-aber",
+        "intent-lexical-cloze",
+        "trains-function-word-recall",
+        "trains-grammar-pattern",
+      ]),
+    }))
+    expect(mockCreateClozeNote.mock.calls[0][0].extra).toContain("yt2anki-word")
+    expect(mockCreateClozeNote.mock.calls[0][0].extra).toContain("Pattern:")
+    expect(mockCreateClozeNote.mock.calls[0][0].extra).toContain("Я устал, но я приду.")
+  })
+
+  test("runWordWorkflow creates cloze notes for non-curated LLM-classified connectors", async () => {
+    mockChooseMeaning.mockResolvedValue({
+      russian: "чтобы",
+      english: "so that",
+    })
+    mockChooseWordSentence.mockResolvedValue({
+      german: "Ich lerne, damit ich die Prüfung bestehe.",
+      russian: "Я учусь, чтобы сдать экзамен.",
+      focusForm: "damit",
+    })
+    mockEnrich.mockResolvedValue({
+      german: "Ich lerne, damit ich die Prüfung bestehe.",
+      ipa: "[ɪç ˈlɛʁnə daˈmɪt ɪç diː ˈpʁyːfʊŋ bəˈʃteːə]",
+      russian: "Я учусь, чтобы сдать экзамен.",
+      cefr: { level: "A2" },
+    })
+
+    const added = await runWordWorkflow("damit", {
+      analysisResult: {
+        shouldCreateWordCard: true,
+        isImageable: false,
+        imageabilityReason: "connector learned through sentence context",
+        recommendedMode: "cloze-form",
+        lexicalType: "subjunction",
+        canonical: "damit",
+        lemma: "damit",
+        clozeHint: "so that + subordinate clause",
+        meanings: [{ russian: "чтобы", english: "so that" }],
+        exampleSentences: [{ german: "Ich lerne, damit ich die Prüfung bestehe.", russian: "Я учусь, чтобы сдать экзамен.", focusForm: "damit" }],
+      },
+      meaning: "чтобы",
+      sentence: "Ich lerne, damit ich die Prüfung bestehe.",
+      deck: "German::Test",
+      skipHeader: true,
+    })
+
+    expect(added).toBe(true)
+    expect(mockCreateClozeNote).toHaveBeenCalledWith(expect.objectContaining({
+      text: "Ich lerne, {{c1::damit::so that + subordinate clause}} ich die Prüfung bestehe.",
+      tags: expect.arrayContaining([
+        "mode-lexical-cloze",
+        "word-subjunction",
+        "lemma-damit",
+      ]),
+    }))
+  })
+
+  test("runWordWorkflow honors cloze-form for non-curated adverbs", async () => {
+    mockChooseMeaning.mockResolvedValue({
+      russian: "никогда",
+      english: "never",
+    })
+    mockChooseWordSentence.mockResolvedValue({
+      german: "Ich trinke nie Kaffee.",
+      russian: "Я никогда не пью кофе.",
+      focusForm: "nie",
+    })
+    mockEnrich.mockResolvedValue({
+      german: "Ich trinke nie Kaffee.",
+      ipa: "[ɪç ˈtʁɪŋkə niː ˈkafeː]",
+      russian: "Я никогда не пью кофе.",
+      cefr: { level: "A1" },
+    })
+
+    const added = await runWordWorkflow("nie", {
+      analysisResult: {
+        shouldCreateWordCard: true,
+        isImageable: false,
+        imageabilityReason: "frequency adverb learned through sentence context",
+        recommendedMode: "cloze-form",
+        lexicalType: "adverb",
+        canonical: "nie",
+        lemma: "nie",
+        clozeHint: "frequency adverb",
+        meanings: [{ russian: "никогда", english: "never" }],
+        exampleSentences: [{ german: "Ich trinke nie Kaffee.", russian: "Я никогда не пью кофе.", focusForm: "nie" }],
+      },
+      meaning: "никогда",
+      sentence: "Ich trinke nie Kaffee.",
+      deck: "German::Test",
+      skipHeader: true,
+    })
+
+    expect(added).toBe(true)
+    expect(mockCreateClozeNote).toHaveBeenCalledWith(expect.objectContaining({
+      text: "Ich trinke {{c1::nie::frequency adverb}} Kaffee.",
+      tags: expect.arrayContaining([
+        "mode-lexical-cloze",
+        "word-adverb",
+        "lemma-nie",
+      ]),
+    }))
+  })
+
+  test("runWordWorkflow skips lexical cloze duplicates before enriching the sentence", async () => {
+    mockChooseMeaning.mockResolvedValue({
+      russian: "ничего",
+      english: "nothing",
+    })
+    mockChooseWordSentence.mockResolvedValue({
+      german: "Ich sehe nichts.",
+      russian: "Я ничего не вижу.",
+      focusForm: "nichts",
+    })
+    mockFindLexicalClozeDuplicates.mockResolvedValue({
+      exactMatches: [{ noteId: 99, canonical: "nichts", meaning: "ничего" }],
+      headwordMatches: [],
+    })
+
+    const added = await runWordWorkflow("nichts", {
+      analysisResult: {
+        shouldCreateWordCard: true,
+        isImageable: false,
+        recommendedMode: "cloze-form",
+        lexicalType: "pronoun",
+        canonical: "nichts",
+        lemma: "nichts",
+        meanings: [{ russian: "ничего", english: "nothing" }],
+        exampleSentences: [{ german: "Ich sehe nichts.", russian: "Я ничего не вижу.", focusForm: "nichts" }],
+      },
+      meaning: "ничего",
+      sentence: "Ich sehe nichts.",
+      deck: "German::Test",
+      skipHeader: true,
+    })
+
+    expect(added).toBe(false)
+    expect(mockEnrich).not.toHaveBeenCalled()
+    expect(mockCreateClozeNote).not.toHaveBeenCalled()
   })
 
   test("sentence review waits to search images until final approval", async () => {

@@ -48,9 +48,11 @@ jest.unstable_mockModule("../src/wordConfirm.js", () => ({
 
 jest.unstable_mockModule("../src/anki.js", () => ({
   checkConnection: mockCheckConnection,
+  createClozeNote: jest.fn(),
   createNote: jest.fn(),
   createPictureWordNote: mockCreatePictureWordNote,
   ensureDeck: mockEnsureDeck,
+  findLexicalClozeDuplicates: jest.fn(),
   findSimilarCards: jest.fn(),
   findSentenceWordDuplicates: jest.fn(),
   findWordDuplicates: mockFindWordDuplicates,

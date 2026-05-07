@@ -176,7 +176,7 @@ program
 program
   .command('words')
   .description('Create Fluent Forever lexical notes; pass one item or enter a mixed batch interactively')
-  .argument('[item...]', 'German noun, adjective, adverb, or verb; quote multi-word inputs if needed')
+  .argument('[item...]', 'German lexical item or verb; quote multi-word inputs if needed')
   .option('-m, --meaning <gloss>', 'Preferred meaning/gloss')
   .option('-s, --sentence <text>', 'Preferred example sentence for single-item sentence-based notes')
   .option('-n, --dry-run', 'Preview lexical notes without creating them')

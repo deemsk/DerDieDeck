@@ -12,6 +12,7 @@ import { buildClozeNoteFields } from './templates/grammar/clozeNote.js';
 import { escapeHtml, stripHtml } from './cardContent/html.js';
 import { normalizeGermanForCompare, toTagSlug } from './cardContent/german.js';
 import { extractCanonicalWord, extractWordLexicalType, extractWordMeaning, parseWordMetadataComment } from './cardContent/wordMetadata.js';
+import { buildLearningIntentTags, buildSiblingStageTags } from './cardContent/learningDesign.js';
 import { buildWordSentenceContrastFooter, formatIpaHtml, personalConnectionCue } from './templates/shared/components.js';
 import { hasCurrentDerDieDeckStyles, mergeDerDieDeckStyles } from './templates/shared/styles.js';
 import { parseGrammarMetadataComment } from './grammar/utils.js';
@@ -173,7 +174,12 @@ export async function createNotes(cards, audioFilename, options = {}) {
     const fields = formatCardForAnki(card, audioFilename);
 
     // Build tags
-    const tags = ['yt2anki', `card-${card.type}`];
+    const tags = [
+      'yt2anki',
+      `card-${card.type}`,
+      ...buildLearningIntentTags(card.intent),
+      ...buildSiblingStageTags(card.siblingStage?.index || 0, card.siblingStage?.total || cards.length),
+    ];
     if (cefr?.level) {
       tags.push(`cefr-${cefr.level.toLowerCase()}`);
     }
@@ -223,6 +229,7 @@ export async function createPictureWordNote({
   theme = null,
   deck = null,
   modelName = config.wordNoteType || PICTURE_WORD_MODEL,
+  extraTags = [],
 }) {
   const deckName = deck || config.ankiDeck;
   const fields = buildPictureWordFields({
@@ -232,16 +239,19 @@ export async function createPictureWordNote({
     pronunciationField,
     extraInfoField,
   });
-  const tags = buildPictureWordTags({
-    canonical,
-    gender,
-    frequencyBand,
-    lemma,
-    imageSource,
-    audioSource,
-    lexicalType,
-    theme,
-  });
+  const tags = [
+    ...buildPictureWordTags({
+      canonical,
+      gender,
+      frequencyBand,
+      lemma,
+      imageSource,
+      audioSource,
+      lexicalType,
+      theme,
+    }),
+    ...extraTags,
+  ];
 
   return ankiConnect('addNote', {
     note: {
@@ -503,15 +513,13 @@ function extractSearchableText(note) {
 }
 
 function extractWordMetadataFromSentenceNote(note) {
-  const front = note.fields?.Front?.value || '';
-  const back = note.fields?.Back?.value || '';
-  const embedded = parseWordMetadataComment(`${front} ${back}`);
+  const embedded = parseWordMetadataComment(extractAllFieldValues(note));
   if (embedded) {
     return embedded;
   }
 
   const tags = Array.isArray(note.tags) ? note.tags : [];
-  const lexicalTag = tags.find((tag) => /^word-(noun|adjective|adverb|verb)$/i.test(tag)) || null;
+  const lexicalTag = tags.find((tag) => /^word-(noun|adjective|adverb|verb|preposition|conjunction|subjunction|pronoun|determiner|particle|numeral|interjection)$/i.test(tag)) || null;
   const canonicalTag = tags.find((tag) => /^canonical-/i.test(tag)) || null;
   const lemmaTag = tags.find((tag) => /^lemma-/i.test(tag)) || null;
 
@@ -780,6 +788,52 @@ export async function findSentenceWordDuplicates({
 }) {
   const noteIds = await ankiConnect('findNotes', {
     query: 'tag:mode-word-sentence',
+  });
+
+  if (noteIds.length === 0) {
+    return { exactMatches: [], headwordMatches: [] };
+  }
+
+  const notes = await ankiConnect('notesInfo', { notes: noteIds });
+  const normalizedCanonical = normalizeGerman(canonical);
+  const normalizedMeaning = meaning ? normalizeGerman(meaning) : null;
+  const exactMatches = [];
+  const headwordMatches = [];
+
+  for (const note of notes) {
+    const metadata = extractWordMetadataFromSentenceNote(note);
+    if (!metadata?.canonical) continue;
+    if (normalizeGerman(metadata.canonical) !== normalizedCanonical) continue;
+    if (lexicalType && metadata.lexicalType && metadata.lexicalType !== lexicalType) continue;
+
+    const duplicate = {
+      noteId: note.noteId,
+      canonical: metadata.canonical,
+      lexicalType: metadata.lexicalType,
+      meaning: metadata.meaning || null,
+    };
+
+    if (normalizedMeaning && duplicate.meaning && normalizeGerman(duplicate.meaning) === normalizedMeaning) {
+      exactMatches.push(duplicate);
+      continue;
+    }
+
+    headwordMatches.push(duplicate);
+  }
+
+  return { exactMatches, headwordMatches };
+}
+
+/**
+ * Find existing lexical Cloze notes for a canonical function word.
+ */
+export async function findLexicalClozeDuplicates({
+  canonical,
+  meaning = null,
+  lexicalType = null,
+}) {
+  const noteIds = await ankiConnect('findNotes', {
+    query: `tag:mode-lexical-cloze tag:lemma-${toTagSlug(canonical)}`,
   });
 
   if (noteIds.length === 0) {

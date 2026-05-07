@@ -53,6 +53,31 @@ describe("lexical mode router", () => {
     )
   })
 
+  test("chooseLexicalRouteFromAnalyses routes function words through the word workflow", () => {
+    const result = chooseLexicalRouteFromAnalyses(
+      {
+        lexicalType: "conjunction",
+        canonical: "aber",
+        lemma: "aber",
+        shouldCreateWordCard: true,
+        recommendedMode: "cloze-form",
+        meanings: [{ russian: "но" }],
+      },
+      {
+        infinitive: "",
+        shouldCreateVerbCard: false,
+        meanings: [],
+      }
+    )
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        route: "word",
+        reason: "word-only",
+      })
+    )
+  })
+
   test("chooseLexicalRouteFromAnalyses routes verb inputs automatically", () => {
     const result = chooseLexicalRouteFromAnalyses(
       {

@@ -1,4 +1,4 @@
-import { createPictureWordNote, findSentenceWordDuplicates, findWordDuplicates, migratePictureWordExtraInfo, migratePictureWordPersonalConnections } from "../src/anki.js"
+import { createPictureWordNote, findLexicalClozeDuplicates, findSentenceWordDuplicates, findWordDuplicates, migratePictureWordExtraInfo, migratePictureWordPersonalConnections } from "../src/anki.js"
 import { buildWordExtraInfo } from "../src/templates/word/extraInfo.js"
 
 describe("word note helpers", () => {
@@ -366,6 +366,59 @@ describe("word note helpers", () => {
         noteId: 31,
         canonical: "sofort",
         lexicalType: "adverb",
+      }),
+    ])
+  })
+
+  test("findLexicalClozeDuplicates reads hidden metadata from Cloze fields", async () => {
+    global.fetch = async (_url, options) => {
+      const body = JSON.parse(options.body)
+
+      if (body.action === "findNotes") {
+        expect(body.params.query).toBe("tag:mode-lexical-cloze tag:lemma-aber")
+        return {
+          async json() {
+            return { result: [41], error: null }
+          },
+        }
+      }
+
+      if (body.action === "notesInfo") {
+        return {
+          async json() {
+            return {
+              result: [
+                {
+                  noteId: 41,
+                  fields: {
+                    Text: { value: "Ich bin müde, {{c1::aber::contrast connector}} ich komme." },
+                    "Back Extra": {
+                      value: 'Я устал, но я приду.<!-- yt2anki-word:%7B%22canonical%22%3A%22aber%22%2C%22meaning%22%3A%22%D0%BD%D0%BE%22%2C%22lexicalType%22%3A%22conjunction%22%7D -->',
+                    },
+                  },
+                  tags: ["yt2anki", "mode-lexical-cloze", "word-conjunction", "lemma-aber"],
+                },
+              ],
+              error: null,
+            }
+          },
+        }
+      }
+
+      throw new Error(`Unexpected action: ${body.action}`)
+    }
+
+    const duplicates = await findLexicalClozeDuplicates({
+      canonical: "aber",
+      meaning: "но",
+      lexicalType: "conjunction",
+    })
+
+    expect(duplicates.exactMatches).toEqual([
+      expect.objectContaining({
+        noteId: 41,
+        canonical: "aber",
+        meaning: "но",
       }),
     ])
   })

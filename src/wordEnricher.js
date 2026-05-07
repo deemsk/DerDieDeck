@@ -3,6 +3,8 @@ import { config, CONFIG_PATH_DISPLAY } from './lib/config.js';
 import { getWordFrequencyInfo } from './lib/wordFrequency.js';
 import { normalizeGermanForCompare } from './cardContent/german.js';
 import { normalizeWordIpa } from './cardContent/ipa.js';
+import { getCuratedFunctionWordAnalysis } from './cardContent/functionWords.js';
+import { isFunctionLexicalType, normalizeLexicalType } from './cardContent/lexicalTypes.js';
 import { resolveSecret } from './lib/secrets.js';
 
 let openai = null;
@@ -183,17 +185,18 @@ function buildWordSystemPrompt({ forceVisibleNoun = false, forceBareLexicalCandi
 
   return `You are a German language expert and Fluent Forever consultant.
 
-Analyze a single German input for noun, adjective, or adverb flashcards in word mode.
+Analyze a single German lexical input for flashcards in word mode.
 
 Rules:
-- Accept nouns, adjectives, and common adverbs that can work as strong learner cards in word mode.
-- Reject verbs, modal particles, and unrelated full phrases that are not suitable lexical cards.
+- Accept nouns, adjectives, common adverbs, prepositions, conjunctions, subjunctions, pronouns, determiners, particles, numerals, and interjections that can work as strong learner cards.
+- Reject verbs and unrelated full phrases that are not suitable lexical cards.
 - Do not reject a noun solely because it is colloquial if it is common everyday family vocabulary.
 - Everyday kinship nouns like "Opa", "Oma", "Mama", and "Papa" are valid learner cards and should be accepted.
-- Always set lexicalType to noun, adjective, or adverb.
+- Always set lexicalType to noun, adjective, adverb, preposition, conjunction, subjunction, pronoun, determiner, particle, numeral, or interjection.
 - Always normalize accepted nouns into canonical singular form with article.
 - Always normalize accepted adjectives into the positive/base form with no article.
 - Always normalize accepted adverbs into the base lexical form with no article.
+- Always normalize function words into the base lexical form with no article.
 - Visible natural things and scene nouns such as "der Himmel", "die Sonne", "der Mond", "die Wolke", "der Stern", "der Regenbogen", "das Meer", and "der Wald" are imageable and should usually be accepted.
 - Basic everyday nouns that can be represented with stable visual proxies or familiar situations should also usually be accepted.
 - Examples: "der Preis" with a price tag, "der Termin" with a calendar entry, "das Datum" with a marked date, "der Montag" with a calendar page, "die Frage" with a person asking or a question mark.
@@ -222,11 +225,16 @@ Rules:
 - Example: for "groß", prefer "großer Hund neben kleinem Hund" or "großes Auto" over just "groß".
 - Use recommendedMode="picture-word" for nouns and for strongly imageable adjectives.
 - Use recommendedMode="sentence-form" for adjectives that are common and useful but not learnable from a single stable image.
-- Use recommendedMode="sentence-form" for accepted adverbs.
+- Use recommendedMode="sentence-form" for accepted adverbs when the sentence itself is the learning target.
+- Use recommendedMode="cloze-form" for function words where the learner should recall the word from sentence context.
+- Use recommendedMode="cloze-form" for short scope, polarity, frequency, or connector-like adverbs when recalling the exact lexical item from context is the learning target.
 - Common adverbs like "sofort", "oft", "später", "früher", "dort", "hier", "oben", "unten", "zusammen", and "allein" should usually be accepted when they can be taught through short concrete example sentences.
-- Modal particles and discourse fillers such as "doch", "ja", "mal", and "halt" should usually be rejected unless the input has a clear stable lexical adverb reading.
+- Function words such as "aber", "wenn", "nichts", "mit", "für", "weil", "dass", "doch", "ja", "mal", and "halt" should usually be accepted only when they can be taught with clear cloze sentences.
 - For sentence-form adjectives, provide exactly 3 short natural example sentences in German with Russian translations.
 - For sentence-form adverbs, provide exactly 3 short natural example sentences in German with Russian translations.
+- For cloze-form function words or cloze-form adverbs, provide exactly 3 short natural example sentences in German with Russian translations and focusForm set to the target word surface form in each sentence.
+- For cloze-form items, provide clozeHint as a short English hint such as "subordinate connector", "negative pronoun", or "frequency adverb".
+- For cloze-form items, provide patternHint when word order or case behavior matters.
 - For each sentence-form adjective example sentence, include imageBrief with a strong German searchQuery, 3-6 German queryVariants, a short sceneSummary, a focusRole that says what visually conveys the adjective, 2-5 mustShow constraints, 2-5 avoid constraints, and a concise imagePrompt.
 - For each sentence-form adverb example sentence, include imageBrief with a strong German searchQuery, 3-6 German queryVariants, a short sceneSummary, a focusRole that says what visually conveys the adverb in the scene or timing, 2-5 mustShow constraints, 2-5 avoid constraints, and a concise imagePrompt.
 - searchQuery and queryVariants should emphasize the noun or scene carrying the adjective, not the adjective in isolation.
@@ -238,8 +246,9 @@ Rules:
 - IPA must use Standard German conventions: use ʁ/ɐ̯ for German r where appropriate, never ɾ; place stress before the stressed syllable.
 - For nouns, return the plain plural noun without article. If the noun usually has no plural, set noPlural=true.
 - For adjectives and adverbs, set article, gender, plural to null and noPlural to false.
+- For function words, set article, gender, plural, anchorPhrase, and opposite to null.
 - For adverbs, set anchorPhrase and opposite to null.
-- If you reject an identifiable noun, adjective, or adverb, still return best-effort values for canonical, lemma, meanings, and imageability fields.
+- If you reject an identifiable lexical item, still return best-effort values for canonical, lemma, meanings, and imageability fields.
 ${retryInstructions}
 ${lexicalRetryInstructions}
 
@@ -261,6 +270,8 @@ Respond in JSON only:
   "noPlural": true,
   "anchorPhrase": null,
   "opposite": null,
+  "clozeHint": null,
+  "patternHint": null,
   "meanings": [
     {
       "russian": "вода",
@@ -286,8 +297,8 @@ Respond in JSON only:
   ]
 }
 
-lexicalType must be one of: noun, adjective, adverb.
-recommendedMode must be one of: picture-word, sentence-form.
+lexicalType must be one of: noun, adjective, adverb, preposition, conjunction, subjunction, pronoun, determiner, particle, numeral, interjection.
+recommendedMode must be one of: picture-word, sentence-form, cloze-form.
 Gender must be one of: masculine, feminine, neuter.
 Register must be one of: neutral, colloquial, formal, specialized.
 If rejected, set shouldCreateWordCard=false and explain why.`;
@@ -351,12 +362,34 @@ export function shouldSuppressAdjectiveContrast(result = {}) {
   return candidates.some((candidate) => COLOR_ADJECTIVES.has(normalizeGermanForCompare(candidate || '')));
 }
 
+/**
+ * Chooses the card route requested by a sanitized lexical analysis.
+ */
+function resolveRecommendedMode(lexicalType, result = {}) {
+  if (isFunctionLexicalType(lexicalType)) {
+    return 'cloze-form';
+  }
+
+  if (result.recommendedMode === 'cloze-form') {
+    return 'cloze-form';
+  }
+
+  if (lexicalType === 'adverb') {
+    return 'sentence-form';
+  }
+
+  if (
+    result.recommendedMode === 'sentence-form' ||
+    (lexicalType === 'adjective' && (result.isImageable === false || result.shouldCreateWordCard === false))
+  ) {
+    return 'sentence-form';
+  }
+
+  return 'picture-word';
+}
+
 function sanitizeWordAnalysis(result = {}) {
-  const lexicalType = result.lexicalType === 'adjective'
-    ? 'adjective'
-    : result.lexicalType === 'adverb'
-      ? 'adverb'
-      : 'noun';
+  const lexicalType = normalizeLexicalType(result.lexicalType);
   const lemma = String(result.lemma || result.bareNoun || result.canonical || '').trim();
   const article = lexicalType === 'noun' ? String(result.article || '').trim() : null;
   const canonical = lexicalType === 'noun'
@@ -369,12 +402,7 @@ function sanitizeWordAnalysis(result = {}) {
     lemma: lexicalType === 'noun' ? lemma.replace(/^(der|die|das)\s+/i, '') : lemma,
     article,
     gender: lexicalType === 'noun' ? result.gender || null : null,
-    recommendedMode: lexicalType === 'adverb'
-      ? 'sentence-form'
-      : result.recommendedMode === 'sentence-form' ||
-      (lexicalType === 'adjective' && (result.isImageable === false || result.shouldCreateWordCard === false))
-        ? 'sentence-form'
-        : 'picture-word',
+    recommendedMode: resolveRecommendedMode(lexicalType, result),
     plural: lexicalType === 'noun' ? result.plural || null : null,
     noPlural: lexicalType === 'noun' ? Boolean(result.noPlural) : false,
     anchorPhrase: lexicalType === 'adjective' ? String(result.anchorPhrase || '').trim() || null : null,
@@ -403,7 +431,7 @@ function sanitizeWordAnalysis(result = {}) {
 }
 
 function hydrateFallbackModifierAnalysis(input, result = {}) {
-  if (result.lexicalType !== 'adjective' && result.lexicalType !== 'adverb') {
+  if (result.lexicalType === 'noun') {
     return result;
   }
 
@@ -436,7 +464,13 @@ function looksLikeBareLexicalInput(input = '') {
 }
 
 export function hasStructuredWordAnalysis(result = {}) {
-  if (result.lexicalType === 'adjective' || result.lexicalType === 'adverb') {
+  const lexicalType = result.lexicalType || 'noun';
+
+  if (lexicalType === 'verb') {
+    return false;
+  }
+
+  if (lexicalType !== 'noun') {
     return Boolean(
       result.canonical &&
       (result.lemma || result.bareNoun)
@@ -635,7 +669,7 @@ async function requestWordAnalysis(client, input, options = {}) {
 async function completeSentenceExamplesIfNeeded(client, result) {
   if (
     result.shouldCreateWordCard === false ||
-    result.recommendedMode !== 'sentence-form' ||
+    !['sentence-form', 'cloze-form'].includes(result.recommendedMode) ||
     result.exampleSentences.length >= 3
   ) {
     return result;
@@ -665,6 +699,11 @@ async function completeSentenceExamplesIfNeeded(client, result) {
 }
 
 export async function enrichWord(input) {
+  const curatedFunctionWord = getCuratedFunctionWordAnalysis(input);
+  if (curatedFunctionWord) {
+    return curatedFunctionWord;
+  }
+
   const client = await getClient();
   const result = await requestWordAnalysis(client, input);
   const completed = await completeSentenceExamplesIfNeeded(client, result);
