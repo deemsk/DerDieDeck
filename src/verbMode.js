@@ -437,7 +437,6 @@ async function prepareStrongVerbPackage({ verbData, selectedMeaning, route, freq
     !Array.isArray(morphology.selectedForms) ||
     morphology.selectedForms.length === 0
   ) {
-    console.log(chalk.dim('Verb morphology package skipped: trusted non-regular present forms were not available.'));
     return null;
   }
 

@@ -150,10 +150,64 @@ describe("verb morphology resolution", () => {
     ])
   })
 
+  test("strips leading pronouns from WiktApi finite forms before validation", async () => {
+    const morphology = await resolveVerbMorphology("wollen", {
+      payload: {
+        tags: ["modal"],
+        forms: [
+          form("ich will", ["first-person", "singular"]),
+          form("du willst", ["second-person", "singular"]),
+          form("er will", ["third-person", "singular"]),
+          form("wir wollen", ["first-person", "plural"]),
+          form("ihr wollt", ["second-person", "plural"]),
+          form("sie wollen", ["third-person", "plural"]),
+        ],
+      },
+    })
+
+    expect(morphology.classification).toBe("core-irregular")
+    expect(morphology.confidence).toBe("high")
+    expect(morphology.selectedForms.map((entry) => [entry.key, entry.form])).toEqual([
+      ["ich", "will"],
+      ["du", "willst"],
+      ["er", "will"],
+      ["wir", "wollen"],
+      ["ihr", "wollt"],
+      ["sie", "wollen"],
+    ])
+  })
+
+  test("chooses the first clean finite form from WiktApi alternative strings", async () => {
+    const morphology = await resolveVerbMorphology("wollen", {
+      payload: {
+        tags: ["modal"],
+        forms: [
+          form("ich will[1], wolle", ["first-person", "singular"]),
+          form("du willst / wollest", ["second-person", "singular"]),
+          form("er will (also wolle)", ["third-person", "singular"]),
+          form("wir wollen", ["first-person", "plural"]),
+          form("ihr wollt", ["second-person", "plural"]),
+          form("sie wollen", ["third-person", "plural"]),
+        ],
+      },
+    })
+
+    expect(morphology.confidence).toBe("high")
+    expect(morphology.selectedForms.map((entry) => [entry.key, entry.form])).toEqual([
+      ["ich", "will"],
+      ["du", "willst"],
+      ["er", "will"],
+      ["wir", "wollen"],
+      ["ihr", "wollt"],
+      ["sie", "wollen"],
+    ])
+  })
+
   test.each([
     ["dürfen", [["ich", "darf"], ["du", "darfst"], ["er", "darf"], ["wir", "dürfen"], ["ihr", "dürft"], ["sie", "dürfen"]]],
     ["mögen", [["ich", "mag"], ["du", "magst"], ["er", "mag"], ["wir", "mögen"], ["ihr", "mögt"], ["sie", "mögen"]]],
     ["können", [["ich", "kann"], ["du", "kannst"], ["er", "kann"], ["wir", "können"], ["ihr", "könnt"], ["sie", "können"]]],
+    ["tun", [["ich", "tue"], ["du", "tust"], ["er", "tut"], ["wir", "tun"], ["ihr", "tut"], ["sie", "tun"]]],
   ])("uses curated core fallback for %s after forms lookup fails and search resolves the lemma", async (lemma, expectedForms) => {
     const originalFetch = global.fetch
     global.fetch = async (url) => {

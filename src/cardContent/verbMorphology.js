@@ -11,6 +11,7 @@ const CORE_IRREGULAR_VERBS = new Set([
   'sollen',
   'duerfen',
   'moegen',
+  'tun',
 ]);
 
 const CORE_FORM_SPECS = [
@@ -32,6 +33,7 @@ const CORE_IRREGULAR_PRESENT_FORMS = {
   sollen: { ich: 'soll', du: 'sollst', er: 'soll', wir: 'sollen', ihr: 'sollt', sie: 'sollen' },
   duerfen: { ich: 'darf', du: 'darfst', er: 'darf', wir: 'dürfen', ihr: 'dürft', sie: 'dürfen' },
   moegen: { ich: 'mag', du: 'magst', er: 'mag', wir: 'mögen', ihr: 'mögt', sie: 'mögen' },
+  tun: { ich: 'tue', du: 'tust', er: 'tut', wir: 'tun', ihr: 'tut', sie: 'tun' },
 };
 
 const TARGET_FORM_SPECS = [
@@ -266,9 +268,16 @@ function normalizeFinitePresentForm(form = '', slot = '') {
     sie: /^(sie|Sie)\s+/,
   }[slot];
 
-  return String(form || '')
+  const withoutPronoun = String(form || '')
     .trim()
     .replace(pronounPattern || /^$/, '')
+    .replace(/^(ich|du|er|sie|es|wir|ihr)\s+/i, '')
+    .trim();
+
+  return withoutPronoun
+    .replace(/\([^)]*\)/g, '')
+    .replace(/\[[^\]]*\]/g, '')
+    .split(/\s*(?:,|;|\/|\boder\b|\bor\b)\s*/i)[0]
     .replace(/!+$/g, '')
     .trim();
 }

@@ -40,6 +40,44 @@ describe("strong verb package planning", () => {
     expect(plan.sentences.map((sentence) => sentence.focusForm)).toEqual(["steigst", "steigt"])
   })
 
+  test("builds core modal packages from validated generated sentences", () => {
+    const modalMorphology = {
+      infinitive: "wollen",
+      confidence: "high",
+      particle: null,
+      selectedForms: [
+        { key: "ich", pronoun: "ich", label: "ich", form: "will" },
+        { key: "du", pronoun: "du", label: "du", form: "willst" },
+        { key: "er", pronoun: "er", label: "er/sie/es", form: "will" },
+        { key: "wir", pronoun: "wir", label: "wir", form: "wollen" },
+        { key: "ihr", pronoun: "ihr", label: "ihr", form: "wollt" },
+        { key: "sie", pronoun: "sie", label: "sie/Sie", form: "wollen" },
+      ],
+    }
+
+    const plan = buildStrongVerbPackagePlan({
+      morphology: modalMorphology,
+      sentences: [
+        { formKey: "ich", german: "Ich will ein Buch.", russian: "Я хочу книгу." },
+        { formKey: "du", german: "Du willst ein Eis.", russian: "Ты хочешь мороженое." },
+        { formKey: "er", german: "Er will ein Eis.", russian: "Он хочет мороженое." },
+        { formKey: "wir", german: "Wir wollen ein Eis.", russian: "Мы хотим мороженое." },
+        { formKey: "ihr", german: "Ihr wollt ein Eis.", russian: "Вы хотите мороженое." },
+        { formKey: "sie", german: "Sie wollen ein Eis.", russian: "Они хотят мороженое." },
+      ],
+    })
+
+    expect(plan.forms).toHaveLength(6)
+    expect(plan.sentences.map((sentence) => sentence.focusForm)).toEqual([
+      "will",
+      "willst",
+      "will",
+      "wollen",
+      "wollt",
+      "wollen",
+    ])
+  })
+
   test("returns null when a required sentence is invalid", () => {
     const plan = buildStrongVerbPackagePlan({
       morphology,

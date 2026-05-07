@@ -315,6 +315,32 @@ describe("verb mode sentence flow", () => {
     }))
   })
 
+  test("runVerbWorkflow silently falls back when no explicit morphology package is available", async () => {
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {})
+
+    try {
+      const added = await runVerbWorkflow("liegen", {
+        analysisResult: {
+          shouldCreateVerbCard: true,
+          infinitive: "liegen",
+          displayForm: "liegen",
+          ipa: "[ˈliːɡn̩]",
+          recommendedMode: "sentence-form",
+          meanings: [{ russian: "лежать", english: "lie" }],
+        },
+        meaning: "лежать",
+        deck: "German::Test",
+        skipHeader: true,
+      })
+
+      expect(added).toBe(true)
+      expect(mockChooseVerbSentence).toHaveBeenCalled()
+      expect(logSpy.mock.calls.flat().join("\n")).not.toContain("Verb morphology package skipped")
+    } finally {
+      logSpy.mockRestore()
+    }
+  })
+
   test("runVerbWorkflow rejects an existing Basic verb package before creating notes", async () => {
     mockChooseMeaning.mockResolvedValueOnce({
       russian: "говорить",
