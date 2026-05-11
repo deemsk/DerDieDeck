@@ -56,9 +56,9 @@ export function buildLexicalClozeExtra({
   const patternHint = buildFunctionWordPatternHint(wordData);
   const contrastHint = buildContrastHint(wordData.canonical || wordData.lemma);
   const extraRows = [
-    `<div class="ddd-cloze-context" style="font-size:0.86em;line-height:1.25;color:var(--ddd-muted, #475569);">${escapeHtml(wordData.canonical)} · ${escapeHtml(typeLabel)}</div>`,
-    patternHint ? `<div class="ddd-cloze-pattern" style="margin-top:7px;font-size:0.82em;line-height:1.25;color:var(--ddd-muted, #475569);"><b>Pattern:</b> ${escapeHtml(patternHint)}</div>` : null,
-    contrastHint ? `<div class="ddd-cloze-contrast" style="margin-top:7px;font-size:0.82em;line-height:1.25;color:var(--ddd-muted, #475569);"><b>Contrast:</b> ${escapeHtml(contrastHint)}</div>` : null,
+    `<div class="ddd-cloze-context">${escapeHtml(wordData.canonical)} · ${escapeHtml(typeLabel)}</div>`,
+    patternHint ? `<div class="ddd-cloze-pattern"><b>Pattern:</b> ${escapeHtml(patternHint)}</div>` : null,
+    contrastHint ? `<div class="ddd-cloze-contrast"><b>Contrast:</b> ${escapeHtml(contrastHint)}</div>` : null,
   ].filter(Boolean).join('');
 
   return answerStack({

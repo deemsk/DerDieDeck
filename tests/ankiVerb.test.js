@@ -46,7 +46,8 @@ describe("verb note helpers", () => {
     expect(note.tags).toContain("word-verb")
     expect(note.tags.some((tag) => tag.startsWith("gender-"))).toBe(false)
     expect(note.fields["Gender, Personal Connection, Extra Info (Back side)"]).toContain("yt2anki-extra-example")
-    expect(note.fields["Gender, Personal Connection, Extra Info (Back side)"]).toContain("margin:22px auto 0")
+    expect(note.fields["Gender, Personal Connection, Extra Info (Back side)"]).toContain("ddd-extra-example")
+    expect(note.fields["Gender, Personal Connection, Extra Info (Back side)"]).not.toContain("style=")
     expect(note.fields["Gender, Personal Connection, Extra Info (Back side)"]).toContain("Он бегает в парке.")
   })
 
@@ -134,7 +135,7 @@ describe("verb note helpers", () => {
 
     const updateRequest = requests.find((entry) => entry.action === "updateNoteFields")
     expect(updateRequest.params.note.id).toBe(88)
-    expect(updateRequest.params.note.fields.Back).toContain('class="yt2anki-ipa"')
+    expect(updateRequest.params.note.fields.Back).toContain("yt2anki-ipa")
     expect(updateRequest.params.note.fields.Back).toContain("erreichen")
     expect(updateRequest.params.note.fields.Back).toContain("достигать")
   })

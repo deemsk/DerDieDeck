@@ -9,7 +9,7 @@ function infoRow(label, value, className = '') {
     return '';
   }
 
-  return `<div class="yt2anki-extra-row ${className}" style="margin-top:8px;font-size:0.82em;line-height:1.22;color:var(--ddd-muted, #475569);"><span class="yt2anki-extra-label" style="display:block;font-size:0.68em;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:var(--ddd-focus-label, #64748b);">${escapeHtml(label)}</span><span class="yt2anki-extra-value">${escapeHtml(value)}</span></div>`;
+  return `<div class="yt2anki-extra-row ddd-extra-row ${className}"><span class="yt2anki-extra-label ddd-extra-label">${escapeHtml(label)}</span><span class="yt2anki-extra-value ddd-extra-value">${escapeHtml(value)}</span></div>`;
 }
 
 export function buildWordExtraInfo({
@@ -26,7 +26,7 @@ export function buildWordExtraInfo({
 
   if (meaning) {
     lines.push(plainMeaning
-      ? `<div class="yt2anki-extra-meaning" style="margin-top:8px;font-size:0.92em;font-weight:650;line-height:1.22;color:var(--ddd-text, #111827);">${escapeHtml(meaning)}</div>`
+      ? `<div class="yt2anki-extra-meaning ddd-extra-meaning">${escapeHtml(meaning)}</div>`
       : infoRow('Meaning', meaning, 'yt2anki-extra-meaning'));
   }
 
@@ -35,9 +35,9 @@ export function buildWordExtraInfo({
   }
 
   if (exampleSentence) {
-    lines.push(`<div class="yt2anki-extra-example" style="margin:22px auto 0;max-width:520px;padding:13px 14px 12px;border-top:1px solid var(--ddd-divider, rgba(15, 23, 42, 0.42));border-radius:14px;background:var(--ddd-panel, rgba(148, 163, 184, 0.12));color:var(--ddd-text, #111827);"><span class="yt2anki-extra-label" style="display:block;font-size:0.68em;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:var(--ddd-focus-label, #64748b);">Example</span><span class="yt2anki-extra-value" style="display:block;margin-top:6px;font-size:0.88em;font-weight:650;line-height:1.24;">${escapeHtml(exampleSentence)}</span></div>`);
+    lines.push(`<div class="yt2anki-extra-example ddd-extra-example"><span class="yt2anki-extra-label ddd-extra-label">Example</span><span class="yt2anki-extra-value ddd-extra-example-value">${escapeHtml(exampleSentence)}</span></div>`);
     if (exampleSentenceTranslation) {
-      lines.push(`<div class="yt2anki-extra-example-translation" style="margin:7px auto 0;max-width:520px;font-size:0.76em;line-height:1.2;color:var(--ddd-muted, #475569);">${escapeHtml(exampleSentenceTranslation)}</div>`);
+      lines.push(`<div class="yt2anki-extra-example-translation ddd-extra-example-translation">${escapeHtml(exampleSentenceTranslation)}</div>`);
     }
   }
 

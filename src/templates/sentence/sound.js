@@ -11,7 +11,7 @@ export function formatSoundCard(card, audioFilename) {
       german: card.back.german,
       ipa: card.back.ipa,
       extraHtml: card.back.targetSound
-        ? `<div class="ddd-sound-target" style="font-size:0.86em;color:var(--ddd-muted, #475569);">Target sound: ${escapeHtml(card.back.targetSound)}</div>`
+        ? `<div class="ddd-sound-target">Target sound: ${escapeHtml(card.back.targetSound)}</div>`
         : null,
     }),
   };

@@ -59,9 +59,9 @@ describe("anki helpers", () => {
 
     const note = requests[0].params.note
     expect(note.fields.Front).toContain("gut.jpg")
-    expect(note.fields.Back).toContain('class="yt2anki-ipa"')
+    expect(note.fields.Back).toContain("yt2anki-ipa")
     expect(note.fields.Back).toContain('class="ddd-answer-translation"')
-    expect(note.fields.Back).toContain("font-weight:700")
+    expect(note.fields.Back).not.toContain("style=")
     expect(note.fields.Back).toContain("yt2anki-word:")
   })
 
@@ -288,7 +288,7 @@ describe("anki helpers", () => {
     expect(updateRequest.params.note.fields.Front).toContain('[sound:gross.mp3]')
     expect(updateRequest.params.note.fields.Front).toContain('<img src="gross.jpg" />')
     expect(updateRequest.params.note.fields.Front).toContain("gross.jpg")
-    expect(updateRequest.params.note.fields.Front).toContain('class="yt2anki-word-contrast"')
+    expect(updateRequest.params.note.fields.Front).toContain("yt2anki-word-contrast")
     expect(updateRequest.params.note.fields.Front).not.toContain("Context:")
   })
 

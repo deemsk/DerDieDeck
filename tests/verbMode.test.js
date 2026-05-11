@@ -205,7 +205,7 @@ describe("verb mode sentence flow", () => {
     }))
     expect(mockCreateBasicNote).toHaveBeenCalledWith(expect.objectContaining({
       front: "gehört",
-      back: expect.stringContaining('class="yt2anki-ipa"'),
+      back: expect.stringContaining("yt2anki-ipa"),
       deck: "German::Test",
       tags: expect.arrayContaining(["mode-verb-dictionary"]),
     }))

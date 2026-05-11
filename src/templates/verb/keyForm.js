@@ -7,9 +7,9 @@ import { html, joinHtml } from '../shared/html.js';
  */
 export function buildVerbKeyFormProductionFront(infinitive, formSpec) {
   return html`
-    <div class="ddd-keyform-prompt" style="text-align:center;">
-      <div style="font-size:13px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;">Produce the form</div>
-      <div style="margin-top:8px;font-size:28px;font-weight:700;line-height:1.15;">${escapeHtml(infinitive)} → ${escapeHtml(formSpec.label)}</div>
+    <div class="ddd-keyform-prompt">
+      <div class="ddd-keyform-kicker">Produce the form</div>
+      <div class="ddd-keyform-main">${escapeHtml(infinitive)} → ${escapeHtml(formSpec.label)}</div>
     </div>
   `;
 }
@@ -29,9 +29,9 @@ export function buildVerbKeyFormProductionBack(formSpec, selectedMeaning = null)
  */
 export function buildVerbKeyFormRecognitionFront(formSpec) {
   return html`
-    <div class="ddd-keyform-recognition" style="text-align:center;">
-      <div style="font-size:13px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;">Recognize the form</div>
-      <div style="margin-top:8px;font-size:28px;font-weight:700;line-height:1.15;">${escapeHtml(formSpec.label)} ${escapeHtml(formSpec.displayForm || formSpec.form)}</div>
+    <div class="ddd-keyform-recognition">
+      <div class="ddd-keyform-kicker">Recognize the form</div>
+      <div class="ddd-keyform-main">${escapeHtml(formSpec.label)} ${escapeHtml(formSpec.displayForm || formSpec.form)}</div>
     </div>
   `;
 }

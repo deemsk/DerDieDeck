@@ -22,14 +22,14 @@ import { buildWordExtraInfo } from "../src/templates/word/extraInfo.js"
 import { getWordFrequencyInfo } from "../src/lib/wordFrequency.js"
 
 describe("word helpers", () => {
-  test("formatGenderColoredWord wraps canonical noun with inline color", () => {
+  test("formatGenderColoredWord wraps canonical noun with synced style classes", () => {
     const html = formatGenderColoredWord("das Wasser", "neuter")
 
     expect(html).toContain("das Wasser")
     expect(html).toContain("yt2anki-word-display")
+    expect(html).toContain("ddd-word-display")
     expect(html).toContain("yt2anki-gender-neuter")
-    expect(html).toContain("font-size:1.55em")
-    expect(html).toContain("color:var(--yt2anki-gender-neuter, #0f766e)")
+    expect(html).not.toContain("style=")
   })
 
   test("formatPlainWord gives verbs the same main word display weight", () => {
@@ -37,28 +37,28 @@ describe("word helpers", () => {
 
     expect(html).toContain("warte")
     expect(html).toContain("yt2anki-word-display")
-    expect(html).toContain("font-size:1.55em")
-    expect(html).toContain("font-weight:700")
+    expect(html).toContain("ddd-word-display")
+    expect(html).not.toContain("style=")
   })
 
   test("formatIpaHtml renders IPA as neutral secondary text", () => {
     const html = formatIpaHtml("[das baːt]")
 
-    expect(html).toContain('class="yt2anki-ipa"')
-    expect(html).toContain("color:var(--yt2anki-ipa, #475569)")
+    expect(html).toContain('class="yt2anki-ipa ddd-ipa"')
+    expect(html).not.toContain("style=")
     expect(html).toContain("[das baːt]")
   })
 
   test("formatPronunciationField joins audio and formatted IPA", () => {
     const field = formatPronunciationField("bad.mp3", "[das baːt]")
 
-    expect(field).toBe('[sound:bad.mp3]<br><span class="yt2anki-ipa" style="color:var(--yt2anki-ipa, #475569);font-size:0.92em;font-style:italic;">[das baːt]</span>')
+    expect(field).toBe('[sound:bad.mp3]<br><span class="yt2anki-ipa ddd-ipa">[das baːt]</span>')
   })
 
   test("buildWordSentenceContrastFooter renders a dedicated adjective contrast block", () => {
     const footer = buildWordSentenceContrastFooter("klein")
 
-    expect(footer).toContain('class="yt2anki-word-contrast"')
+    expect(footer).toContain("yt2anki-word-contrast")
     expect(footer).toContain("Contrast")
     expect(footer).toContain("klein")
   })
@@ -100,9 +100,9 @@ describe("word helpers", () => {
     expect(extra).toContain("yt2anki-extra-meaning")
     expect(extra).not.toContain("Meaning:")
     expect(extra).toContain("yt2anki-extra-example")
-    expect(extra).toContain("margin:22px auto 0")
-    expect(extra).toContain("border-top:1px solid")
-    expect(extra).toContain("font-weight:650")
+    expect(extra).toContain("ddd-extra-example")
+    expect(extra).toContain("ddd-extra-example-value")
+    expect(extra).not.toContain("style=")
     expect(extra).toContain("Das Wasser ist kalt.")
     expect(extra).toContain("Вода холодная.")
     expect(extractWordMeaning(extra)).toBe("вода")

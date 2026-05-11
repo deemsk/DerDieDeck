@@ -32,6 +32,6 @@ export function buildVerbFormClozeExtra(sentence, formSpec, infinitive) {
   return answerStack({
     ipa: sentence?.ipa,
     russian: sentence?.russian,
-    extraHtml: `<div class="ddd-cloze-context" style="font-size:0.86em;line-height:1.25;color:var(--ddd-muted, #475569);">${escapeHtml(formSpec.label)} ${escapeHtml(formSpec.displayForm || formSpec.form)} → ${escapeHtml(infinitive)}</div>`,
+    extraHtml: `<div class="ddd-cloze-context">${escapeHtml(formSpec.label)} ${escapeHtml(formSpec.displayForm || formSpec.form)} → ${escapeHtml(infinitive)}</div>`,
   });
 }

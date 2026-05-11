@@ -35,10 +35,10 @@ describe("card type helpers", () => {
     expect(withEnglish.front.situation).toBeNull()
     expect(formatCardForAnki(withEnglish, "clip.mp3").Front).toContain("Say in German")
     expect(formatCardForAnki(withEnglish, "clip.mp3").Front).toContain("Я хочу кофе.")
-    expect(formatCardForAnki(withEnglish, "clip.mp3").Front).toContain("text-align:center")
+    expect(formatCardForAnki(withEnglish, "clip.mp3").Front).toContain("ddd-production-source")
     expect(formatCardForAnki(withEnglish, "clip.mp3").Front).not.toContain("ordering coffee")
     expect(withRussian.front.situation).toBe("в кафе")
-    expect(formatCardForAnki(withRussian, "clip.mp3").Front).toContain('class="yt2anki-production-hint"')
+    expect(formatCardForAnki(withRussian, "clip.mp3").Front).toContain("yt2anki-production-hint")
     expect(formatCardForAnki(withRussian, "clip.mp3").Front).toContain(">в кафе<")
   })
 
@@ -56,8 +56,9 @@ describe("card type helpers", () => {
       "clip.mp3"
     )
 
-    expect(fields.Back).toContain('class="yt2anki-ipa"')
-    expect(fields.Back).toContain("color:var(--yt2anki-ipa, #475569)")
+    expect(fields.Back).toContain("yt2anki-ipa")
+    expect(fields.Back).toContain("ddd-ipa")
+    expect(fields.Back).not.toContain("style=")
   })
 
   test("dialogue cards render an explicit reply task block", () => {

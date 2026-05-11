@@ -97,7 +97,7 @@ describe("strong verb package planning", () => {
     )
 
     expect(back).toContain('class="ddd-answer-translation"')
-    expect(back).toContain("font-weight:700")
+    expect(back).not.toContain("style=")
     expect(back).toContain("садиться")
   })
 
