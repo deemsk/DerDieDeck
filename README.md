@@ -2,7 +2,7 @@
 
 DerDieDeck creates German Anki cards from clips, selected text, words, and grammar prompts.
 
-![DerDieDeck picture-word cards](docs/images/derdiedeck-playing-cards.png)
+![DerDieDeck picture-word cards](docs/images/derdiedeck-readme-hero.png)
 
 DerDieDeck started as a clip-first workflow, but it now covers four distinct study paths:
 - turn bookmarked YouTube clips into audio-first sentence cards
