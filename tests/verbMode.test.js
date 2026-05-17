@@ -204,9 +204,13 @@ describe("verb mode sentence flow", () => {
       tags: expect.arrayContaining(["mode-verb-sentence"]),
     }))
     expect(mockCreateBasicNote).toHaveBeenCalledWith(expect.objectContaining({
-      front: "gehört",
+      front: expect.stringContaining("gehört"),
       back: expect.stringContaining("yt2anki-ipa"),
       deck: "German::Test",
+      tags: expect.arrayContaining(["mode-verb-dictionary"]),
+    }))
+    expect(mockCreateBasicNote).toHaveBeenCalledWith(expect.objectContaining({
+      front: expect.stringContaining("yt2anki-word-display"),
       tags: expect.arrayContaining(["mode-verb-dictionary"]),
     }))
   })
@@ -253,7 +257,11 @@ describe("verb mode sentence flow", () => {
     expect(mockChooseVerbSentence).not.toHaveBeenCalled()
     expect(mockCreateBasicNote).toHaveBeenCalledTimes(7)
     expect(mockCreateBasicNote).toHaveBeenCalledWith(expect.objectContaining({
-      front: "sprechen",
+      front: expect.stringContaining("sprechen"),
+      tags: expect.arrayContaining(["mode-verb-lemma", "verb-morphology-strong"]),
+    }))
+    expect(mockCreateBasicNote).toHaveBeenCalledWith(expect.objectContaining({
+      front: expect.stringContaining("yt2anki-word-display"),
       tags: expect.arrayContaining(["mode-verb-lemma", "verb-morphology-strong"]),
     }))
     expect(mockCreateBasicNote).toHaveBeenCalledWith(expect.objectContaining({

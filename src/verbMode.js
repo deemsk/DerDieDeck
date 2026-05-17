@@ -331,7 +331,7 @@ async function createDictionaryFormNote(verbData, selectedMeaning, focusForm, de
  */
 async function createVerbLemmaNote(verbData, selectedMeaning, audioFilename, deck, morphology, stageTags = []) {
   return createBasicNote({
-    front: verbData.infinitive,
+    front: formatPlainWord(verbData.infinitive),
     back: [
       formatPronunciationField(audioFilename, verbData.ipa),
       selectedMeaning?.russian,

@@ -1,4 +1,4 @@
-import { formatIpaHtml, formatPrimaryTranslation } from '../shared/components.js';
+import { formatIpaHtml, formatPlainWord, formatPrimaryTranslation } from '../shared/components.js';
 import { joinHtml } from '../shared/html.js';
 
 export function buildVerbDictionaryNote({
@@ -8,13 +8,13 @@ export function buildVerbDictionaryNote({
 }) {
   const displayForm = focusForm || verbData.displayForm || verbData.infinitive;
   const back = joinHtml([
-    verbData.infinitive,
+    formatPlainWord(verbData.infinitive),
     formatIpaHtml(verbData.ipa),
     formatPrimaryTranslation(selectedMeaning?.russian),
   ]);
 
   return {
-    front: displayForm,
+    front: formatPlainWord(displayForm),
     back,
   };
 }

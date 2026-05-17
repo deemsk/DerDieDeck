@@ -800,6 +800,118 @@ describe("anki helpers", () => {
     expect(Object.values(nextFields).join(" ")).not.toContain("style=")
   })
 
+  test("migrateTemplateInlineStyles styles classless Picture Words word fields", async () => {
+    const requests = []
+
+    global.fetch = async (_url, options) => {
+      const body = JSON.parse(options.body)
+      requests.push(body)
+
+      if (body.action === "findNotes") {
+        return {
+          async json() {
+            return { result: [72], error: null }
+          },
+        }
+      }
+
+      if (body.action === "notesInfo") {
+        return {
+          async json() {
+            return {
+              result: [
+                {
+                  noteId: 72,
+                  fields: {
+                    Word: { value: "<span>die Abteilung</span>" },
+                  },
+                  tags: ["yt2anki", "gender-feminine"],
+                },
+              ],
+              error: null,
+            }
+          },
+        }
+      }
+
+      if (body.action === "updateNoteFields") {
+        return {
+          async json() {
+            return { result: null, error: null }
+          },
+        }
+      }
+
+      throw new Error(`Unexpected action: ${body.action}`)
+    }
+
+    const result = await migrateTemplateInlineStyles()
+
+    expect(result.updated).toBe(1)
+    const updateRequest = requests.find((entry) => entry.action === "updateNoteFields")
+    expect(updateRequest.params.note.fields.Word).toBe(
+      '<span class="yt2anki-word-display ddd-word-display yt2anki-gender yt2anki-gender-feminine">die Abteilung</span>'
+    )
+  })
+
+  test("migrateTemplateInlineStyles styles plain verb dictionary word fields", async () => {
+    const requests = []
+
+    global.fetch = async (_url, options) => {
+      const body = JSON.parse(options.body)
+      requests.push(body)
+
+      if (body.action === "findNotes") {
+        return {
+          async json() {
+            return { result: [73], error: null }
+          },
+        }
+      }
+
+      if (body.action === "notesInfo") {
+        return {
+          async json() {
+            return {
+              result: [
+                {
+                  noteId: 73,
+                  fields: {
+                    Front: { value: "ankommen" },
+                    Back: { value: "ankommen<br>[ˈankɔmən]<br>прибывать" },
+                  },
+                  tags: ["yt2anki", "mode-verb-dictionary"],
+                },
+              ],
+              error: null,
+            }
+          },
+        }
+      }
+
+      if (body.action === "updateNoteFields") {
+        return {
+          async json() {
+            return { result: null, error: null }
+          },
+        }
+      }
+
+      throw new Error(`Unexpected action: ${body.action}`)
+    }
+
+    const result = await migrateTemplateInlineStyles()
+
+    expect(result.updated).toBe(1)
+    const updateRequest = requests.find((entry) => entry.action === "updateNoteFields")
+    expect(updateRequest.params.note.fields.Front).toBe(
+      '<span class="yt2anki-word-display ddd-word-display">ankommen</span>'
+    )
+    expect(updateRequest.params.note.fields.Back).toContain(
+      '<span class="yt2anki-word-display ddd-word-display">ankommen</span>'
+    )
+  })
+
   test("findSimilarCards matches current audio-first cards using back-side German text", async () => {
     global.fetch = async (_url, options) => {
       const body = JSON.parse(options.body)

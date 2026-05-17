@@ -1,4 +1,5 @@
 import { createBasicNote, createPictureWordNote, migrateVerbDictionaryIpaBacks } from "../src/anki.js"
+import { buildVerbDictionaryNote } from "../src/templates/verb/dictionary.js"
 import { buildWordExtraInfo } from "../src/templates/word/extraInfo.js"
 
 describe("verb note helpers", () => {
@@ -75,6 +76,24 @@ describe("verb note helpers", () => {
     expect(requests[0].params.note.fields.Back).toContain("laufen")
     expect(requests[0].params.note.fields["Add Reverse"]).toBe("1")
     expect(requests[0].params.note.tags).toContain("mode-verb-dictionary")
+  })
+
+  test("buildVerbDictionaryNote uses the shared target word display", () => {
+    const note = buildVerbDictionaryNote({
+      verbData: {
+        infinitive: "ankommen",
+        displayForm: "kommt an",
+        ipa: "[ˈankɔmən]",
+      },
+      selectedMeaning: { russian: "прибывать" },
+      focusForm: "kommt an",
+    })
+
+    expect(note.front).toContain("yt2anki-word-display")
+    expect(note.front).toContain("ddd-word-display")
+    expect(note.front).toContain("kommt an")
+    expect(note.back).toContain("yt2anki-word-display")
+    expect(note.back).toContain("ankommen")
   })
 
   test("migrateVerbDictionaryIpaBacks rewrites plain IPA lines with shared styling", async () => {

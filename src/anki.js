@@ -1317,6 +1317,67 @@ function mergeClassList(current = '', additions = []) {
   ])).join(' ');
 }
 
+function getNoteTags(note = {}) {
+  return Array.isArray(note.tags) ? note.tags : [];
+}
+
+function getPictureWordDisplayClasses(note = {}) {
+  const genderTag = getNoteTags(note)
+    .find((tag) => /^gender-(masculine|feminine|neuter)$/i.test(tag));
+  const gender = genderTag ? genderTag.replace(/^gender-/i, '').toLowerCase() : null;
+
+  return [
+    'yt2anki-word-display',
+    'ddd-word-display',
+    ...(gender ? ['yt2anki-gender', `yt2anki-gender-${gender}`] : []),
+  ];
+}
+
+function replaceLeadingSpanWithWordDisplay(html = '', classes = []) {
+  return String(html || '').replace(
+    /^(\s*)<span\b([^>]*)>([\s\S]*?)<\/span>/i,
+    (match, leadingSpace, attrs, value) => {
+      const classMatch = String(attrs || '').match(/\s+class=(["'])(.*?)\1/i);
+      const existingClasses = classMatch?.[2] || '';
+      const nextClasses = mergeClassList(classes.join(' '), existingClasses.split(/\s+/).filter(Boolean));
+      const nextAttrs = String(attrs || '')
+        .replace(/\s+class=(["'])(.*?)\1/i, '')
+        .replace(/\s+style=(["'])(.*?)\1/i, '')
+        .trim();
+      const attrText = nextAttrs ? ` ${nextAttrs}` : '';
+
+      return `${leadingSpace}<span class="${nextClasses}"${attrText}>${value}</span>`;
+    }
+  );
+}
+
+function wrapLeadingTextWithWordDisplay(html = '', classes = []) {
+  const value = String(html || '');
+  if (!value.trim() || /^\s*</.test(value)) {
+    return value;
+  }
+
+  return value.replace(/^(\s*)([^<]+)([\s\S]*)$/, (_match, leadingSpace, text, rest) => {
+    const leadingTextSpace = String(text).match(/^\s*/)?.[0] || '';
+    const trailingTextSpace = String(text).match(/\s*$/)?.[0] || '';
+    const word = String(text).trim();
+    if (!word) {
+      return value;
+    }
+
+    return `${leadingSpace}${leadingTextSpace}<span class="${classes.join(' ')}">${escapeHtml(word)}</span>${trailingTextSpace}${rest}`;
+  });
+}
+
+function modernizeLeadingWordDisplay(html = '', classes = []) {
+  const value = String(html || '');
+  if (/^\s*<span\b/i.test(value)) {
+    return replaceLeadingSpanWithWordDisplay(value, classes);
+  }
+
+  return wrapLeadingTextWithWordDisplay(value, classes);
+}
+
 /**
  * Adds classes to elements that already contain a known source class.
  */
@@ -1399,22 +1460,31 @@ function modernizeLegacyFocusContext(html = '') {
 }
 
 /**
- * Converts classless legacy Picture Words word spans into class-driven word display markup.
+ * Converts legacy Picture Words word values into class-driven word display markup.
  */
 function modernizeLegacyPictureWordSpan(html = '', note = {}, fieldName = '') {
   if (fieldName !== PICTURE_WORD_FIELDS.word) {
     return String(html || '');
   }
 
-  const genderTag = (Array.isArray(note.tags) ? note.tags : [])
-    .find((tag) => /^gender-(masculine|feminine|neuter)$/i.test(tag));
-  const gender = genderTag ? genderTag.replace(/^gender-/i, '').toLowerCase() : null;
-  const genderClasses = gender ? ` yt2anki-gender yt2anki-gender-${gender}` : '';
+  return modernizeLeadingWordDisplay(html, getPictureWordDisplayClasses(note));
+}
 
-  return String(html || '').replace(
-    /<span\b(?![^>]*\bclass=)[^>]*\bstyle=(["'])[\s\S]*?\1[^>]*>([\s\S]*?)<\/span>/gi,
-    (_match, _quote, value) => `<span class="yt2anki-word-display ddd-word-display${genderClasses}">${value}</span>`
-  );
+function isVerbWordDisplayField(note = {}, fieldName = '') {
+  const tags = getNoteTags(note);
+  const isDictionary = tags.includes('mode-verb-dictionary');
+  const isLemma = tags.includes('mode-verb-lemma');
+
+  return (fieldName === 'Front' && (isDictionary || isLemma))
+    || (fieldName === 'Back' && isDictionary);
+}
+
+function modernizeLegacyVerbWordDisplay(html = '', note = {}, fieldName = '') {
+  if (!isVerbWordDisplayField(note, fieldName)) {
+    return String(html || '');
+  }
+
+  return modernizeLeadingWordDisplay(html, ['yt2anki-word-display', 'ddd-word-display']);
 }
 
 /**
@@ -1440,6 +1510,7 @@ function removeInlineStyleAttributes(html = '') {
 function modernizeTemplateInlineStylesInField(value = '', { note = {}, fieldName = '' } = {}) {
   let next = String(value || '');
   next = modernizeLegacyPictureWordSpan(next, note, fieldName);
+  next = modernizeLegacyVerbWordDisplay(next, note, fieldName);
   next = modernizeLegacyFocusContext(next);
   next = modernizeTwoSpanBlock(next, 'yt2anki-personal-cue', 'ddd-personal-cue-label', 'ddd-personal-cue-value');
   next = modernizeTwoSpanBlock(next, 'ddd-focus', 'ddd-focus-label', 'ddd-focus-value');
