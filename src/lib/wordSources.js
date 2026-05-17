@@ -837,6 +837,25 @@ export function buildWordImageSearchTerms(wordData, selectedMeaning) {
   return buildWordImageQueryEntries(wordData, selectedMeaning).map((entry) => entry.term);
 }
 
+export function buildGoogleImagesUrl(query = '') {
+  const url = new URL('https://images.google.com/search');
+  url.searchParams.set('tbm', 'isch');
+  url.searchParams.set('q', String(query || '').trim());
+  return url.toString();
+}
+
+export function buildWordGoogleImagesSearch(wordData, selectedMeaning) {
+  const terms = buildWordImageSearchTerms(wordData, selectedMeaning);
+  const fallback = getWordLemma(wordData);
+  const query = terms.find(Boolean) || fallback;
+
+  return {
+    query,
+    url: buildGoogleImagesUrl(query),
+    queryVariants: terms.slice(0, 6),
+  };
+}
+
 function buildVerbImageQueryEntries(verbData, selectedMeaning) {
   const englishGlossValue = selectedMeaning?.english ? String(selectedMeaning.english).trim() : '';
   const specificTerms = dedupeTerms(selectedMeaning?.imageSearchTerms || []);
@@ -882,6 +901,18 @@ function buildVerbImageQueryEntries(verbData, selectedMeaning) {
  */
 export function buildVerbImageSearchTerms(verbData, selectedMeaning) {
   return buildVerbImageQueryEntries(verbData, selectedMeaning).map((entry) => entry.term);
+}
+
+export function buildVerbGoogleImagesSearch(verbData, selectedMeaning) {
+  const terms = buildVerbImageSearchTerms(verbData, selectedMeaning);
+  const fallback = String(verbData.infinitive || verbData.canonical || '').trim();
+  const query = terms.find(Boolean) || fallback;
+
+  return {
+    query,
+    url: buildGoogleImagesUrl(query),
+    queryVariants: terms.slice(0, 6),
+  };
 }
 
 function briefTokens(value) {

@@ -20,10 +20,10 @@ const mockConfirmPictureVerbSelection = jest.fn(async () => ({
   personalConnection: null,
   addDictionaryForm: false,
 }))
-const mockChooseImage = jest.fn(async () => ({
-  source: "Brave Images",
-  downloadUrl: "https://example.com/laufen.jpg",
-  previewUrl: "https://example.com/laufen-preview.jpg",
+const mockChooseGoogleImage = jest.fn(async () => ({
+  type: "remote-url",
+  source: "Google Images",
+  url: "https://example.com/laufen.jpg",
 }))
 
 const mockCheckConnection = jest.fn(async () => true)
@@ -61,11 +61,11 @@ const mockResolveWordPronunciation = jest.fn(async () => ({
   audioPath: "/tmp/gehoeren-human.mp3",
   source: "Wiktionary/Wikimedia",
 }))
-const mockSearchVerbImages = jest.fn(async () => ([{
-  source: "Brave Images",
-  downloadUrl: "https://example.com/laufen.jpg",
-  previewUrl: "https://example.com/laufen-preview.jpg",
-}]))
+const mockBuildVerbGoogleImagesSearch = jest.fn(() => ({
+  query: "laufen",
+  url: "https://images.google.com/search?tbm=isch&q=laufen",
+  queryVariants: ["laufen"],
+}))
 const mockSpinnerFactory = jest.fn(() => ({
   start: jest.fn(),
   succeed: jest.fn(),
@@ -80,7 +80,7 @@ jest.unstable_mockModule("ora", () => ({
 
 jest.unstable_mockModule("../src/wordConfirm.js", () => ({
   chooseMeaning: mockChooseMeaning,
-  chooseImage: mockChooseImage,
+  chooseGoogleImage: mockChooseGoogleImage,
 }))
 
 jest.unstable_mockModule("../src/verbConfirm.js", () => ({
@@ -143,9 +143,9 @@ jest.unstable_mockModule("../src/cardContent/verbMorphology.js", () => ({
 }))
 
 jest.unstable_mockModule("../src/lib/wordSources.js", () => ({
+  buildVerbGoogleImagesSearch: mockBuildVerbGoogleImagesSearch,
   resolveImageAsset: mockResolveImageAsset,
   resolveWordPronunciation: mockResolveWordPronunciation,
-  searchVerbImages: mockSearchVerbImages,
 }))
 
 const { runVerbWorkflow } = await import("../src/verbMode.js")
@@ -499,12 +499,12 @@ describe("verb mode sentence flow", () => {
       showImage: false,
     }))
     expect(mockConfirmPictureVerbSelection.mock.invocationCallOrder[0]).toBeLessThan(
-      mockSearchVerbImages.mock.invocationCallOrder[0]
+      mockChooseGoogleImage.mock.invocationCallOrder[0]
     )
     expect(mockCreatePictureWordNote).toHaveBeenCalledWith(expect.objectContaining({
       canonical: "laufen",
       imageFilename: "verb-image.jpg",
-      imageSource: "Brave Images",
+      imageSource: "Google Images",
       deck: "German::Test",
     }))
   })

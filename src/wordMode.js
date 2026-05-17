@@ -20,8 +20,8 @@ import { buildLexicalClozeExtra, buildLexicalClozeText } from './templates/word/
 import { formatWordDisplay, isNounWord } from './templates/word/pictureWord.js';
 import { buildWordSentenceFrontFooter } from './templates/word/sentenceWord.js';
 import { canProceedWithWeakWordCard, enrichWord, hasStructuredWordAnalysis } from './wordEnricher.js';
-import { chooseImage, chooseMeaning, chooseWordSentence, confirmSentenceWordSelection, confirmWordSelection } from './wordConfirm.js';
-import { resolveImageAsset, resolveWordPronunciation, searchWordImages } from './lib/wordSources.js';
+import { chooseGoogleImage, chooseMeaning, chooseWordSentence, confirmSentenceWordSelection, confirmWordSelection } from './wordConfirm.js';
+import { buildWordGoogleImagesSearch, resolveImageAsset, resolveWordPronunciation } from './lib/wordSources.js';
 import {
   checkConnection,
   createBasicNote,
@@ -269,15 +269,8 @@ async function buildWordSentenceAudio(sentence, spinner) {
 
 async function choosePictureWordImage(prepared, spinner) {
   const { wordData, selectedMeaning } = prepared;
-
-  spinner.start('Searching images...');
-  const imageCandidates = await searchWordImages(wordData, selectedMeaning, {
-    pageSize: config.wordImagePreviewCount || 6,
-    total: config.wordImageSearchResults || 12,
-  });
-  spinner.stop();
-
-  const imageChoice = await chooseImage(wordData, selectedMeaning, imageCandidates);
+  const googleSearch = buildWordGoogleImagesSearch(wordData, selectedMeaning);
+  const imageChoice = await chooseGoogleImage(wordData, selectedMeaning, googleSearch);
   if (!imageChoice) {
     console.log(chalk.dim('Continuing without image.'));
   }
@@ -287,18 +280,9 @@ async function choosePictureWordImage(prepared, spinner) {
 
 async function chooseSentenceWordImage(prepared, spinner) {
   const { wordData, selectedMeaning, chosenSentence } = prepared;
-
-  spinner.start('Searching optional image...');
   const imageSearchMeaning = buildSentenceImageMeaning(selectedMeaning, chosenSentence, wordData);
-  const imageCandidates = await searchWordImages(wordData, imageSearchMeaning, {
-    pageSize: config.wordImagePreviewCount || 6,
-    total: config.wordImageSearchResults || 12,
-  });
-  spinner.stop();
-
-  return imageCandidates.length > 0
-    ? await chooseImage(wordData, selectedMeaning, imageCandidates)
-    : null;
+  const googleSearch = buildWordGoogleImagesSearch(wordData, imageSearchMeaning);
+  return chooseGoogleImage(wordData, selectedMeaning, googleSearch);
 }
 
 async function rebuildSentenceWordPreview(prepared, feedback, options, spinner) {

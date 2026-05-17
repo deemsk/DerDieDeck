@@ -1,5 +1,5 @@
 import { config } from "../src/lib/config.js"
-import { buildVerbImageSearchTerms, buildWordImageSearchTerms, resolveWordPronunciation, searchVerbImages, searchWordImages } from "../src/lib/wordSources.js"
+import { buildGoogleImagesUrl, buildVerbGoogleImagesSearch, buildVerbImageSearchTerms, buildWordGoogleImagesSearch, buildWordImageSearchTerms, resolveWordPronunciation, searchVerbImages, searchWordImages } from "../src/lib/wordSources.js"
 
 describe("word image sources", () => {
   const originalFetch = global.fetch
@@ -27,6 +27,34 @@ describe("word image sources", () => {
     expect(terms.slice(0, 4)).toEqual(["Glas Wasser", "Flasche Wasser", "Trinkwasser", "Leitungswasser"])
     expect(terms).toContain("water")
     expect(terms).toContain("Wasser")
+  })
+
+  test("buildWordGoogleImagesSearch opens Google Images with the best word query", () => {
+    const search = buildWordGoogleImagesSearch(
+      { bareNoun: "Wasser" },
+      {
+        english: "water",
+        imageSearchTerms: ["Wasser", "Glas Wasser"],
+      }
+    )
+
+    expect(search.query).toBe("Glas Wasser")
+    expect(search.url).toBe(buildGoogleImagesUrl("Glas Wasser"))
+    expect(search.url).toContain("images.google.com/search")
+    expect(search.url).toContain("tbm=isch")
+  })
+
+  test("buildVerbGoogleImagesSearch opens Google Images with the best verb query", () => {
+    const search = buildVerbGoogleImagesSearch(
+      { infinitive: "laufen", displayForm: "läuft" },
+      {
+        english: "run",
+        imageSearchTerms: ["Mann läuft"],
+      }
+    )
+
+    expect(search.query).toBe("Mann läuft")
+    expect(search.url).toBe(buildGoogleImagesUrl("Mann läuft"))
   })
 
   test("buildWordImageSearchTerms expands weak substance queries into prototype views", () => {

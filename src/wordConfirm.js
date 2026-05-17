@@ -3,7 +3,7 @@ import chalk from 'chalk';
 import { mkdir, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { platform, tmpdir } from 'os';
+import { homedir, platform, tmpdir } from 'os';
 import { spawn } from 'child_process';
 import { pathToFileURL } from 'url';
 import { config } from './lib/config.js';
@@ -30,6 +30,11 @@ function ask(question) {
 
 function label(text) {
   return chalk.cyan(text);
+}
+
+function expandUserPath(value = '') {
+  const trimmed = String(value || '').trim();
+  return trimmed.replace(/^~(?=$|\/)/, homedir());
 }
 
 function formatImageSelectionLabel(imageChoice) {
@@ -347,7 +352,10 @@ export async function chooseImage(wordData, meaning, candidates) {
     if (!manual) return null;
 
     if (/^https?:\/\//i.test(manual)) {
-      return manualRemoteSelection(manual);
+      return {
+        ...manualRemoteSelection(manual),
+        source: 'Google Images',
+      };
     }
 
     if (existsSync(manual)) {
@@ -416,6 +424,49 @@ export async function chooseImage(wordData, meaning, candidates) {
     if (!Number.isNaN(index) && index >= 1 && index <= pageCandidates.length) {
       return pageCandidates[index - 1];
     }
+  }
+}
+
+export async function chooseGoogleImage(wordData, meaning, googleSearch = {}) {
+  const searchUrl = googleSearch.url;
+  const query = googleSearch.query || wordData.canonical;
+  const variants = Array.isArray(googleSearch.queryVariants)
+    ? googleSearch.queryVariants.filter(Boolean)
+    : [];
+
+  console.log();
+  console.log(`Opening Google Images for ${wordData.canonical}${meaning?.russian ? ` (${meaning.russian})` : ''}: ${query}`);
+  if (variants.length > 1) {
+    console.log(chalk.dim(`Other useful queries: ${variants.slice(1, 4).join(' · ')}`));
+  }
+
+  if (searchUrl) {
+    try {
+      await openFile(searchUrl);
+    } catch (err) {
+      console.log(chalk.dim(`Could not open browser automatically: ${err.message}`));
+      console.log(chalk.dim(searchUrl));
+    }
+  }
+
+  while (true) {
+    const manual = await ask('Paste image URL/local path, or [S]kip: ');
+    const normalized = manual.toLowerCase();
+
+    if (!manual || normalized === 's' || normalized === 'skip') {
+      return null;
+    }
+
+    if (/^https?:\/\//i.test(manual)) {
+      return manualRemoteSelection(manual);
+    }
+
+    const path = expandUserPath(manual);
+    if (existsSync(path)) {
+      return manualLocalSelection(path);
+    }
+
+    console.log('Enter a valid image URL, existing local path, or S to skip.');
   }
 }
 

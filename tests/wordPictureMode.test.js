@@ -5,8 +5,11 @@ const mockChooseMeaning = jest.fn(async () => ({
   english: "quite",
 }))
 
-const mockChooseImage = jest.fn(async () => null)
-const mockSearchWordImages = jest.fn(async () => [])
+const mockChooseGoogleImage = jest.fn(async () => null)
+const mockBuildWordGoogleImagesSearch = jest.fn(() => ({
+  query: "ziemlich",
+  url: "https://images.google.com/search?tbm=isch&q=ziemlich",
+}))
 
 const mockConfirmWordSelection = jest.fn(async () => ({
   confirmed: true,
@@ -39,7 +42,7 @@ jest.unstable_mockModule("ora", () => ({
 }))
 
 jest.unstable_mockModule("../src/wordConfirm.js", () => ({
-  chooseImage: mockChooseImage,
+  chooseGoogleImage: mockChooseGoogleImage,
   chooseMeaning: mockChooseMeaning,
   chooseWordSentence: jest.fn(),
   confirmSentenceWordSelection: jest.fn(),
@@ -68,9 +71,9 @@ jest.unstable_mockModule("../src/lib/tts.js", () => ({
 }))
 
 jest.unstable_mockModule("../src/lib/wordSources.js", () => ({
+  buildWordGoogleImagesSearch: mockBuildWordGoogleImagesSearch,
   resolveImageAsset: jest.fn(),
   resolveWordPronunciation: mockResolveWordPronunciation,
-  searchWordImages: mockSearchWordImages,
 }))
 
 jest.unstable_mockModule("../src/wordEnricher.js", () => ({
@@ -118,9 +121,13 @@ describe("word mode picture flow", () => {
       showImage: false,
     }))
     expect(mockConfirmWordSelection.mock.invocationCallOrder[0]).toBeLessThan(
-      mockSearchWordImages.mock.invocationCallOrder[0]
+      mockChooseGoogleImage.mock.invocationCallOrder[0]
     )
-    expect(mockChooseImage).toHaveBeenCalled()
+    expect(mockBuildWordGoogleImagesSearch).toHaveBeenCalledWith(
+      expect.objectContaining({ canonical: "ziemlich" }),
+      expect.objectContaining({ russian: "довольно" })
+    )
+    expect(mockChooseGoogleImage).toHaveBeenCalled()
     expect(mockStoreMedia).not.toHaveBeenCalled()
     expect(mockStoreAudio).toHaveBeenCalled()
     expect(mockCreatePictureWordNote).toHaveBeenCalledWith(expect.objectContaining({

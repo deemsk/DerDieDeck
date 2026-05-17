@@ -18,9 +18,9 @@ import { buildVerbDictionaryNote } from './templates/verb/dictionary.js';
 import { buildVerbKeyFormProductionBack, buildVerbKeyFormProductionFront, buildVerbKeyFormRecognitionBack, buildVerbKeyFormRecognitionFront } from './templates/verb/keyForm.js';
 import { enrichVerb, generateVerbFormSentence, hasStructuredVerbAnalysis, shouldOfferDictionaryFormCard } from './verbEnricher.js';
 import { shouldSuggestVerbInfinitive, suggestVerbInfinitives } from './verbCorrection.js';
-import { chooseImage, chooseMeaning } from './wordConfirm.js';
+import { chooseGoogleImage, chooseMeaning } from './wordConfirm.js';
 import { chooseVerbSentence, confirmPictureVerbSelection, confirmSentenceVerbSelection, confirmStrongVerbPackage, formatVerbPreviewSummary, resolveVerbFocusForm } from './verbConfirm.js';
-import { resolveImageAsset, resolveWordPronunciation, searchVerbImages } from './lib/wordSources.js';
+import { buildVerbGoogleImagesSearch, resolveImageAsset, resolveWordPronunciation } from './lib/wordSources.js';
 import {
   checkConnection,
   createBasicNote,
@@ -215,18 +215,11 @@ async function buildVerbSentenceAudio(sentence, spinner) {
 
 async function choosePictureVerbImage(prepared, spinner) {
   const { verbData, selectedMeaning } = prepared;
-
-  spinner.start('Searching images...');
-  const imageCandidates = await searchVerbImages(verbData, selectedMeaning, {
-    pageSize: config.wordImagePreviewCount || 12,
-    total: config.wordImageSearchResults || 12,
-  });
-  spinner.stop();
-
-  const imageChoice = await chooseImage(
+  const googleSearch = buildVerbGoogleImagesSearch(verbData, selectedMeaning);
+  const imageChoice = await chooseGoogleImage(
     { canonical: verbData.infinitive },
     selectedMeaning,
-    imageCandidates
+    googleSearch
   );
   if (!imageChoice) {
     console.log(chalk.dim('Continuing without image.'));

@@ -11,10 +11,10 @@ const mockChooseWordSentence = jest.fn(async () => ({
   focusForm: "groß",
 }))
 
-const mockChooseImage = jest.fn(async () => ({
-  source: "Brave Images",
-  downloadUrl: "https://example.com/gross.jpg",
-  previewUrl: "https://example.com/gross-preview.jpg",
+const mockChooseGoogleImage = jest.fn(async () => ({
+  type: "remote-url",
+  source: "Google Images",
+  url: "https://example.com/gross.jpg",
 }))
 
 const mockConfirmSentenceWordSelection = jest.fn(async () => ({
@@ -42,11 +42,11 @@ const mockResolveWordPronunciation = jest.fn(async () => ({
   source: "Wiktionary/Wikimedia",
 }))
 const mockResolveImageAsset = jest.fn(async () => "/tmp/gross.jpg")
-const mockSearchWordImages = jest.fn(async () => ([{
-  source: "Brave Images",
-  downloadUrl: "https://example.com/gross.jpg",
-  previewUrl: "https://example.com/gross-preview.jpg",
-}]))
+const mockBuildWordGoogleImagesSearch = jest.fn(() => ({
+  query: "großes Haus",
+  url: "https://images.google.com/search?tbm=isch&q=gro%C3%9Fes+Haus",
+  queryVariants: ["großes Haus"],
+}))
 const mockReviewEnrichedText = jest.fn()
 const mockEnrich = jest.fn(async () => ({
   german: "Das Haus ist groß.",
@@ -67,7 +67,7 @@ jest.unstable_mockModule("ora", () => ({
 }))
 
 jest.unstable_mockModule("../src/wordConfirm.js", () => ({
-  chooseImage: mockChooseImage,
+  chooseGoogleImage: mockChooseGoogleImage,
   chooseMeaning: mockChooseMeaning,
   chooseWordSentence: mockChooseWordSentence,
   confirmSentenceWordSelection: mockConfirmSentenceWordSelection,
@@ -96,9 +96,9 @@ jest.unstable_mockModule("../src/lib/tts.js", () => ({
 }))
 
 jest.unstable_mockModule("../src/lib/wordSources.js", () => ({
+  buildWordGoogleImagesSearch: mockBuildWordGoogleImagesSearch,
   resolveImageAsset: mockResolveImageAsset,
   resolveWordPronunciation: mockResolveWordPronunciation,
-  searchWordImages: mockSearchWordImages,
 }))
 
 jest.unstable_mockModule("../src/wordEnricher.js", () => ({
@@ -137,19 +137,19 @@ describe("word mode sentence flow", () => {
       russian: "Дом большой.",
       focusForm: "groß",
     })
-    mockChooseImage.mockResolvedValue({
-      source: "Brave Images",
-      downloadUrl: "https://example.com/gross.jpg",
-      previewUrl: "https://example.com/gross-preview.jpg",
+    mockChooseGoogleImage.mockResolvedValue({
+      type: "remote-url",
+      source: "Google Images",
+      url: "https://example.com/gross.jpg",
     })
     mockConfirmSentenceWordSelection.mockResolvedValue({
       confirmed: true,
     })
-    mockSearchWordImages.mockResolvedValue([{
-      source: "Brave Images",
-      downloadUrl: "https://example.com/gross.jpg",
-      previewUrl: "https://example.com/gross-preview.jpg",
-    }])
+    mockBuildWordGoogleImagesSearch.mockReturnValue({
+      query: "großes Haus",
+      url: "https://images.google.com/search?tbm=isch&q=gro%C3%9Fes+Haus",
+      queryVariants: ["großes Haus"],
+    })
     mockReviewEnrichedText.mockReset()
     mockEnrich.mockResolvedValue({
       german: "Das Haus ist groß.",
@@ -184,7 +184,7 @@ describe("word mode sentence flow", () => {
       showImage: false,
     }))
     expect(mockConfirmSentenceWordSelection.mock.invocationCallOrder[0]).toBeLessThan(
-      mockSearchWordImages.mock.invocationCallOrder[0]
+      mockChooseGoogleImage.mock.invocationCallOrder[0]
     )
     expect(mockCreateNote).toHaveBeenCalledWith(expect.objectContaining({
       german: "Das Haus ist groß.",
@@ -314,7 +314,7 @@ describe("word mode sentence flow", () => {
 
     expect(added).toBe(true)
     expect(mockCreateNote).not.toHaveBeenCalled()
-    expect(mockSearchWordImages).not.toHaveBeenCalled()
+    expect(mockBuildWordGoogleImagesSearch).not.toHaveBeenCalled()
     expect(mockCreateBasicNote).not.toHaveBeenCalled()
     expect(mockCreateClozeNote).toHaveBeenCalledWith(expect.objectContaining({
       text: "[sound:word-sentence.mp3]<br>Ich bin müde, {{c1::aber::contrast connector}} ich komme.",
@@ -501,10 +501,10 @@ describe("word mode sentence flow", () => {
       "Use coffee instead.",
       expect.not.objectContaining({ includeImageBrief: true })
     )
-    expect(mockSearchWordImages).toHaveBeenCalledTimes(1)
-    expect(mockChooseImage).toHaveBeenCalledTimes(1)
+    expect(mockBuildWordGoogleImagesSearch).toHaveBeenCalledTimes(1)
+    expect(mockChooseGoogleImage).toHaveBeenCalledTimes(1)
     expect(mockConfirmSentenceWordSelection.mock.invocationCallOrder[1]).toBeLessThan(
-      mockSearchWordImages.mock.invocationCallOrder[0]
+      mockChooseGoogleImage.mock.invocationCallOrder[0]
     )
 
     const payload = mockCreateNote.mock.calls.at(-1)[0]
@@ -542,10 +542,10 @@ describe("word mode sentence flow", () => {
     })
 
     expect(added).toBe(true)
-    expect(mockSearchWordImages).toHaveBeenCalledTimes(1)
-    expect(mockChooseImage).toHaveBeenCalledTimes(1)
+    expect(mockBuildWordGoogleImagesSearch).toHaveBeenCalledTimes(1)
+    expect(mockChooseGoogleImage).toHaveBeenCalledTimes(1)
     expect(mockConfirmSentenceWordSelection.mock.invocationCallOrder[1]).toBeLessThan(
-      mockSearchWordImages.mock.invocationCallOrder[0]
+      mockChooseGoogleImage.mock.invocationCallOrder[0]
     )
 
     const payload = mockCreateNote.mock.calls.at(-1)[0]
