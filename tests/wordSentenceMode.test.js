@@ -82,12 +82,17 @@ jest.unstable_mockModule("../src/anki.js", () => ({
   createPictureWordNote: jest.fn(),
   ensureDeck: mockEnsureDeck,
   findLexicalClozeDuplicates: mockFindLexicalClozeDuplicates,
+  findCardsByQuery: jest.fn(),
   findSimilarCards: mockFindSimilarCards,
   findSentenceWordDuplicates: mockFindSentenceWordDuplicates,
+  findNotesByQuery: jest.fn(),
   findWordDuplicates: jest.fn(),
+  getCardsInfo: jest.fn(),
+  getNotesInfo: jest.fn(),
   getNoteTypes: mockGetNoteTypes,
   storeAudio: mockStoreAudio,
   storeMedia: mockStoreMedia,
+  syncCollection: jest.fn(),
 }))
 
 jest.unstable_mockModule("../src/lib/tts.js", () => ({

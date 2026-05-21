@@ -32,6 +32,7 @@ function buildWordSystemPrompt({
   forceBareLexicalCandidate = false,
   forceGermanInputIdentity = false,
   forceFunctionWordCandidate = false,
+  learnerProfileContext = null,
 } = {}) {
   const retryInstructions = forceVisibleNoun ? `
 - The user explicitly wants a picture-word card for a visible noun that may depict a scene rather than a handheld object.
@@ -54,6 +55,12 @@ function buildWordSystemPrompt({
 - Return a cloze-form lexical analysis with clear short examples that contain the exact typed surface form where possible.
 - For personal pronoun case forms like "mich", "mir", "dich", "dir", "ihn", "ihm", "uns", "euch", and "ihnen", keep the typed case form as canonical instead of replacing it with nominative "ich", "du", "er", or "sie".
 - For article/determiner forms like "den", "dem", "einen", or "keine", prefer the typed surface form as canonical when the learner likely needs that form.` : '';
+  const learnerProfileInstructions = learnerProfileContext ? `
+Learner progress:
+${learnerProfileContext}
+- When generating examples, use the learner progress as a gentle preference for vocabulary and sentence complexity.
+- Do not force advanced vocabulary if it makes the sentence unnatural or distracts from the target word.
+- Prefer examples that are more relevant to the learner's current level over generic beginner defaults.` : '';
 
   return `You are a German language expert and Fluent Forever consultant.
 
@@ -132,6 +139,7 @@ ${retryInstructions}
 ${lexicalRetryInstructions}
 ${germanInputIdentityInstructions}
 ${functionWordRetryInstructions}
+${learnerProfileInstructions}
 
 Respond in JSON only:
 {
@@ -687,12 +695,13 @@ async function requestWordAnalysis(client, input, options = {}) {
 
 async function requestCompletedWordAnalysis(client, input, options = {}) {
   const result = await requestWordAnalysis(client, input, options);
-  return completeWordAnalysisIfNeeded(client, result);
+  return completeWordAnalysisIfNeeded(client, result, options);
 }
 
-async function completeWordAnalysisIfNeeded(client, result) {
+async function completeWordAnalysisIfNeeded(client, result, options = {}) {
   const withMeanings = await completeMeaningsIfNeeded(client, result);
-  return completeSentenceExamplesIfNeeded(client, withMeanings);
+  const withExamples = await completeSentenceExamplesIfNeeded(client, withMeanings, options);
+  return tuneExampleSentencesForLearnerIfNeeded(client, withExamples, options);
 }
 
 async function completeMeaningsIfNeeded(client, result) {
@@ -723,7 +732,7 @@ async function completeMeaningsIfNeeded(client, result) {
   };
 }
 
-async function completeSentenceExamplesIfNeeded(client, result) {
+async function completeSentenceExamplesIfNeeded(client, result, options = {}) {
   if (
     !['sentence-form', 'cloze-form'].includes(result.recommendedMode) ||
     result.exampleSentences.length >= 3 ||
@@ -755,35 +764,96 @@ async function completeSentenceExamplesIfNeeded(client, result) {
   };
 }
 
-export async function enrichWord(input) {
+function shouldTuneExamplesForLearner(result = {}, options = {}) {
+  return Boolean(
+    String(options.learnerProfileContext || '').trim() &&
+    ['sentence-form', 'cloze-form'].includes(result.recommendedMode) &&
+    result.canonical &&
+    Array.isArray(result.exampleSentences) &&
+    result.exampleSentences.length > 0
+  );
+}
+
+async function tuneExampleSentencesForLearnerIfNeeded(client, result, options = {}) {
+  if (!shouldTuneExamplesForLearner(result, options)) {
+    return result;
+  }
+
+  try {
+    const completion = await client.chat.completions.create({
+      model: config.openaiModel,
+      messages: [
+        {
+          role: 'system',
+          content: `Return JSON only. Review and, if useful, improve German example sentence options for a lexical flashcard.
+
+The learner progress context is a preference, not a hard filter.
+Keep the German natural, keep the target word or a direct inflected/surface form, and keep the intended meaning clear.
+Prefer examples that avoid generic beginner filler when a more relevant learner-level sentence would still be short and natural.
+Do not make the sentence advanced merely for its own sake.`,
+        },
+        {
+          role: 'user',
+          content: `Learner progress context:
+${options.learnerProfileContext}
+
+German target word: ${result.canonical}
+Lexical type: ${result.lexicalType}
+Meaning options: ${result.meanings?.map((meaning) => meaning?.russian || meaning?.english).filter(Boolean).join('; ') || 'none'}
+
+Current examples:
+${result.exampleSentences.map((sentence, index) => `${index + 1}. ${sentence.german}${sentence.russian ? ` = ${sentence.russian}` : ''}${sentence.focusForm ? ` [focus: ${sentence.focusForm}]` : ''}`).join('\n')}
+
+Return up to 3 examples as {"exampleSentences":[{"german":"","russian":"","focusForm":"","imageBrief":{"searchQuery":"","queryVariants":[],"sceneSummary":"","focusRole":"","mustShow":[],"avoid":[],"imagePrompt":""}}]}.`,
+        },
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.25,
+    });
+    const reviewed = JSON.parse(completion.choices[0].message.content);
+
+    return {
+      ...result,
+      exampleSentences: mergeExampleSentences(reviewed.exampleSentences, result.exampleSentences),
+    };
+  } catch {
+    return result;
+  }
+}
+
+export async function enrichWord(input, options = {}) {
   const curatedFunctionWord = getCuratedFunctionWordAnalysis(input);
   if (curatedFunctionWord) {
-    return curatedFunctionWord;
+    if (!options.learnerProfileContext) {
+      return curatedFunctionWord;
+    }
+    const client = await getClient();
+    return completeWordAnalysisIfNeeded(client, curatedFunctionWord, options);
   }
 
   const client = await getClient();
-  let completed = await requestCompletedWordAnalysis(client, input);
+  let completed = await requestCompletedWordAnalysis(client, input, options);
 
   if (shouldRetryGermanInputPreservation(input, completed)) {
-    completed = await requestCompletedWordAnalysis(client, input, { forceGermanInputIdentity: true });
+    completed = await requestCompletedWordAnalysis(client, input, { ...options, forceGermanInputIdentity: true });
   }
 
   if (shouldRetryFunctionWordRejection(input, completed)) {
-    const retried = await requestCompletedWordAnalysis(client, input, { forceFunctionWordCandidate: true });
+    const retried = await requestCompletedWordAnalysis(client, input, { ...options, forceFunctionWordCandidate: true });
     if (retried.shouldCreateWordCard !== false || hasStructuredWordAnalysis(retried)) {
       return retried;
     }
-    return completeWordAnalysisIfNeeded(client, buildFunctionWordFallback(input, retried));
+    return completeWordAnalysisIfNeeded(client, buildFunctionWordFallback(input, retried), options);
   }
 
   if (shouldRetryImageableNounRejection(input, completed)) {
-    return requestCompletedWordAnalysis(client, input, { forceVisibleNoun: true });
+    return requestCompletedWordAnalysis(client, input, { ...options, forceVisibleNoun: true });
   }
 
   if (shouldRetryBareLexicalRejection(input, completed)) {
-    const retried = await requestCompletedWordAnalysis(client, input, { forceBareLexicalCandidate: true });
+    const retried = await requestCompletedWordAnalysis(client, input, { ...options, forceBareLexicalCandidate: true });
     if (shouldFallbackBareAdverbRejection(input, retried)) {
-      return completeWordAnalysisIfNeeded(client, buildBareLexicalAdverbFallback(input, retried));
+      return completeWordAnalysisIfNeeded(client, buildBareLexicalAdverbFallback(input, retried), options);
     }
     if (retried.shouldCreateWordCard === false) {
       const familyFallback = buildEverydayFamilyNounFallback(input, retried);
@@ -792,14 +862,14 @@ export async function enrichWord(input) {
       }
     }
     if (shouldRetryBareLexicalRejection(input, retried)) {
-      return completeWordAnalysisIfNeeded(client, buildBareLexicalAdjectiveFallback(input, retried));
+      return completeWordAnalysisIfNeeded(client, buildBareLexicalAdjectiveFallback(input, retried), options);
     }
     return retried;
   }
 
   if (completed.shouldCreateWordCard === false) {
     if (shouldFallbackBareAdverbRejection(input, completed)) {
-      return completeWordAnalysisIfNeeded(client, buildBareLexicalAdverbFallback(input, completed));
+      return completeWordAnalysisIfNeeded(client, buildBareLexicalAdverbFallback(input, completed), options);
     }
     const familyFallback = buildEverydayFamilyNounFallback(input, completed);
     if (familyFallback !== completed) {

@@ -59,6 +59,14 @@ const defaults = {
   audioLeadIn: 0.4,   // Silence at start of audio (seconds) for brain to tune in
   wordImagePreviewCount: 12,
   wordImageSearchResults: 12,
+
+  // Learner progress profile
+  knowledgeProfileEnabled: true,
+  knowledgeProfileQuery: 'tag:yt2anki',
+  knowledgeProfileSyncBeforeRefresh: true,
+  knowledgeProfileMaxCacheAgeDays: 21,
+  knowledgeProfilePromptKnownWordsLimit: 60,
+  knowledgeProfileRefreshTimeoutMs: 7000,
 };
 
 const ACTIVE_CONFIG_PATH = resolveConfigPath();

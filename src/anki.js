@@ -48,6 +48,34 @@ export async function checkConnection() {
   }
 }
 
+export async function syncCollection() {
+  return ankiConnect('sync');
+}
+
+export async function findNotesByQuery(query) {
+  return ankiConnect('findNotes', { query });
+}
+
+export async function getNotesInfo(noteIds = []) {
+  if (!noteIds.length) {
+    return [];
+  }
+
+  return ankiConnect('notesInfo', { notes: noteIds });
+}
+
+export async function findCardsByQuery(query) {
+  return ankiConnect('findCards', { query });
+}
+
+export async function getCardsInfo(cardIds = []) {
+  if (!cardIds.length) {
+    return [];
+  }
+
+  return ankiConnect('cardsInfo', { cards: cardIds });
+}
+
 /**
  * Ensure deck exists
  */

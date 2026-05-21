@@ -235,6 +235,12 @@ Edit `~/.derdiedeck.json`:
   "audioLeadIn": 0.4,
   "wordImagePreviewCount": 12,
   "wordImageSearchResults": 12,
+  "knowledgeProfileEnabled": true,
+  "knowledgeProfileQuery": "tag:yt2anki",
+  "knowledgeProfileSyncBeforeRefresh": true,
+  "knowledgeProfileMaxCacheAgeDays": 21,
+  "knowledgeProfilePromptKnownWordsLimit": 60,
+  "knowledgeProfileRefreshTimeoutMs": 7000,
   "dataDir": "/tmp/derdiedeck"
 }
 ```
@@ -245,6 +251,7 @@ Notes:
 - `ttsPause` is a legacy setting from the old repeated sentence-audio flow and is no longer used in the default word/verb paths.
 - `wordNoteType` is used for picture-word cards.
 - `grammarNoteType` should point to an Anki cloze model with `Text` and `Back Extra` or `Extra`.
+- `knowledgeProfile*` settings let the app refresh a local, best-effort learning profile from Anki and use a compact summary to tune generated examples.
 
 ## Stack
 

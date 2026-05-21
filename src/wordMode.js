@@ -22,6 +22,7 @@ import { buildWordSentenceFrontFooter } from './templates/word/sentenceWord.js';
 import { canProceedWithWeakWordCard, enrichWord, hasStructuredWordAnalysis } from './wordEnricher.js';
 import { chooseGoogleImage, chooseMeaning, chooseWordSentence, confirmSentenceWordSelection, confirmWordSelection } from './wordConfirm.js';
 import { buildWordGoogleImagesSearch, resolveImageAsset, resolveWordPronunciation } from './lib/wordSources.js';
+import { consumeLearnerProfileWarning, getLearnerProfilePromptContext } from './knowledgeProfile/index.js';
 import {
   checkConnection,
   createBasicNote,
@@ -193,6 +194,32 @@ function showWordHeader(rawInput) {
   console.log(chalk.bold(label));
 }
 
+async function resolveLearnerProfileForWord(rawInput, options = {}) {
+  if (options.analysisResult || options.learnerProfileContext === false) {
+    return null;
+  }
+
+  if (typeof options.learnerProfileContext === 'string') {
+    return options.learnerProfileContext;
+  }
+
+  try {
+    const result = await getLearnerProfilePromptContext({
+      target: { rawInput },
+      allowRefresh: options.knowledgeProfileRefresh !== false,
+      allowSync: !options.dryRun,
+    });
+    const warning = consumeLearnerProfileWarning(result);
+    if (warning) {
+      console.log(chalk.yellow(warning));
+    }
+
+    return result.promptContext || null;
+  } catch {
+    return null;
+  }
+}
+
 async function ensureWordSetup(deck, dryRun) {
   if (dryRun) return;
 
@@ -349,8 +376,9 @@ async function rebuildSentenceWordPreview(prepared, feedback, options, spinner) 
 }
 
 async function prepareWord(rawInput, options, spinner) {
+  const learnerProfileContext = await resolveLearnerProfileForWord(rawInput, options);
   spinner.start('Analyzing word...');
-  const wordData = options.analysisResult || await enrichWord(rawInput);
+  const wordData = options.analysisResult || await enrichWord(rawInput, { learnerProfileContext });
   const route = resolveWordRoute(wordData);
   const structuredAnalysis = hasStructuredWordAnalysis(wordData);
   const recoverableWeakCandidate = route === 'picture-word' && canProceedWithWeakWordCard(wordData);
