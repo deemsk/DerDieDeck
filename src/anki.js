@@ -13,9 +13,10 @@ import { escapeHtml, stripHtml } from './cardContent/html.js';
 import { normalizeGermanForCompare, toTagSlug } from './cardContent/german.js';
 import { extractCanonicalWord, extractWordLexicalType, extractWordMeaning, parseWordMetadataComment } from './cardContent/wordMetadata.js';
 import { buildLearningIntentTags, buildSiblingStageTags } from './cardContent/learningDesign.js';
-import { buildWordSentenceContrastFooter, formatIpaHtml, personalConnectionCue } from './templates/shared/components.js';
+import { buildWordSentenceContrastFooter, formatIpaHtml, formatPlainWord, formatPronunciationField, personalConnectionCue } from './templates/shared/components.js';
 import { hasCurrentDerDieDeckStyles, mergeDerDieDeckStyles } from './templates/shared/styles.js';
 import { parseGrammarMetadataComment } from './grammar/utils.js';
+import { resolveWordPronunciation } from './lib/wordSources.js';
 
 /**
  * Call AnkiConnect API
@@ -1316,6 +1317,93 @@ export async function migrateVerbDictionaryIpaBacks({ dryRun = false } = {}) {
       noteId: note.noteId,
       infinitive: lines[0] || null,
       ipa: lines[ipaIndex] || null,
+    });
+    updated++;
+  }
+
+  return {
+    matched: notes.length,
+    updated,
+    skipped,
+    notes: migrated,
+  };
+}
+
+export async function migrateVerbDictionaryPronunciationBacks({ dryRun = false } = {}) {
+  const noteIds = await ankiConnect('findNotes', {
+    query: 'tag:mode-verb-dictionary',
+  });
+
+  if (noteIds.length === 0) {
+    return {
+      matched: 0,
+      updated: 0,
+      skipped: 0,
+      notes: [],
+    };
+  }
+
+  const notes = await ankiConnect('notesInfo', { notes: noteIds });
+  const migrated = [];
+  let updated = 0;
+  let skipped = 0;
+
+  for (const note of notes) {
+    const back = note.fields?.Back?.value || '';
+
+    if (/\[sound:[^\]]+\]/i.test(back)) {
+      skipped++;
+      continue;
+    }
+
+    const lines = extractFieldLines(back);
+    const infinitive = lines[0] || stripHtml(note.fields?.Back?.value || '').trim();
+    if (!infinitive) {
+      skipped++;
+      continue;
+    }
+
+    let pronunciation = null;
+    try {
+      pronunciation = await resolveWordPronunciation({
+        canonical: infinitive,
+        bareNoun: infinitive,
+        lemma: infinitive,
+      }, {
+        downloadAudio: !dryRun,
+      });
+    } catch {
+      pronunciation = null;
+    }
+
+    if (!pronunciation?.audioPath && !(dryRun && pronunciation?.audioUrl)) {
+      skipped++;
+      continue;
+    }
+
+    let audioFilename = null;
+    if (!dryRun) {
+      audioFilename = await storeAudio(pronunciation.audioPath);
+    }
+
+    const ipaIndex = lines.findIndex((line) => /^\[[^\]]+\]$/.test(line));
+    const ipa = pronunciation.ipa || (ipaIndex === -1 ? null : lines[ipaIndex]);
+    const rest = lines.slice(1).filter((line, index) => index + 1 !== ipaIndex);
+    const nextBack = [
+      formatPlainWord(infinitive),
+      formatPronunciationField(audioFilename || 'preview.mp3', ipa),
+      ...rest.map((line) => escapeHtml(line)),
+    ].filter(Boolean).join('<br>');
+
+    if (!dryRun) {
+      await updateNoteFields(note.noteId, { Back: nextBack });
+    }
+
+    migrated.push({
+      noteId: note.noteId,
+      infinitive,
+      ipa,
+      source: pronunciation.source,
     });
     updated++;
   }

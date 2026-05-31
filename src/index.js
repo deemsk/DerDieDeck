@@ -10,7 +10,7 @@ import { downloadAudio, extractVideoId } from './lib/downloader.js';
 import { cutClip, parseTimestamp } from './lib/clipper.js';
 import { transcribe } from './lib/transcriber.js';
 import { enrich, reviewEnrichedText } from './enricher.js';
-import { checkConnection, ensureDeck, storeAudio, createNote, createNotes, getNoteTypes, getNoteFields, findSimilarCards, migrateAdjectiveSentenceFronts, migrateComprehensionCardFronts, migratePictureWordExtraInfo, migratePictureWordPersonalConnections, migrateProductionCardFronts, migrateSentenceWordReverseCards, migrateSentenceVerbReverseCards, migrateTemplateInlineStyles, migrateVerbSentenceFronts, migrateVerbDictionaryIpaBacks, ensureDerDieDeckStyling } from './anki.js';
+import { checkConnection, ensureDeck, storeAudio, createNote, createNotes, getNoteTypes, getNoteFields, findSimilarCards, migrateAdjectiveSentenceFronts, migrateComprehensionCardFronts, migratePictureWordExtraInfo, migratePictureWordPersonalConnections, migrateProductionCardFronts, migrateSentenceWordReverseCards, migrateSentenceVerbReverseCards, migrateTemplateInlineStyles, migrateVerbSentenceFronts, migrateVerbDictionaryIpaBacks, migrateVerbDictionaryPronunciationBacks, ensureDerDieDeckStyling } from './anki.js';
 import { config, CONFIG_PATH_DISPLAY, ACTIVE_CONFIG_PATH_DISPLAY, LEGACY_CONFIG_PATH_DISPLAY } from './lib/config.js';
 import { confirmCard, confirmCardSet } from './confirm.js';
 import { analyzeSentence, selectCards } from './analyzer.js';
@@ -233,6 +233,12 @@ program
   .description('Rewrite existing verb dictionary-note IPA lines to use the shared IPA styling')
   .option('-n, --dry-run', 'Preview matching notes without changing them')
   .action(runVerbDictionaryIpaMigration);
+
+program
+  .command('migrate-verb-dictionary-audio')
+  .description('Add Wiktionary/Wikimedia audio to existing verb dictionary-note backs')
+  .option('-n, --dry-run', 'Preview matching notes without changing them')
+  .action(runVerbDictionaryAudioMigration);
 
 program
   .command('migrate-picture-word-extra-info')
@@ -1229,6 +1235,55 @@ async function runVerbDictionaryIpaMigration(options) {
       console.log(chalk.yellow('⚡ DRY RUN: No notes were changed'));
     } else {
       console.log(chalk.green(`✓ Migrated ${result.updated} verb dictionary cards`));
+    }
+  } catch (err) {
+    spinner.fail(err.message);
+    process.exit(1);
+  }
+}
+
+async function runVerbDictionaryAudioMigration(options) {
+  const spinner = ora();
+
+  try {
+    spinner.start('Checking AnkiConnect...');
+    if (!await checkConnection()) {
+      spinner.fail('AnkiConnect not available. Make sure Anki is running.');
+      process.exit(1);
+    }
+    spinner.succeed('AnkiConnect ready');
+
+    spinner.start(options.dryRun
+      ? 'Scanning verb dictionary cards...'
+      : 'Adding verb dictionary audio...');
+    const result = await migrateVerbDictionaryPronunciationBacks({
+      dryRun: Boolean(options.dryRun),
+    });
+    spinner.stop();
+
+    console.log();
+    console.log(chalk.bold('Verb dictionary audio migration'));
+    console.log(`  Matched: ${result.matched}`);
+    console.log(`  Updated: ${result.updated}`);
+    console.log(`  Skipped: ${result.skipped}`);
+
+    if (result.notes.length > 0) {
+      console.log();
+      console.log(chalk.dim('Updated note IDs:'));
+      result.notes.slice(0, 20).forEach((entry) => {
+        const source = entry.source ? `, ${entry.source}` : '';
+        console.log(chalk.dim(`  ${entry.noteId}${entry.infinitive ? ` (${entry.infinitive}${source})` : ''}`));
+      });
+      if (result.notes.length > 20) {
+        console.log(chalk.dim(`  ...and ${result.notes.length - 20} more`));
+      }
+    }
+
+    console.log();
+    if (options.dryRun) {
+      console.log(chalk.yellow('⚡ DRY RUN: No notes were changed'));
+    } else {
+      console.log(chalk.green(`✓ Added audio to ${result.updated} verb dictionary cards`));
     }
   } catch (err) {
     spinner.fail(err.message);

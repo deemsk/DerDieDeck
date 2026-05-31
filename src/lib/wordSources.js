@@ -1572,7 +1572,7 @@ async function getWiktionaryPronunciationData(word) {
 /**
  * Fetch human pronunciation audio and IPA from Wiktionary/Wikimedia when available.
  */
-export async function resolveWordPronunciation(wordData) {
+export async function resolveWordPronunciation(wordData, options = {}) {
   const pronunciationData = await getWiktionaryPronunciationData(getWordLemma(wordData));
   const normalizedIpa = pronunciationData.ipa
     ? normalizeWordIpa(wordData.canonical, pronunciationData.ipa)
@@ -1587,6 +1587,15 @@ export async function resolveWordPronunciation(wordData) {
       ipa: normalizedIpa,
       audioPath: null,
       source: 'Wiktionary',
+    };
+  }
+
+  if (options.downloadAudio === false) {
+    return {
+      ipa: normalizedIpa,
+      audioPath: null,
+      audioUrl: pronunciationData.audioUrls[0],
+      source: 'Wiktionary/Wikimedia',
     };
   }
 

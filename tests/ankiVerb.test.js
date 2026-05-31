@@ -1,4 +1,4 @@
-import { createBasicNote, createPictureWordNote, migrateVerbDictionaryIpaBacks } from "../src/anki.js"
+import { createBasicNote, createPictureWordNote, migrateVerbDictionaryIpaBacks, migrateVerbDictionaryPronunciationBacks } from "../src/anki.js"
 import { buildVerbDictionaryNote } from "../src/templates/verb/dictionary.js"
 import { buildWordExtraInfo } from "../src/templates/word/extraInfo.js"
 
@@ -159,5 +159,83 @@ describe("verb note helpers", () => {
     expect(updateRequest.params.note.fields.Back).toContain("yt2anki-ipa")
     expect(updateRequest.params.note.fields.Back).toContain("erreichen")
     expect(updateRequest.params.note.fields.Back).toContain("достигать")
+  })
+
+  test("migrateVerbDictionaryPronunciationBacks adds Wiktionary audio to verb dictionary backs", async () => {
+    const requests = []
+
+    global.fetch = async (url, options = {}) => {
+      const urlText = String(url)
+
+      if (urlText.includes("de.wiktionary.org")) {
+        return {
+          ok: true,
+          async json() {
+            return {
+              parse: {
+                text: 'IPA: [foːɐ̯ˈbaɪ̯ˌkɔmən] <a href="//upload.wikimedia.org/wikipedia/commons/6/6e/De-vorbeikommen.mp3">vorbeikommen</a>',
+              },
+            }
+          },
+        }
+      }
+
+      if (urlText.includes("upload.wikimedia.org")) {
+        return {
+          ok: true,
+          headers: { get: () => "audio/mpeg" },
+          async arrayBuffer() {
+            return Buffer.from("audio")
+          },
+        }
+      }
+
+      const body = JSON.parse(options.body)
+      requests.push(body)
+
+      if (body.action === "findNotes") {
+        return {
+          async json() {
+            return { result: [101], error: null }
+          },
+        }
+      }
+
+      if (body.action === "notesInfo") {
+        return {
+          async json() {
+            return {
+              result: [
+                {
+                  noteId: 101,
+                  fields: {
+                    Front: { value: "kommt vorbei" },
+                    Back: { value: "vorbeikommen" },
+                  },
+                  tags: ["yt2anki", "mode-verb-dictionary"],
+                },
+              ],
+              error: null,
+            }
+          },
+        }
+      }
+
+      return {
+        async json() {
+          return { result: null, error: null }
+        },
+      }
+    }
+
+    const result = await migrateVerbDictionaryPronunciationBacks()
+
+    expect(result.updated).toBe(1)
+    const mediaRequest = requests.find((body) => body.action === "storeMediaFile")
+    expect(mediaRequest.params.filename).toMatch(/^word_audio_human_.*\.mp3$/)
+    const updateRequest = requests.find((body) => body.action === "updateNoteFields")
+    expect(updateRequest.params.note.fields.Back).toContain("[sound:")
+    expect(updateRequest.params.note.fields.Back).toContain("vorbeikommen")
+    expect(updateRequest.params.note.fields.Back).toContain("yt2anki-ipa")
   })
 })
