@@ -5,7 +5,7 @@ import chalk from 'chalk';
 import { config } from './lib/config.js';
 import { estimateLexicalCEFR } from './cardContent/cefr.js';
 import { getWordFrequencyInfo } from './lib/wordFrequency.js';
-import { toTagSlug } from './cardContent/german.js';
+import { normalizeGermanForCompare, toTagSlug } from './cardContent/german.js';
 import { applyChosenSentenceGloss } from './cardContent/wordLexical.js';
 import { buildVerbMorphologyTags, resolveVerbMorphology } from './cardContent/verbMorphology.js';
 import { buildStrongVerbPackagePlan, buildVerbFormContext } from './cardContent/verbPackage.js';
@@ -29,6 +29,7 @@ import {
   createPictureWordNote,
   ensureDeck,
   findSimilarCards,
+  findVerbFormDuplicates,
   findVerbLemmaDuplicates,
   findVerbSentenceDuplicates,
   findWordDuplicates,
@@ -67,6 +68,19 @@ function normalizeVerbMode(mode) {
   if (mode === 'picture' || mode === 'picture-word') return 'picture-word';
   if (mode === 'sentence' || mode === 'sentence-form') return 'sentence-form';
   return null;
+}
+
+function resolveRequestedVerbForm(verbData = {}) {
+  const displayForm = String(verbData.displayForm || '').trim();
+  const infinitive = String(verbData.infinitive || '').trim();
+
+  if (!displayForm || !infinitive) {
+    return null;
+  }
+
+  return normalizeGermanForCompare(displayForm) !== normalizeGermanForCompare(infinitive)
+    ? displayForm
+    : null;
 }
 
 async function askVerbInfinitiveSuggestion(rawInput, suggestions = []) {
@@ -480,7 +494,7 @@ async function createVerbFormClozeNote(verbData, sentence, morphology, deck, sta
  * Builds an explicit morphology package preview, or returns null for standard fallback.
  */
 async function prepareStrongVerbPackage({ verbData, selectedMeaning, route, frequencyInfo, options, spinner }) {
-  if (options.disableStrongVerbPackage || options.sentence) {
+  if (options.disableStrongVerbPackage || options.sentence || resolveRequestedVerbForm(verbData)) {
     return null;
   }
 
@@ -635,31 +649,45 @@ async function prepareVerb(rawInput, options, spinner) {
   if (!options.dryRun) {
     spinner.start('Checking verb duplicates...');
     try {
-      const [wordDuplicateInfo, lemmaDuplicateInfo, sentenceDuplicateInfo] = await Promise.all([
-        findWordDuplicates({
-          canonical: verbData.infinitive,
-          meaning: selectedMeaning.russian,
-          lexicalType: 'verb',
-          modelName: DEFAULT_WORD_NOTE_TYPE,
-        }),
-        findVerbLemmaDuplicates({
+      const requestedForm = resolveRequestedVerbForm(verbData);
+      if (requestedForm) {
+        const formDuplicateInfo = await findVerbFormDuplicates({
           infinitive: verbData.infinitive,
-          modelName: config.ankiNoteType,
-        }),
-        findVerbSentenceDuplicates({
-          infinitive: verbData.infinitive,
-        }),
-      ]);
-      spinner.stop();
+          form: requestedForm,
+        });
+        spinner.stop();
 
-      if (
-        wordDuplicateInfo.exactMatches.length > 0 ||
-        wordDuplicateInfo.headwordMatches.length > 0 ||
-        lemmaDuplicateInfo.exactMatches.length > 0 ||
-        sentenceDuplicateInfo.exactMatches.length > 0
-      ) {
-        console.log(chalk.yellow(`Verb already exists for ${verbData.infinitive}`));
-        return { rejected: true };
+        if (formDuplicateInfo.exactMatches.length > 0) {
+          console.log(chalk.yellow(`Verb form already exists for ${verbData.infinitive}: ${requestedForm}`));
+          return { rejected: true };
+        }
+      } else {
+        const [wordDuplicateInfo, lemmaDuplicateInfo, sentenceDuplicateInfo] = await Promise.all([
+          findWordDuplicates({
+            canonical: verbData.infinitive,
+            meaning: selectedMeaning.russian,
+            lexicalType: 'verb',
+            modelName: DEFAULT_WORD_NOTE_TYPE,
+          }),
+          findVerbLemmaDuplicates({
+            infinitive: verbData.infinitive,
+            modelName: config.ankiNoteType,
+          }),
+          findVerbSentenceDuplicates({
+            infinitive: verbData.infinitive,
+          }),
+        ]);
+        spinner.stop();
+
+        if (
+          wordDuplicateInfo.exactMatches.length > 0 ||
+          wordDuplicateInfo.headwordMatches.length > 0 ||
+          lemmaDuplicateInfo.exactMatches.length > 0 ||
+          sentenceDuplicateInfo.exactMatches.length > 0
+        ) {
+          console.log(chalk.yellow(`Verb already exists for ${verbData.infinitive}`));
+          return { rejected: true };
+        }
       }
     } catch (err) {
       spinner.stop();

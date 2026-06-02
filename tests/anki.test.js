@@ -1,4 +1,4 @@
-import { createNote, createNotes, ensureDerDieDeckStyling, findSimilarCards, findVerbSentenceDuplicates } from "../src/anki.js"
+import { createNote, createNotes, ensureDerDieDeckStyling, findSimilarCards, findVerbFormDuplicates, findVerbSentenceDuplicates } from "../src/anki.js"
 
 describe("anki helpers", () => {
   const originalFetch = global.fetch
@@ -300,6 +300,29 @@ describe("anki helpers", () => {
       exactMatches: [
         { noteId: 91, infinitive: "bleiben" },
         { noteId: 92, infinitive: "bleiben" },
+      ],
+    })
+  })
+
+  test("findVerbFormDuplicates checks exact trained verb forms by lemma and form tags", async () => {
+    global.fetch = async (_url, options) => {
+      const body = JSON.parse(options.body)
+
+      if (body.action === "findNotes") {
+        expect(body.params.query).toBe("tag:lemma-sein tag:verb-form-waere")
+        return {
+          async json() {
+            return { result: [101], error: null }
+          },
+        }
+      }
+
+      throw new Error(`Unexpected action: ${body.action}`)
+    }
+
+    await expect(findVerbFormDuplicates({ infinitive: "sein", form: "wäre" })).resolves.toEqual({
+      exactMatches: [
+        { noteId: 101, infinitive: "sein", form: "wäre" },
       ],
     })
   })

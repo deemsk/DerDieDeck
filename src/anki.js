@@ -729,6 +729,28 @@ export async function findVerbSentenceDuplicates({
   };
 }
 
+export async function findVerbFormDuplicates({
+  infinitive,
+  form,
+}) {
+  const normalizedForm = String(form || '').trim();
+  if (!normalizedForm) {
+    return { exactMatches: [] };
+  }
+
+  const noteIds = await ankiConnect('findNotes', {
+    query: `tag:lemma-${toTagSlug(infinitive)} tag:verb-form-${toTagSlug(normalizedForm)}`,
+  });
+
+  return {
+    exactMatches: noteIds.map((noteId) => ({
+      noteId,
+      infinitive,
+      form: normalizedForm,
+    })),
+  };
+}
+
 export async function findSentenceWordDuplicates({
   canonical,
   meaning = null,

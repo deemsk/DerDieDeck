@@ -30,6 +30,7 @@ const mockCheckConnection = jest.fn(async () => true)
 const mockGetNoteTypes = jest.fn(async () => ["2. Picture Words", "Basic (optional reversed card)"])
 const mockEnsureDeck = jest.fn(async () => {})
 const mockFindSimilarCards = jest.fn(async () => [])
+const mockFindVerbFormDuplicates = jest.fn(async () => ({ exactMatches: [] }))
 const mockFindVerbLemmaDuplicates = jest.fn(async () => ({ exactMatches: [] }))
 const mockFindVerbSentenceDuplicates = jest.fn(async () => ({ exactMatches: [] }))
 const mockFindWordDuplicates = jest.fn(async () => ({ exactMatches: [], headwordMatches: [] }))
@@ -108,6 +109,7 @@ jest.unstable_mockModule("../src/anki.js", () => ({
   createPictureWordNote: mockCreatePictureWordNote,
   ensureDeck: mockEnsureDeck,
   findSimilarCards: mockFindSimilarCards,
+  findVerbFormDuplicates: mockFindVerbFormDuplicates,
   findVerbLemmaDuplicates: mockFindVerbLemmaDuplicates,
   findVerbSentenceDuplicates: mockFindVerbSentenceDuplicates,
   findWordDuplicates: mockFindWordDuplicates,
@@ -161,6 +163,7 @@ describe("verb mode sentence flow", () => {
       english: "belong",
     })
     mockResolveVerbMorphology.mockReset()
+    mockFindVerbFormDuplicates.mockReset()
     mockFindVerbLemmaDuplicates.mockReset()
     mockFindVerbSentenceDuplicates.mockReset()
     mockFindWordDuplicates.mockReset()
@@ -182,6 +185,7 @@ describe("verb mode sentence flow", () => {
       reason: "test-default",
       selectedForms: [],
     })
+    mockFindVerbFormDuplicates.mockResolvedValue({ exactMatches: [] })
     mockFindVerbLemmaDuplicates.mockResolvedValue({ exactMatches: [] })
     mockFindVerbSentenceDuplicates.mockResolvedValue({ exactMatches: [] })
     mockFindWordDuplicates.mockResolvedValue({ exactMatches: [], headwordMatches: [] })
@@ -448,6 +452,73 @@ describe("verb mode sentence flow", () => {
     expect(mockChooseVerbSentence).not.toHaveBeenCalled()
     expect(mockGenerateVerbFormSentence).not.toHaveBeenCalled()
     expect(mockCreateNote).not.toHaveBeenCalled()
+  })
+
+  test("runVerbWorkflow rejects an existing requested verb form", async () => {
+    mockFindVerbFormDuplicates.mockResolvedValueOnce({
+      exactMatches: [{ noteId: 81, infinitive: "sein", form: "wäre" }],
+    })
+
+    const added = await runVerbWorkflow("wäre", {
+      analysisResult: {
+        shouldCreateVerbCard: true,
+        infinitive: "sein",
+        displayForm: "wäre",
+        ipa: "[zaɪ̯n]",
+        recommendedMode: "sentence-form",
+        meanings: [{ russian: "быть", english: "be" }],
+      },
+      meaning: "быть",
+      deck: "German::Test",
+      skipHeader: true,
+    })
+
+    expect(added).toBe(false)
+    expect(mockFindVerbFormDuplicates).toHaveBeenCalledWith({
+      infinitive: "sein",
+      form: "wäre",
+    })
+    expect(mockFindVerbLemmaDuplicates).not.toHaveBeenCalled()
+    expect(mockChooseVerbSentence).not.toHaveBeenCalled()
+    expect(mockCreateNote).not.toHaveBeenCalled()
+  })
+
+  test("runVerbWorkflow creates a sentence card for a new requested form even when the lemma exists", async () => {
+    mockFindVerbLemmaDuplicates.mockResolvedValueOnce({
+      exactMatches: [{ noteId: 99, infinitive: "sein" }],
+    })
+    mockChooseVerbSentence.mockResolvedValueOnce({
+      german: "Ich wäre gern zu Hause.",
+      russian: "Я бы хотел быть дома.",
+      focusForm: "wäre",
+    })
+
+    const added = await runVerbWorkflow("wäre", {
+      analysisResult: {
+        shouldCreateVerbCard: true,
+        infinitive: "sein",
+        displayForm: "wäre",
+        ipa: "[zaɪ̯n]",
+        recommendedMode: "sentence-form",
+        meanings: [{ russian: "быть", english: "be" }],
+      },
+      meaning: "быть",
+      deck: "German::Test",
+      skipHeader: true,
+    })
+
+    expect(added).toBe(true)
+    expect(mockFindVerbFormDuplicates).toHaveBeenCalledWith({
+      infinitive: "sein",
+      form: "wäre",
+    })
+    expect(mockFindVerbLemmaDuplicates).not.toHaveBeenCalled()
+    expect(mockResolveVerbMorphology).not.toHaveBeenCalled()
+    expect(mockCreateNote).toHaveBeenCalledWith(expect.objectContaining({
+      german: "Ich wäre gern zu Hause.",
+      context: "wäre → sein",
+      tags: expect.arrayContaining(["mode-verb-sentence", "verb-form-waere"]),
+    }))
   })
 
   test("runVerbWorkflow omits synthetic fallback context when focus form matches the infinitive", async () => {
