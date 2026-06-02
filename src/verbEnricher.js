@@ -86,6 +86,7 @@ function sanitizeSentence(sentence = {}) {
     german: String(sentence.german || '').trim(),
     russian: String(sentence.russian || '').trim(),
     focusForm: String(sentence.focusForm || '').trim(),
+    formRussian: String(sentence.formRussian || '').trim(),
   };
 }
 
@@ -227,7 +228,9 @@ Meaning: ${meaning}
 Pronoun label: ${pronounLabel}
 Target pronoun to use: ${pronoun}
 Target finite form: ${form}
-Return {"german":"","russian":"","focusForm":"${form}"}.`,
+Return {"german":"","russian":"","focusForm":"${form}","formRussian":""}.
+"formRussian" must translate only the target pronoun + finite verb form, not the whole sentence.
+Example: for German "Du nimmst das Buch.", russian is "Ты берёшь книгу.", formRussian is "ты берёшь".`,
       },
     ],
     response_format: { type: 'json_object' },

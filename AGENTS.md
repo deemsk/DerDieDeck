@@ -27,13 +27,6 @@ Common commands:
 - `npm run text` - manual phrase input
 - `npm run clip` / `npm start` - process clipboard clip data
 
-Useful migrations:
-- `npm run styles:dry-run` / `npm run styles`
-- `npm run migrate-picture-word-extra-info:dry-run`
-- `npm run migrate-picture-word-personal-connections:dry-run`
-- `npm run migrate-template-inline-styles:dry-run`
-- `npm run migrate-verb-dictionary-audio:dry-run`
-
 When changing behavior, prefer a focused Jest run first, then `npm test` if the change touches shared modules.
 
 ## Architecture Map
@@ -51,7 +44,7 @@ Workflows:
 - `src/verbEnricher.js` - verb analysis and sentence generation
 
 Anki:
-- `src/anki.js` - AnkiConnect wrapper, note creation, duplicate checks, migrations
+- `src/anki.js` - AnkiConnect wrapper, note creation, duplicate checks
 - `src/templates/index.js` - sentence card field construction
 - `src/templates/word/*` - picture-word fields and extra info
 - `src/templates/verb/*` - verb dictionary, cloze, and key-form card content
@@ -76,7 +69,7 @@ Integrations:
 
 Tests:
 - Workflow tests live in `tests/*Mode.test.js`
-- Anki helpers/migrations live in `tests/anki*.test.js`
+- Anki helpers live in `tests/anki*.test.js`
 - Source/integration helper behavior lives in `tests/wordSources.test.js`, `tests/tts.test.js`, etc.
 
 ## Stable Conventions
@@ -125,6 +118,7 @@ Before editing:
 - Check `git status --short`; unrelated untracked or modified files may exist and should be left alone.
 - Search narrowly for the relevant module/test instead of scanning everything by default.
 - For OpenAI/API behavior, prefer the existing SDK/config patterns and prompt structures.
+- By default, user-requested behavior changes apply only to newly created cards. If a change could also be applied to existing Anki notes, ask explicitly whether to add/run a migration or leave old notes unchanged this time.
 
 When adding behavior:
 - Put workflow-specific logic in the workflow module.
@@ -132,12 +126,6 @@ When adding behavior:
 - Put card HTML construction in `src/templates/*` or `src/cardContent/*`, not inline in workflows.
 - Put external-source retrieval in `src/lib/wordSources.js`.
 - Add or update focused tests near the behavior.
-
-When adding migrations:
-- Provide a dry-run flag.
-- Return `{ matched, updated, skipped, notes }` where possible.
-- Skip notes that already have the target state.
-- Keep existing note fields/tags intact except for the intended field update.
 
 When committing:
 - Stage only files related to the task.

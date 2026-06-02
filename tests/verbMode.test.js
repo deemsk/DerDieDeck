@@ -33,9 +33,12 @@ const mockFindSimilarCards = jest.fn(async () => [])
 const mockFindVerbLemmaDuplicates = jest.fn(async () => ({ exactMatches: [] }))
 const mockFindVerbSentenceDuplicates = jest.fn(async () => ({ exactMatches: [] }))
 const mockFindWordDuplicates = jest.fn(async () => ({ exactMatches: [], headwordMatches: [] }))
-const mockStoreAudio = jest.fn(async (path = "") =>
-  String(path).includes("verb_sentence") ? "verb-sentence.mp3" : "verb-target.mp3"
-)
+const mockStoreAudio = jest.fn(async (path = "") => {
+  const value = String(path)
+  if (value.includes("verb_sentence")) return "verb-sentence.mp3"
+  if (value.includes("verb_form")) return "verb-form.mp3"
+  return "verb-target.mp3"
+})
 const mockStoreMedia = jest.fn(async () => "verb-image.jpg")
 const mockCreateNote = jest.fn(async () => 123)
 const mockCreatePictureWordNote = jest.fn(async () => 789)
@@ -264,9 +267,9 @@ describe("verb mode sentence flow", () => {
         meanings: [{ russian: "говорить", english: "speak" }],
       },
       packageSentences: {
-        du: { german: "Du sprichst mit Maria.", russian: "Ты говоришь с Марией.", focusForm: "sprichst" },
-        er: { german: "Er spricht Deutsch.", russian: "Он говорит по-немецки.", focusForm: "spricht" },
-        ihr: { german: "Ihr sprecht Deutsch.", russian: "Вы говорите по-немецки.", focusForm: "sprecht" },
+        du: { german: "Du sprichst mit Maria.", russian: "Ты говоришь с Марией.", focusForm: "sprichst", formRussian: "ты говоришь" },
+        er: { german: "Er spricht Deutsch.", russian: "Он говорит по-немецки.", focusForm: "spricht", formRussian: "он говорит" },
+        ihr: { german: "Ihr sprecht Deutsch.", russian: "Вы говорите по-немецки.", focusForm: "sprecht", formRussian: "вы говорите" },
       },
       deck: "German::Test",
       skipHeader: true,
@@ -285,7 +288,16 @@ describe("verb mode sentence flow", () => {
     }))
     expect(mockCreateBasicNote).toHaveBeenCalledWith(expect.objectContaining({
       front: expect.stringContaining("sprechen → du"),
+      back: expect.stringContaining("[sound:verb-form.mp3]"),
       tags: expect.arrayContaining(["mode-verb-keyform-production", "verb-pronoun-du"]),
+    }))
+    expect(mockCreateBasicNote).toHaveBeenCalledWith(expect.objectContaining({
+      front: expect.stringContaining("sprechen → du"),
+      back: expect.stringContaining("ты говоришь"),
+    }))
+    expect(mockCreateBasicNote).toHaveBeenCalledWith(expect.objectContaining({
+      front: expect.stringContaining("sprechen → du"),
+      back: expect.not.stringContaining(">говорить<"),
     }))
     expect(mockCreateBasicNote).toHaveBeenCalledWith(expect.objectContaining({
       front: expect.stringContaining("du"),

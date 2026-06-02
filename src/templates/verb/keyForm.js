@@ -1,5 +1,5 @@
 import { escapeHtml } from '../../cardContent/html.js';
-import { formatIpaHtml, formatPrimaryTranslation } from '../shared/components.js';
+import { formatIpaHtml, formatPrimaryTranslation, soundTag } from '../shared/components.js';
 import { html, joinHtml } from '../shared/html.js';
 
 /**
@@ -17,10 +17,11 @@ export function buildVerbKeyFormProductionFront(infinitive, formSpec) {
 /**
  * Builds the answer for a key verb form production card.
  */
-export function buildVerbKeyFormProductionBack(formSpec, selectedMeaning = null) {
+export function buildVerbKeyFormProductionBack(formSpec, selectedMeaning = null, audioFilename = null, formRussian = null) {
   return joinHtml([
+    soundTag(audioFilename),
     `<strong>${escapeHtml(formSpec.label)} ${escapeHtml(formSpec.displayForm || formSpec.form)}</strong>`,
-    formatPrimaryTranslation(selectedMeaning?.russian),
+    formatPrimaryTranslation(formRussian || selectedMeaning?.russian),
   ]);
 }
 

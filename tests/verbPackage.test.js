@@ -93,12 +93,16 @@ describe("strong verb package planning", () => {
   test("key-form cards emphasize the primary translation consistently", () => {
     const back = buildVerbKeyFormProductionBack(
       { label: "du", form: "steigst" },
-      { russian: "садиться" }
+      { russian: "садиться" },
+      "du-steigst.mp3",
+      "ты садишься"
     )
 
+    expect(back).toContain("[sound:du-steigst.mp3]")
     expect(back).toContain('class="ddd-answer-translation"')
     expect(back).not.toContain("style=")
-    expect(back).toContain("садиться")
+    expect(back).toContain("ты садишься")
+    expect(back).not.toContain(">садиться<")
   })
 
   test("builds finite-form cloze text and extra context", () => {

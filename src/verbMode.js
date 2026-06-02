@@ -213,6 +213,17 @@ async function buildVerbSentenceAudio(sentence, spinner) {
   };
 }
 
+async function buildVerbFormAudio(text, formKey, spinner) {
+  spinner.start(`Generating ${text} audio...`);
+  const audioPath = join(config.dataDir, `verb_form_${Date.now()}_${toTagSlug(formKey || text)}.mp3`);
+  await generateSpeech(text, audioPath);
+  spinner.succeed('Verb form audio ready');
+  return {
+    audioPath,
+    source: 'Google TTS',
+  };
+}
+
 async function choosePictureVerbImage(prepared, spinner) {
   const { verbData, selectedMeaning } = prepared;
   const googleSearch = buildVerbGoogleImagesSearch(verbData, selectedMeaning);
@@ -353,17 +364,28 @@ async function createVerbLemmaNote(verbData, selectedMeaning, audioFilename, dec
 /**
  * Creates production and recognition notes for one selected verb form.
  */
-async function createVerbKeyFormNotes(verbData, selectedMeaning, morphology, formSpec, deck, productionStageTags = [], recognitionStageTags = []) {
+async function createVerbKeyFormNotes(
+  verbData,
+  selectedMeaning,
+  morphology,
+  formSpec,
+  deck,
+  productionStageTags = [],
+  recognitionStageTags = [],
+  formSentence = null,
+  productionAudioFilename = null
+) {
   const sharedTags = [
     'yt2anki',
     `lemma-${toTagSlug(verbData.infinitive)}`,
     ...buildContrastTags(verbData.infinitive),
     ...buildVerbMorphologyTags(morphology, formSpec),
   ];
+  const formRussian = formSentence?.formRussian || null;
 
   await createBasicNote({
     front: buildVerbKeyFormProductionFront(verbData.infinitive, formSpec),
-    back: buildVerbKeyFormProductionBack(formSpec, selectedMeaning),
+    back: buildVerbKeyFormProductionBack(formSpec, selectedMeaning, productionAudioFilename, formRussian),
     deck,
     tags: [
       ...sharedTags,
@@ -493,6 +515,7 @@ async function prepareStrongVerbPackage({ verbData, selectedMeaning, route, freq
     sentenceCandidates.push({
       ...sentenceData,
       formKey: formSpec.key,
+      formRussian: generated.formRussian || null,
     });
   }
 
@@ -541,6 +564,14 @@ async function prepareStrongVerbPackage({ verbData, selectedMeaning, route, freq
   }
 
   const audio = await buildVerbAudio(verbData, spinner);
+  const keyFormAudios = [];
+  for (const formSpec of packagePlan.forms) {
+    keyFormAudios.push(await buildVerbFormAudio(
+      `${formSpec.label} ${formSpec.displayForm || formSpec.form}`,
+      formSpec.key,
+      spinner
+    ));
+  }
   const sentenceAudios = [];
   for (const sentence of packagePlan.sentences) {
     sentenceAudios.push(await buildVerbSentenceAudio(sentence.german, spinner));
@@ -555,6 +586,7 @@ async function prepareStrongVerbPackage({ verbData, selectedMeaning, route, freq
     morphology,
     packagePlan,
     audio,
+    keyFormAudios,
     sentenceAudios,
   };
 }
@@ -972,6 +1004,7 @@ async function finalizeStrongVerbPackage(prepared, options, spinner) {
     morphology,
     packagePlan,
     audio,
+    keyFormAudios = [],
     sentenceAudios,
   } = prepared;
 
@@ -1016,7 +1049,11 @@ async function finalizeStrongVerbPackage(prepared, options, spinner) {
     buildSiblingStageTags(packageNoteIndex++, totalPackageNotes)
   );
 
-  for (const formSpec of packagePlan.forms) {
+  for (let index = 0; index < packagePlan.forms.length; index++) {
+    const formSpec = packagePlan.forms[index];
+    const keyFormAudio = keyFormAudios[index];
+    const keyFormAudioFilename = keyFormAudio ? await storeAudio(keyFormAudio.audioPath) : null;
+    const formSentence = packagePlan.sentences.find((sentence) => sentence.formSpec?.key === formSpec.key) || null;
     await createVerbKeyFormNotes(
       verbData,
       selectedMeaning,
@@ -1024,7 +1061,9 @@ async function finalizeStrongVerbPackage(prepared, options, spinner) {
       formSpec,
       options.deck,
       buildSiblingStageTags(packageNoteIndex++, totalPackageNotes),
-      buildSiblingStageTags(packageNoteIndex++, totalPackageNotes)
+      buildSiblingStageTags(packageNoteIndex++, totalPackageNotes),
+      formSentence,
+      keyFormAudioFilename
     );
   }
 
