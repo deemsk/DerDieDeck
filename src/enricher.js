@@ -184,7 +184,10 @@ Examples of corrections:
   const result = JSON.parse(content);
 
   const german = result.german || germanText;
-  const ipa = await generateGermanIpa(german, { fallbackIpa: result.ipa || '' });
+  const ipa = await generateGermanIpa(german, {
+    fallbackIpa: result.ipa || '',
+    preferFallbackIpa: false,
+  });
   const cefr = await estimateCEFR(german);
 
   return {
@@ -275,7 +278,10 @@ ${responseShape}`;
   const german = String(result.german || currentData.german || '').trim() || String(currentData.german || '').trim();
   const germanChanged = normalizeGermanForCompare(german) !== normalizeGermanForCompare(currentData.german || '');
   const fallbackIpa = result.ipa || (germanChanged ? '' : currentData.ipa || '');
-  const ipa = await generateGermanIpa(german, { fallbackIpa: normalizeIpa(fallbackIpa) });
+  const ipa = await generateGermanIpa(german, {
+    fallbackIpa: normalizeIpa(fallbackIpa),
+    preferFallbackIpa: false,
+  });
   const russian = String(result.russian || currentData.russian || '').trim();
   const cefr = await estimateCEFR(german);
 

@@ -19,6 +19,15 @@ describe("German IPA generation", () => {
     expect(normalizeSentenceIpa("")).toBe("")
   })
 
+  test("uses exact sentence IPA overrides before model fallback or espeak-ng", async () => {
+    const ipa = await generateGermanIpa("Wir fangen um acht Uhr an.", {
+      fallbackIpa: "[viːr f'aŋən ʊm 'axt 'uːr an]",
+    })
+
+    expect(ipa).toBe("[viːɐ̯ ˈfaŋən ʊm axt uːɐ̯ an]")
+    expect(mockExecFile).not.toHaveBeenCalled()
+  })
+
   test("uses clean model fallback IPA before espeak-ng", async () => {
     const ipa = await generateGermanIpa("Ich gehe nach Hause.", {
       fallbackIpa: "[ɪç ˈɡeːə nax ˈhaʊzə]",

@@ -219,7 +219,10 @@ Rules:
 - Use common concrete vocabulary.
 - Use the exact target pronoun and exact finite verb form.
 - Avoid subordinate clauses and extra grammar complexity.
-- Russian translation must be natural Russian.${particleRule}`,
+- Russian translation must be natural Russian.
+- The "russian" field must translate the whole German sentence, with all time/place/object information.
+- Never put only the infinitive meaning in "russian"; for "Wir fangen um acht Uhr an.", use a sentence translation like "Мы начинаем в восемь часов.", not "начинать".
+- The "formRussian" field must translate only the target pronoun + finite verb form.${particleRule}`,
       },
       {
         role: 'user',
@@ -229,8 +232,10 @@ Pronoun label: ${pronounLabel}
 Target pronoun to use: ${pronoun}
 Target finite form: ${form}
 Return {"german":"","russian":"","focusForm":"${form}","formRussian":""}.
+"russian" must translate the whole sentence.
 "formRussian" must translate only the target pronoun + finite verb form, not the whole sentence.
-Example: for German "Du nimmst das Buch.", russian is "Ты берёшь книгу.", formRussian is "ты берёшь".`,
+Example: for German "Du nimmst das Buch.", russian is "Ты берёшь книгу.", formRussian is "ты берёшь".
+Bad: russian="брать".`,
       },
     ],
     response_format: { type: 'json_object' },

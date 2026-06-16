@@ -19,9 +19,9 @@ export function buildVerbKeyFormProductionFront(infinitive, formSpec) {
  */
 export function buildVerbKeyFormProductionBack(formSpec, selectedMeaning = null, audioFilename = null, formRussian = null) {
   return joinHtml([
-    soundTag(audioFilename),
     `<strong>${escapeHtml(formSpec.label)} ${escapeHtml(formSpec.displayForm || formSpec.form)}</strong>`,
-    formatPrimaryTranslation(formRussian || selectedMeaning?.russian),
+    soundTag(audioFilename),
+    formatPrimaryTranslation(formRussian),
   ]);
 }
 
@@ -40,8 +40,21 @@ export function buildVerbKeyFormRecognitionFront(formSpec) {
 /**
  * Builds the answer for an inflected verb form recognition card.
  */
-export function buildVerbKeyFormRecognitionBack(verbData, selectedMeaning = null) {
+export function buildVerbKeyFormRecognitionBack(
+  verbData,
+  selectedMeaning = null,
+  formSpec = null,
+  formRussian = null,
+  audioFilename = null
+) {
+  const formLine = formSpec
+    ? `<strong>${escapeHtml(formSpec.label)} ${escapeHtml(formSpec.displayForm || formSpec.form)} → ${escapeHtml(verbData.infinitive)}</strong>`
+    : null;
+
   return joinHtml([
+    formLine,
+    formatPrimaryTranslation(formRussian),
+    soundTag(audioFilename),
     `<strong>${escapeHtml(verbData.infinitive)}</strong>`,
     formatIpaHtml(verbData.ipa),
     formatPrimaryTranslation(selectedMeaning?.russian),

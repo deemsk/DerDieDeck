@@ -238,6 +238,53 @@ async function buildVerbFormAudio(text, formKey, spinner) {
   };
 }
 
+function normalizeRussianGloss(value = '') {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[.!?…]+$/u, '')
+    .trim();
+}
+
+function isBareMeaningGloss(value = '', selectedMeaning = null) {
+  const normalized = normalizeRussianGloss(value);
+  const meaning = normalizeRussianGloss(selectedMeaning?.russian || selectedMeaning?.english || '');
+  return Boolean(normalized && meaning && normalized === meaning);
+}
+
+function applyVerbFormSentenceGloss(sentenceData = {}, generatedSentence = {}, selectedMeaning = null) {
+  const generatedRussian = String(generatedSentence?.russian || '').trim();
+  const enrichedRussian = String(sentenceData?.russian || '').trim();
+  const shouldKeepEnriched = (
+    isBareMeaningGloss(generatedRussian, selectedMeaning) &&
+    enrichedRussian &&
+    !isBareMeaningGloss(enrichedRussian, selectedMeaning)
+  );
+
+  if (shouldKeepEnriched || !generatedRussian) {
+    return sentenceData;
+  }
+
+  return {
+    ...sentenceData,
+    russian: generatedRussian,
+  };
+}
+
+function resolveVerbFormRussian(generatedSentence = {}, sentenceData = {}, selectedMeaning = null) {
+  const explicitFormRussian = String(generatedSentence?.formRussian || '').trim();
+  if (explicitFormRussian && !isBareMeaningGloss(explicitFormRussian, selectedMeaning)) {
+    return explicitFormRussian;
+  }
+
+  const sentenceRussian = String(sentenceData?.russian || generatedSentence?.russian || '').trim();
+  if (sentenceRussian && !isBareMeaningGloss(sentenceRussian, selectedMeaning)) {
+    return sentenceRussian;
+  }
+
+  return null;
+}
+
 async function choosePictureVerbImage(prepared, spinner) {
   const { verbData, selectedMeaning } = prepared;
   const googleSearch = buildVerbGoogleImagesSearch(verbData, selectedMeaning);
@@ -387,7 +434,8 @@ async function createVerbKeyFormNotes(
   productionStageTags = [],
   recognitionStageTags = [],
   formSentence = null,
-  productionAudioFilename = null
+  productionAudioFilename = null,
+  lemmaAudioFilename = null
 ) {
   const sharedTags = [
     'yt2anki',
@@ -414,7 +462,7 @@ async function createVerbKeyFormNotes(
 
   await createBasicNote({
     front: buildVerbKeyFormRecognitionFront(formSpec),
-    back: buildVerbKeyFormRecognitionBack(verbData, selectedMeaning),
+    back: buildVerbKeyFormRecognitionBack(verbData, selectedMeaning, formSpec, formRussian, lemmaAudioFilename),
     deck,
     tags: [
       ...sharedTags,
@@ -521,15 +569,16 @@ async function prepareStrongVerbPackage({ verbData, selectedMeaning, route, freq
       particle: morphology.particle,
       meaning: selectedMeaning.russian || selectedMeaning.english || '',
     });
-    const sentenceData = applyChosenSentenceGloss(
+    const sentenceData = applyVerbFormSentenceGloss(
       await enrich(generated.german),
-      generated
+      generated,
+      selectedMeaning
     );
     spinner.succeed(`Sentence ready: ${sentenceData.german}`);
     sentenceCandidates.push({
       ...sentenceData,
       formKey: formSpec.key,
-      formRussian: generated.formRussian || null,
+      formRussian: resolveVerbFormRussian(generated, sentenceData, selectedMeaning),
     });
   }
 
@@ -847,6 +896,7 @@ async function finalizePictureVerb(prepared, options, spinner) {
   const extraInfoField = buildWordExtraInfo({
     meaning: selectedMeaning.russian,
     exampleSentence: verbData.exampleSentences?.[0]?.german || null,
+    exampleSentenceTranslation: verbData.exampleSentences?.[0]?.russian || null,
     dictionaryForm: buildDictionaryFormContext(verbData),
     contrast: buildContrastHint(verbData.infinitive),
     metadata,
@@ -1091,7 +1141,8 @@ async function finalizeStrongVerbPackage(prepared, options, spinner) {
       buildSiblingStageTags(packageNoteIndex++, totalPackageNotes),
       buildSiblingStageTags(packageNoteIndex++, totalPackageNotes),
       formSentence,
-      keyFormAudioFilename
+      keyFormAudioFilename,
+      lemmaAudioFilename
     );
   }
 

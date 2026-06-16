@@ -246,6 +246,12 @@ describe("verb mode sentence flow", () => {
       russian: "говорить",
       english: "speak",
     })
+    mockEnrich.mockImplementation(async (german) => ({
+      german,
+      ipa: "[bad model ipa]",
+      russian: "говорить",
+      cefr: { level: "A1" },
+    }))
     mockResolveVerbMorphology.mockResolvedValueOnce({
       infinitive: "sprechen",
       classification: "strong",
@@ -272,7 +278,7 @@ describe("verb mode sentence flow", () => {
       },
       packageSentences: {
         du: { german: "Du sprichst mit Maria.", russian: "Ты говоришь с Марией.", focusForm: "sprichst", formRussian: "ты говоришь" },
-        er: { german: "Er spricht Deutsch.", russian: "Он говорит по-немецки.", focusForm: "spricht", formRussian: "он говорит" },
+        er: { german: "Er spricht Deutsch.", russian: "Он говорит по-немецки.", focusForm: "spricht" },
         ihr: { german: "Ihr sprecht Deutsch.", russian: "Вы говорите по-немецки.", focusForm: "sprecht", formRussian: "вы говорите" },
       },
       deck: "German::Test",
@@ -303,13 +309,29 @@ describe("verb mode sentence flow", () => {
       front: expect.stringContaining("sprechen → du"),
       back: expect.not.stringContaining(">говорить<"),
     }))
+    const erProductionNote = mockCreateBasicNote.mock.calls.find((call) =>
+      call[0].tags.includes("mode-verb-keyform-production") &&
+      call[0].tags.includes("verb-pronoun-er")
+    )[0]
+    expect(erProductionNote.back).toContain("Он говорит по-немецки.")
+    expect(erProductionNote.back).not.toContain(">говорить<")
     expect(mockCreateBasicNote).toHaveBeenCalledWith(expect.objectContaining({
       front: expect.stringContaining("du"),
       tags: expect.arrayContaining(["mode-verb-keyform-recognition", "verb-form-sprichst"]),
     }))
+    const recognitionNote = mockCreateBasicNote.mock.calls.find((call) =>
+      call[0].tags.includes("mode-verb-keyform-recognition") &&
+      call[0].tags.includes("verb-pronoun-du")
+    )[0]
+    expect(recognitionNote.back).toContain("du sprichst → sprechen")
+    expect(recognitionNote.back).toContain("ты говоришь")
+    expect(recognitionNote.back).toContain("[sound:verb-target.mp3]")
+    expect(recognitionNote.back).toContain("говорить")
     expect(mockCreateNote).toHaveBeenCalledTimes(3)
     expect(mockCreateNote).toHaveBeenCalledWith(expect.objectContaining({
       german: "Du sprichst mit Maria.",
+      russian: "Ты говоришь с Марией.",
+      ipa: "[bad model ipa]",
       context: "du sprichst → sprechen",
       addReversed: false,
       tags: expect.arrayContaining(["mode-verb-sentence", "verb-pronoun-du"]),
@@ -570,6 +592,9 @@ describe("verb mode sentence flow", () => {
         ipa: "[ˈlaʊ̯fn̩]",
         recommendedMode: "picture-word",
         meanings: [{ russian: "бежать", english: "run" }],
+        exampleSentences: [
+          { german: "Er läuft im Park.", russian: "Он бегает в парке." },
+        ],
       },
       meaning: "бежать",
       deck: "German::Test",
@@ -590,5 +615,9 @@ describe("verb mode sentence flow", () => {
       imageSource: "Google Images",
       deck: "German::Test",
     }))
+    const note = mockCreatePictureWordNote.mock.calls[0][0]
+    expect(note.extraInfoField).toContain("Er läuft im Park.")
+    expect(note.extraInfoField).toContain("Он бегает в парке.")
+    expect(note.extraInfoField).toContain("ddd-extra-example-translation")
   })
 })

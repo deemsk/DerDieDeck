@@ -1,6 +1,6 @@
 import { buildStrongVerbPackagePlan, validateVerbFormSentence } from "../src/cardContent/verbPackage.js"
 import { buildVerbFormClozeExtra, buildVerbFormClozeText } from "../src/templates/verb/cloze.js"
-import { buildVerbKeyFormProductionBack } from "../src/templates/verb/keyForm.js"
+import { buildVerbKeyFormProductionBack, buildVerbKeyFormRecognitionBack } from "../src/templates/verb/keyForm.js"
 
 const morphology = {
   infinitive: "einsteigen",
@@ -103,6 +103,34 @@ describe("strong verb package planning", () => {
     expect(back).not.toContain("style=")
     expect(back).toContain("ты садишься")
     expect(back).not.toContain(">садиться<")
+  })
+
+  test("production cards do not fall back to the infinitive translation", () => {
+    const back = buildVerbKeyFormProductionBack(
+      { label: "du", form: "hältst" },
+      { russian: "держать" },
+      "du-haeltst.mp3"
+    )
+
+    expect(back).toContain("du hältst")
+    expect(back).toContain("[sound:du-haeltst.mp3]")
+    expect(back).not.toContain("держать")
+  })
+
+  test("recognition cards show form mapping, form translation, and lemma audio", () => {
+    const back = buildVerbKeyFormRecognitionBack(
+      { infinitive: "können", ipa: "[ˈkœnən]" },
+      { russian: "мочь" },
+      { label: "ihr", form: "könnt", displayForm: "könnt" },
+      "вы можете",
+      "koennen.mp3"
+    )
+
+    expect(back).toContain("ihr könnt → können")
+    expect(back).toContain("вы можете")
+    expect(back).toContain("[sound:koennen.mp3]")
+    expect(back).toContain("[ˈkœnən]")
+    expect(back).toContain("мочь")
   })
 
   test("builds finite-form cloze text and extra context", () => {
