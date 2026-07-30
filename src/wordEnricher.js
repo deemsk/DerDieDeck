@@ -6,7 +6,11 @@ import { normalizeWordIpa } from './cardContent/ipa.js';
 import { validateAiGeneratedIpa } from './cardContent/ipaValidation.js';
 import { refineAiGeneratedMeanings } from './cardContent/meaningValidation.js';
 import { getCuratedFunctionWordAnalysis } from './cardContent/functionWords.js';
-import { isFunctionLexicalType, normalizeLexicalType } from './cardContent/lexicalTypes.js';
+import {
+  formatRussianLexicalTypeLabel,
+  isFunctionLexicalType,
+  normalizeLexicalType,
+} from './cardContent/lexicalTypes.js';
 import {
   COLOR_ADJECTIVES,
   COMMON_FUNCTION_WORD_TYPES,
@@ -122,8 +126,8 @@ Rules:
 - For sentence-form adjectives, provide exactly 3 short natural example sentences in German with Russian translations.
 - For sentence-form adverbs, provide exactly 3 short natural example sentences in German with Russian translations.
 - For cloze-form function words or cloze-form adverbs, provide exactly 3 short natural example sentences in German with Russian translations and focusForm set to the target word surface form in each sentence.
-- For cloze-form items, provide clozeHint as a short English hint such as "subordinate connector", "negative pronoun", or "frequency adverb".
-- For cloze-form items, provide patternHint when word order or case behavior matters.
+- For cloze-form items, provide clozeHint as a short Russian hint such as "подчинительный союз", "отрицательное местоимение", or "наречие частоты".
+- For cloze-form items, provide patternHint in Russian when word order, case behavior, or a meaning distinction matters.
 - For each sentence-form adjective example sentence, include imageBrief with a strong German searchQuery, 3-6 German queryVariants, a short sceneSummary, a focusRole that says what visually conveys the adjective, 2-5 mustShow constraints, 2-5 avoid constraints, and a concise imagePrompt.
 - For each sentence-form adverb example sentence, include imageBrief with a strong German searchQuery, 3-6 German queryVariants, a short sceneSummary, a focusRole that says what visually conveys the adverb in the scene or timing, 2-5 mustShow constraints, 2-5 avoid constraints, and a concise imagePrompt.
 - searchQuery and queryVariants should emphasize the noun or scene carrying the adjective, not the adjective in isolation.
@@ -309,6 +313,11 @@ function resolveRecommendedMode(lexicalType, result = {}) {
   return 'picture-word';
 }
 
+export function normalizeRussianLearnerText(text = '') {
+  const value = String(text || '').trim();
+  return value && /[А-Яа-яЁё]/.test(value) ? value : null;
+}
+
 function sanitizeWordAnalysis(result = {}) {
   const lexicalType = normalizeLexicalType(result.lexicalType);
   const lemma = String(result.lemma || result.bareNoun || result.canonical || '').trim();
@@ -329,6 +338,12 @@ function sanitizeWordAnalysis(result = {}) {
     anchorPhrase: lexicalType === 'adjective' ? String(result.anchorPhrase || '').trim() || null : null,
     opposite: lexicalType === 'adjective' ? String(result.opposite || '').trim() || null : null,
   };
+
+  sanitized.clozeHint = normalizeRussianLearnerText(result.clozeHint);
+  sanitized.patternHint = normalizeRussianLearnerText(result.patternHint);
+  if (sanitized.recommendedMode === 'cloze-form' && !sanitized.clozeHint) {
+    sanitized.clozeHint = `${formatRussianLexicalTypeLabel(lexicalType)} в контексте`;
+  }
 
   if (shouldSuppressAdjectiveContrast(sanitized)) {
     sanitized.opposite = null;
@@ -464,7 +479,7 @@ export function buildFunctionWordFallback(input, result = {}) {
     bareNoun: null,
     anchorPhrase: null,
     opposite: null,
-    clozeHint: result.clozeHint || `${fallbackType} in context`,
+    clozeHint: result.clozeHint || `${formatRussianLexicalTypeLabel(fallbackType)} в контексте`,
     patternHint: result.patternHint || null,
     meanings: fallbackMeanings,
     exampleSentences: fallbackSentences,

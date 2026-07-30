@@ -59,7 +59,7 @@ describe("word helpers", () => {
     const footer = buildWordSentenceContrastFooter("klein")
 
     expect(footer).toContain("yt2anki-word-contrast")
-    expect(footer).toContain("Contrast")
+    expect(footer).toContain("Различие")
     expect(footer).toContain("klein")
   })
 
@@ -106,6 +106,11 @@ describe("word helpers", () => {
     expect(extra).toContain("Das Wasser ist kalt.")
     expect(extra).toContain("Вода холодная.")
     expect(extractWordMeaning(extra)).toBe("вода")
+  })
+
+  test("extractWordMeaning supports Russian visible labels without metadata", () => {
+    expect(extractWordMeaning("<div>Значение: вода</div><div>Пример: Das Wasser</div>"))
+      .toBe("вода")
   })
 
   test("normalization and tag slug keep canonical noun comparisons stable", () => {

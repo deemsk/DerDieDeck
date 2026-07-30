@@ -3,6 +3,7 @@ import { buildContrastHint } from '../../cardContent/interference.js';
 import { buildFunctionWordPatternHint, getFunctionWordPatternFamily } from '../../cardContent/functionWordPatterns.js';
 import { buildWordMetadataComment } from '../../cardContent/wordMetadata.js';
 import { resolveSentenceFocusForm } from '../../cardContent/wordLexical.js';
+import { formatRussianLexicalTypeLabel } from '../../cardContent/lexicalTypes.js';
 import { answerStack } from '../shared/components.js';
 
 /**
@@ -53,13 +54,13 @@ export function buildLexicalClozeExtra({
     contrast: buildContrastHint(wordData.canonical || wordData.lemma),
     patternFamily: getFunctionWordPatternFamily(wordData),
   });
-  const typeLabel = String(wordData.lexicalType || 'word').replace(/-/g, ' ');
+  const typeLabel = formatRussianLexicalTypeLabel(wordData.lexicalType);
   const patternHint = buildFunctionWordPatternHint(wordData);
   const contrastHint = buildContrastHint(wordData.canonical || wordData.lemma);
   const extraRows = [
     `<div class="ddd-cloze-context">${escapeHtml(wordData.canonical)} · ${escapeHtml(typeLabel)}</div>`,
-    patternHint ? `<div class="ddd-cloze-pattern"><b>Pattern:</b> ${escapeHtml(patternHint)}</div>` : null,
-    contrastHint ? `<div class="ddd-cloze-contrast"><b>Contrast:</b> ${escapeHtml(contrastHint)}</div>` : null,
+    patternHint ? `<div class="ddd-cloze-pattern"><b>Правило:</b> ${escapeHtml(patternHint)}</div>` : null,
+    contrastHint ? `<div class="ddd-cloze-contrast"><b>Различие:</b> ${escapeHtml(contrastHint)}</div>` : null,
   ].filter(Boolean).join('');
 
   return answerStack({

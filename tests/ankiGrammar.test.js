@@ -47,6 +47,19 @@ describe("grammar Anki helpers", () => {
     expect(note.tags).toContain("mode-grammar")
   })
 
+  test("buildGrammarExtra renders learner-facing labels in Russian", () => {
+    const extra = buildGrammarExtra({
+      translation: "Я вижу моего брата.",
+      slotLabel: "винительный падеж, мужской род, единственное число",
+      explanation: "Притяжательный определитель «mein».",
+    })
+
+    expect(extra).toContain("Перевод:")
+    expect(extra).toContain("Форма:")
+    expect(extra).toContain("Правило:")
+    expect(extra).not.toContain("Translation:")
+  })
+
   test("findGrammarDuplicates reads grammar slot metadata from cloze notes", async () => {
     global.fetch = async (_url, options) => {
       const body = JSON.parse(options.body)

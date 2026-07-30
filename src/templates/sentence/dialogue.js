@@ -5,9 +5,9 @@ function buildDialogueFront(audioFilename) {
   return soundTag(audioFilename) +
     taskPanel('dialogue', {
       emoji: '💬',
-      kicker: 'Your reply',
-      main: 'Answer aloud in German',
-      sub: 'Reply to the speaker, do not translate the prompt',
+      kicker: 'Ваш ответ',
+      main: 'Ответьте вслух по-немецки',
+      sub: 'Ответьте собеседнику, не переводите его реплику',
     }) +
     replySlot();
 }

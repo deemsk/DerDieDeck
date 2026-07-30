@@ -1,7 +1,7 @@
 import { answerStack, focusPill, soundTag, taskHeader } from '../shared/components.js';
 
 export function formatComprehensionCard(card, audioFilename) {
-  let front = taskHeader('Listen and understand', 'Play the audio before revealing the answer');
+  let front = taskHeader('Слушайте и понимайте', 'Прослушайте аудио до показа ответа');
   front += soundTag(audioFilename);
   if (card.front.context) {
     front += focusPill(card.front.context);

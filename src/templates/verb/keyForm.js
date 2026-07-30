@@ -8,7 +8,7 @@ import { html, joinHtml } from '../shared/html.js';
 export function buildVerbKeyFormProductionFront(infinitive, formSpec) {
   return html`
     <div class="ddd-keyform-prompt">
-      <div class="ddd-keyform-kicker">Produce the form</div>
+      <div class="ddd-keyform-kicker">Образуйте форму</div>
       <div class="ddd-keyform-main">${escapeHtml(infinitive)} → ${escapeHtml(formSpec.label)}</div>
     </div>
   `;
@@ -31,7 +31,7 @@ export function buildVerbKeyFormProductionBack(formSpec, selectedMeaning = null,
 export function buildVerbKeyFormRecognitionFront(formSpec) {
   return html`
     <div class="ddd-keyform-recognition">
-      <div class="ddd-keyform-kicker">Recognize the form</div>
+      <div class="ddd-keyform-kicker">Узнайте форму</div>
       <div class="ddd-keyform-main">${escapeHtml(formSpec.label)} ${escapeHtml(formSpec.displayForm || formSpec.form)}</div>
     </div>
   `;

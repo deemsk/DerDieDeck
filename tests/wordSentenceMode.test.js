@@ -230,7 +230,7 @@ describe("word mode sentence flow", () => {
 
     const payload = mockCreateNote.mock.calls[0][0]
     expect(payload.context).toBeUndefined()
-    expect(payload.frontFooterHtml).toContain("Contrast")
+    expect(payload.frontFooterHtml).toContain("Различие")
     expect(payload.frontFooterHtml).toContain("klein")
   })
 
@@ -345,7 +345,7 @@ describe("word mode sentence flow", () => {
       ]),
     }))
     expect(mockCreateClozeNote.mock.calls[0][0].extra).toContain("yt2anki-word")
-    expect(mockCreateClozeNote.mock.calls[0][0].extra).toContain("Pattern:")
+    expect(mockCreateClozeNote.mock.calls[0][0].extra).toContain("Правило:")
     expect(mockCreateClozeNote.mock.calls[0][0].extra).toContain("Я устал, но я приду.")
   })
 

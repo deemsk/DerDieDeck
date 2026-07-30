@@ -145,7 +145,7 @@ describe("lexical cloze templates", () => {
 
     expect(inferFocusFormFromSentence(sentence.german, wordData)).toBe("keine")
     expect(validateLexicalClozeSentence(sentence, wordData)).toBe(true)
-    expect(buildLexicalClozeText(sentence, wordData)).toBe("Ich habe {{c1::keine::negative determiner}} Zeit.")
+    expect(buildLexicalClozeText(sentence, wordData)).toBe("Ich habe {{c1::keine::отрицательный определитель}} Zeit.")
   })
 
   test("normalizeLexicalType maps common model labels away from noun fallback", () => {
@@ -170,9 +170,10 @@ describe("lexical cloze templates", () => {
 
     expect(extra).not.toContain("Ich glaube")
     expect(extra).toContain("Я думаю, что он придет.")
-    expect(extra).toContain("Pattern:")
-    expect(extra).toContain("Contrast:")
-    expect(extra).toContain("weil/denn/dass")
+    expect(extra).toContain("Правило:")
+    expect(extra).toContain("Различие:")
+    expect(extra).toContain("weil, denn и dass")
+    expect(extra).toContain("подчинительный союз")
     expect(extra).toContain("yt2anki-word")
   })
 })

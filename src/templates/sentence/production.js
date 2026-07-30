@@ -4,7 +4,7 @@ import { html } from '../shared/html.js';
 
 export function buildProductionFront(russian, situation = null) {
   return html`
-    ${taskHeader('Say in German', 'Produce the sentence before revealing the answer')}
+    ${taskHeader('Скажите по-немецки', 'Сформулируйте фразу до показа ответа')}
     <div class="yt2anki-production-source ddd-production-source">${escapeHtml(russian)}</div>
     ${situation ? `<div class="yt2anki-production-hint ddd-production-hint">${escapeHtml(situation)}</div>` : ''}
   `;

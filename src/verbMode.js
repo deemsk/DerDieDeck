@@ -490,8 +490,8 @@ async function createVerbFormSentenceNote(verbData, sentence, audioFilename, mor
     contextStyle: 'plain',
     addReversed: false,
     task: {
-      label: 'Hear the form',
-      instruction: 'Listen for the target verb form',
+      label: 'Услышьте форму',
+      instruction: 'Распознайте нужную форму глагола на слух',
     },
     cefr: sentence.cefr,
     deck,
@@ -1051,8 +1051,8 @@ async function finalizeSentenceVerb(prepared, options, spinner) {
     contextStyle: 'plain',
     addReversed: false,
     task: {
-      label: 'Hear the form',
-      instruction: 'Listen for the target verb form',
+      label: 'Услышьте форму',
+      instruction: 'Распознайте нужную форму глагола на слух',
     },
     cefr: sentenceData.cefr,
     deck: options.deck,

@@ -22,7 +22,7 @@ export function personalConnectionCue(text = '') {
 
   return html`
     <div class="yt2anki-personal-cue ddd-personal-cue">
-      <span class="ddd-personal-cue-label">Personal connection</span>
+      <span class="ddd-personal-cue-label">Личная ассоциация</span>
       <span class="ddd-personal-cue-value">${escapeHtml(value)}</span>
     </div>
   `;
@@ -99,7 +99,7 @@ export function focusPill(context = null) {
 
   return html`
     <div class="yt2anki-front-context ddd-focus">
-      <span class="ddd-focus-label">Focus</span>
+      <span class="ddd-focus-label">Фокус</span>
       <span class="ddd-focus-value">${escapeHtml(value)}</span>
     </div>
   `;
@@ -124,7 +124,7 @@ export function buildWordSentenceContrastFooter(contrast = null) {
 
   return html`
     <div class="yt2anki-word-contrast ddd-word-contrast">
-      <span class="ddd-word-contrast-label">Contrast</span>
+      <span class="ddd-word-contrast-label">Различие</span>
       <span class="ddd-word-contrast-value">${escapeHtml(value)}</span>
     </div>
   `;
@@ -141,5 +141,5 @@ export function taskPanel(type, { emoji, kicker, main, sub = null }) {
 }
 
 export function replySlot() {
-  return '<div class="yt2anki-reply-slot ddd-reply-slot">💬 Your reply: ______</div>';
+  return '<div class="yt2anki-reply-slot ddd-reply-slot">💬 Ваш ответ: ______</div>';
 }

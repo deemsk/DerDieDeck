@@ -23,7 +23,7 @@ export function extractWordMeaning(extraInfo = '') {
   }
 
   const stripped = stripHtml(extraInfo);
-  const match = stripped.match(/Meaning:\s*(.+?)(?:Plural:|Example:|Dictionary Form:|Contrast:|Personal Connection:|$)/i);
+  const match = stripped.match(/(?:Meaning|Значение):\s*(.+?)(?:(?:Plural|Множественное число|Example|Пример|Dictionary Form|Словарная форма|Contrast|Различие|Personal Connection):|$)/i);
   return match ? match[1].trim() : null;
 }
 

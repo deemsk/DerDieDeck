@@ -19,6 +19,8 @@ describe("possessive grammar family", () => {
     expect(units.get("dat-fem-sg").surfaceForm).toBe("meiner")
     expect(units.get("dat-pl").surfaceForm).toBe("meinen")
     expect(units.get("acc-masc-sg").clozeText).toContain("{{c1::meinen::ACC.M.SG}}")
+    expect(units.get("acc-masc-sg").slotLabel).toBe("винительный падеж, мужской род, единственное число")
+    expect(units.get("acc-masc-sg").explanation).toContain("Притяжательный определитель «mein»")
   })
 
   test("handles euer with the shortened stem in inflected forms", () => {

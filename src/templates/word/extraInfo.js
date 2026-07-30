@@ -27,26 +27,26 @@ export function buildWordExtraInfo({
   if (meaning) {
     lines.push(plainMeaning
       ? `<div class="yt2anki-extra-meaning ddd-extra-meaning">${escapeHtml(meaning)}</div>`
-      : infoRow('Meaning', meaning, 'yt2anki-extra-meaning'));
+      : infoRow('Значение', meaning, 'yt2anki-extra-meaning'));
   }
 
   if (plural) {
-    lines.push(infoRow('Plural', plural));
+    lines.push(infoRow('Множественное число', plural));
   }
 
   if (exampleSentence) {
-    lines.push(`<div class="yt2anki-extra-example ddd-extra-example"><span class="yt2anki-extra-label ddd-extra-label">Example</span><span class="yt2anki-extra-value ddd-extra-example-value">${escapeHtml(exampleSentence)}</span></div>`);
+    lines.push(`<div class="yt2anki-extra-example ddd-extra-example"><span class="yt2anki-extra-label ddd-extra-label">Пример</span><span class="yt2anki-extra-value ddd-extra-example-value">${escapeHtml(exampleSentence)}</span></div>`);
     if (exampleSentenceTranslation) {
       lines.push(`<div class="yt2anki-extra-example-translation ddd-extra-example-translation">${escapeHtml(exampleSentenceTranslation)}</div>`);
     }
   }
 
   if (dictionaryForm) {
-    lines.push(infoRow('Dictionary form', dictionaryForm));
+    lines.push(infoRow('Словарная форма', dictionaryForm));
   }
 
   if (contrast) {
-    lines.push(infoRow('Contrast', contrast));
+    lines.push(infoRow('Различие', contrast));
   }
 
   lines.push(buildWordMetadataComment(metadata));

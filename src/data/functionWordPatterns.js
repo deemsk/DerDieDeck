@@ -1,10 +1,10 @@
 export const FUNCTION_WORD_TYPE_PATTERNS = {
-  subjunction: 'Subordinate connector: the finite verb usually moves toward the end of its clause.',
-  conjunction: 'Coordinating connector: it links clauses or phrases without changing main-clause word order.',
-  preposition: 'Preposition: learn it together with its following noun/pronoun phrase and case pattern.',
-  pronoun: 'Pronoun: it replaces a noun-like idea and must fit the clause role.',
-  determiner: 'Determiner: it modifies the following noun phrase.',
-  particle: 'Modal particle: meaning depends on sentence tone and position inside the clause.',
-  adverb: 'Adverbial item: learn its scope from sentence position and context.',
-  interjection: 'Fixed expression: learn it as a reusable conversational chunk.',
+  subjunction: 'Подчинительный союз: спрягаемая часть сказуемого обычно уходит в конец придаточного предложения.',
+  conjunction: 'Сочинительный союз: связывает предложения или их части, не меняя порядок слов главного предложения.',
+  preposition: 'Предлог: запоминайте его вместе с существительным или местоимением и требуемым падежом.',
+  pronoun: 'Местоимение: заменяет существительное и должно соответствовать своей роли в предложении.',
+  determiner: 'Определитель: относится к следующей за ним именной группе.',
+  particle: 'Модальная частица: значение зависит от интонации и позиции в предложении.',
+  adverb: 'Наречие: его смысл и область действия определяются позицией и контекстом.',
+  interjection: 'Устойчивое выражение: запоминайте его как готовую разговорную конструкцию.',
 };

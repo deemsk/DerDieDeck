@@ -1,6 +1,11 @@
-import { buildBareLexicalAdjectiveFallback, buildBareLexicalAdverbFallback, buildEverydayFamilyNounFallback, buildFunctionWordFallback, canProceedWithWeakWordCard, hasStructuredWordAnalysis, shouldCompleteMissingMeanings, shouldFallbackBareAdverbRejection, shouldRetryBareLexicalRejection, shouldRetryFunctionWordRejection, shouldRetryGermanInputPreservation, shouldRetryImageableNounRejection, shouldSuppressAdjectiveContrast } from "../src/wordEnricher.js"
+import { buildBareLexicalAdjectiveFallback, buildBareLexicalAdverbFallback, buildEverydayFamilyNounFallback, buildFunctionWordFallback, canProceedWithWeakWordCard, hasStructuredWordAnalysis, normalizeRussianLearnerText, shouldCompleteMissingMeanings, shouldFallbackBareAdverbRejection, shouldRetryBareLexicalRejection, shouldRetryFunctionWordRejection, shouldRetryGermanInputPreservation, shouldRetryImageableNounRejection, shouldSuppressAdjectiveContrast } from "../src/wordEnricher.js"
 
 describe("word enricher retries", () => {
+  test("rejects English learner-facing grammar text", () => {
+    expect(normalizeRussianLearnerText("Dative pronoun after a verb")).toBeNull()
+    expect(normalizeRussianLearnerText("Местоимение в Dativ после глагола")).toBe("Местоимение в Dativ после глагола")
+  })
+
   test("retries false abstract rejection for visible scene nouns like Himmel", () => {
     expect(
       shouldRetryImageableNounRejection("Himmel", {

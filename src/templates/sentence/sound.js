@@ -6,12 +6,12 @@ import { answerStack, soundTag, taskHeader } from '../shared/components.js';
  */
 export function formatSoundCard(card, audioFilename) {
   return {
-    Front: `${taskHeader('Hear the sound', 'Listen before reading the word or phrase')}${soundTag(audioFilename)}`,
+    Front: `${taskHeader('Услышьте звук', 'Сначала прослушайте, затем прочитайте слово или фразу')}${soundTag(audioFilename)}`,
     Back: answerStack({
       german: card.back.german,
       ipa: card.back.ipa,
       extraHtml: card.back.targetSound
-        ? `<div class="ddd-sound-target">Target sound: ${escapeHtml(card.back.targetSound)}</div>`
+        ? `<div class="ddd-sound-target">Целевой звук: ${escapeHtml(card.back.targetSound)}</div>`
         : null,
     }),
   };

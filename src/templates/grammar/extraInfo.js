@@ -10,15 +10,15 @@ export function buildGrammarExtra({
   const lines = [];
 
   if (translation) {
-    lines.push(`<div>Translation: ${escapeHtml(translation)}</div>`);
+    lines.push(`<div>Перевод: ${escapeHtml(translation)}</div>`);
   }
 
   if (slotLabel) {
-    lines.push(`<div>Slot: ${escapeHtml(slotLabel)}</div>`);
+    lines.push(`<div>Форма: ${escapeHtml(slotLabel)}</div>`);
   }
 
   if (explanation) {
-    lines.push(`<div>Rule: ${escapeHtml(explanation)}</div>`);
+    lines.push(`<div>Правило: ${escapeHtml(explanation)}</div>`);
   }
 
   if (metadata) {

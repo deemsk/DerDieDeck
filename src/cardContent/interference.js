@@ -3,39 +3,39 @@ import { normalizeGermanForCompare } from './german.js';
 const CONTRAST_FAMILIES = [
   {
     id: 'position-vs-placement',
-    label: 'Position vs placement',
+    label: 'Положение и перемещение',
     members: ['liegen', 'legen', 'stehen', 'stellen', 'sitzen', 'setzen'],
-    prompt: 'Check whether the meaning is position/state or placement/action.',
+    prompt: 'Различайте положение или состояние и действие по перемещению предмета.',
   },
   {
     id: 'know-contrast',
-    label: 'kennen vs wissen',
+    label: 'kennen и wissen',
     members: ['kennen', 'wissen'],
-    prompt: 'Kennen is familiarity with a person/place; wissen is factual knowledge.',
+    prompt: 'Kennen означает знакомство с человеком, местом или объектом; wissen — знание факта.',
   },
   {
     id: 'subjunction-choice',
-    label: 'wenn/als/ob',
+    label: 'wenn, als и ob',
     members: ['wenn', 'als', 'ob'],
-    prompt: 'Wenn is if/when; als is one past event; ob is whether.',
+    prompt: 'Wenn — «если» или повторяющееся «когда»; als — однократное событие в прошлом; ob — «ли».',
   },
   {
     id: 'because-that-connectors',
-    label: 'weil/denn/dass',
+    label: 'weil, denn и dass',
     members: ['weil', 'denn', 'dass'],
-    prompt: 'Weil and dass trigger subordinate word order; denn keeps main-clause order.',
+    prompt: 'После weil и dass действует порядок слов придаточного предложения; после denn сохраняется порядок главного.',
   },
   {
     id: 'negation-system',
-    label: 'nicht/nichts/kein',
+    label: 'nicht, nichts и kein',
     members: ['nicht', 'nichts', 'kein', 'keine', 'keinen'],
-    prompt: 'Nicht negates; nichts means nothing; kein negates a noun.',
+    prompt: 'Nicht выражает отрицание; nichts означает «ничего»; kein отрицает существительное.',
   },
   {
     id: 'common-prepositions',
-    label: 'mit/für/zu/nach',
+    label: 'mit, für, zu и nach',
     members: ['mit', 'fuer', 'für', 'zu', 'nach'],
-    prompt: 'Check role and case instead of memorizing a one-word translation.',
+    prompt: 'Запоминайте значение и управление падежом, а не один перевод.',
   },
 ];
 

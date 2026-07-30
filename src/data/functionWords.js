@@ -3,7 +3,7 @@ export const FUNCTION_WORDS = {
     lexicalType: 'conjunction',
     canonical: 'aber',
     lemma: 'aber',
-    clozeHint: 'contrast connector',
+    clozeHint: 'союз противопоставления',
     meanings: [
       {
         russian: 'но',
@@ -33,7 +33,7 @@ export const FUNCTION_WORDS = {
     lexicalType: 'subjunction',
     canonical: 'wenn',
     lemma: 'wenn',
-    clozeHint: 'subordinate-clause connector',
+    clozeHint: 'подчинительный союз',
     meanings: [
       {
         russian: 'если, когда',
@@ -63,7 +63,7 @@ export const FUNCTION_WORDS = {
     lexicalType: 'pronoun',
     canonical: 'nichts',
     lemma: 'nichts',
-    clozeHint: 'negative pronoun',
+    clozeHint: 'отрицательное местоимение',
     meanings: [
       {
         russian: 'ничего',
@@ -93,8 +93,8 @@ export const FUNCTION_WORDS = {
     lexicalType: 'pronoun',
     canonical: 'ihm',
     lemma: 'ihm',
-    clozeHint: 'dative pronoun',
-    patternHint: 'Dative pronoun: often means “to him” or “him” after dative verbs/prepositions.',
+    clozeHint: 'местоимение в дательном падеже',
+    patternHint: 'Местоимение в Dativ: обычно означает «ему» после глаголов и предлогов, требующих дательного падежа.',
     meanings: [
       {
         russian: 'ему',
@@ -124,7 +124,7 @@ export const FUNCTION_WORDS = {
     lexicalType: 'subjunction',
     canonical: 'weil',
     lemma: 'weil',
-    clozeHint: 'because + subordinate clause',
+    clozeHint: 'причина и придаточное предложение',
     meanings: [
       {
         russian: 'потому что',
@@ -154,7 +154,7 @@ export const FUNCTION_WORDS = {
     lexicalType: 'subjunction',
     canonical: 'dass',
     lemma: 'dass',
-    clozeHint: 'that + subordinate clause',
+    clozeHint: 'изъяснительный подчинительный союз',
     meanings: [
       {
         russian: 'что',
@@ -184,7 +184,7 @@ export const FUNCTION_WORDS = {
     lexicalType: 'subjunction',
     canonical: 'ob',
     lemma: 'ob',
-    clozeHint: 'whether/if + subordinate clause',
+    clozeHint: 'косвенный вопрос со значением «ли»',
     meanings: [
       {
         russian: 'ли',
@@ -214,7 +214,7 @@ export const FUNCTION_WORDS = {
     lexicalType: 'subjunction',
     canonical: 'als',
     lemma: 'als',
-    clozeHint: 'when/than connector',
+    clozeHint: 'союз времени или сравнения',
     meanings: [
       {
         russian: 'когда; чем',
@@ -244,7 +244,7 @@ export const FUNCTION_WORDS = {
     lexicalType: 'conjunction',
     canonical: 'denn',
     lemma: 'denn',
-    clozeHint: 'because connector',
+    clozeHint: 'союз причины',
     meanings: [
       {
         russian: 'так как, потому что',
@@ -274,8 +274,8 @@ export const FUNCTION_WORDS = {
     lexicalType: 'adverb',
     canonical: 'also',
     lemma: 'also',
-    clozeHint: 'so/therefore discourse adverb',
-    patternHint: 'German also means “so/therefore/well”; it is not English also (= auch).',
+    clozeHint: 'наречие следствия или маркер речи',
+    patternHint: 'Немецкое also означает «значит», «итак» или «ну»; это не английское also, которому соответствует auch.',
     meanings: [
       {
         russian: 'значит, итак',
@@ -305,8 +305,8 @@ export const FUNCTION_WORDS = {
     lexicalType: 'adverb',
     canonical: 'warum',
     lemma: 'warum',
-    clozeHint: 'question adverb',
-    patternHint: 'Question adverb: it asks for a reason and can start a direct question.',
+    clozeHint: 'вопросительное наречие',
+    patternHint: 'Вопросительное наречие: задаёт вопрос о причине и может начинать прямой вопрос.',
     meanings: [
       {
         russian: 'почему',
@@ -336,7 +336,7 @@ export const FUNCTION_WORDS = {
     lexicalType: 'particle',
     canonical: 'doch',
     lemma: 'doch',
-    clozeHint: 'modal particle',
+    clozeHint: 'модальная частица',
     meanings: [
       {
         russian: 'же, все-таки',
@@ -366,7 +366,7 @@ export const FUNCTION_WORDS = {
     lexicalType: 'particle',
     canonical: 'ja',
     lemma: 'ja',
-    clozeHint: 'modal particle',
+    clozeHint: 'модальная частица',
     meanings: [
       {
         russian: 'же, ведь; да',
@@ -396,7 +396,7 @@ export const FUNCTION_WORDS = {
     lexicalType: 'particle',
     canonical: 'mal',
     lemma: 'mal',
-    clozeHint: 'softening particle',
+    clozeHint: 'смягчающая частица',
     meanings: [
       {
         russian: 'ка, разок',
@@ -426,7 +426,7 @@ export const FUNCTION_WORDS = {
     lexicalType: 'preposition',
     canonical: 'mit',
     lemma: 'mit',
-    clozeHint: 'dative preposition',
+    clozeHint: 'предлог с дательным падежом',
     meanings: [
       {
         russian: 'с',
@@ -456,7 +456,7 @@ export const FUNCTION_WORDS = {
     lexicalType: 'preposition',
     canonical: 'für',
     lemma: 'für',
-    clozeHint: 'accusative preposition',
+    clozeHint: 'предлог с винительным падежом',
     meanings: [
       {
         russian: 'для, за',
@@ -486,7 +486,7 @@ export const FUNCTION_WORDS = {
     lexicalType: 'preposition',
     canonical: 'ohne',
     lemma: 'ohne',
-    clozeHint: 'accusative preposition',
+    clozeHint: 'предлог с винительным падежом',
     meanings: [
       {
         russian: 'без',
@@ -516,7 +516,7 @@ export const FUNCTION_WORDS = {
     lexicalType: 'determiner',
     canonical: 'kein',
     lemma: 'kein',
-    clozeHint: 'negative determiner',
+    clozeHint: 'отрицательный определитель',
     meanings: [
       {
         russian: 'не, никакой',
@@ -546,7 +546,7 @@ export const FUNCTION_WORDS = {
     lexicalType: 'interjection',
     canonical: 'bitte',
     lemma: 'bitte',
-    clozeHint: 'polite expression',
+    clozeHint: 'вежливое выражение',
     meanings: [
       {
         russian: 'пожалуйста',
@@ -573,4 +573,3 @@ export const FUNCTION_WORDS = {
     ],
   },
 };
-

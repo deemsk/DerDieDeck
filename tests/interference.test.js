@@ -11,7 +11,7 @@ describe("interference detector", () => {
   })
 
   test("builds learner-facing contrast hints and tags", () => {
-    expect(buildContrastHint("nichts")).toContain("nicht/nichts/kein")
+    expect(buildContrastHint("nichts")).toContain("nicht, nichts и kein")
     expect(buildContrastTags("für")).toEqual(["contrast-family-common-prepositions"])
   })
 })

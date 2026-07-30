@@ -41,3 +41,27 @@ export function formatLexicalTypeLabel(type = '') {
   if (normalized === 'pronoun') return 'pron';
   return normalized;
 }
+
+const RUSSIAN_LEXICAL_TYPE_LABELS = {
+  noun: 'существительное',
+  adjective: 'прилагательное',
+  adverb: 'наречие',
+  verb: 'глагол',
+  preposition: 'предлог',
+  conjunction: 'сочинительный союз',
+  subjunction: 'подчинительный союз',
+  pronoun: 'местоимение',
+  determiner: 'определитель',
+  particle: 'частица',
+  numeral: 'числительное',
+  interjection: 'междометие',
+};
+
+/**
+ * Formats an internal lexical type for learner-facing card content.
+ */
+export function formatRussianLexicalTypeLabel(type = '') {
+  if (!String(type || '').trim()) return 'слово';
+  const normalized = normalizeLexicalType(type);
+  return RUSSIAN_LEXICAL_TYPE_LABELS[normalized] || normalized;
+}

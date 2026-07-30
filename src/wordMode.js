@@ -943,8 +943,8 @@ async function finalizeSentenceWord(prepared, options, spinner) {
     frontFooterHtml: buildWordSentenceFrontFooter(wordData),
     addReversed: false,
     task: {
-      label: 'Listen and picture',
-      instruction: 'Use the audio and image, then recall the sentence',
+      label: 'Слушайте и представляйте',
+      instruction: 'Используйте аудио и изображение, затем вспомните предложение',
     },
     cefr: sentenceData.cefr,
     metadata: {

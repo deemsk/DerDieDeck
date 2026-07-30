@@ -533,7 +533,7 @@ function extractSearchableText(note) {
     if (/^это\s+перевод\s+в\s+немецкую\s+фразу\b/i.test(line)) return false;
     if (/^(🧭\s*)?подсказка:/i.test(line)) return false;
     if (line.startsWith('Context:')) return false;
-    if (line.startsWith('Contrast:')) return false;
+    if (line.startsWith('Contrast:') || line.startsWith('Различие:')) return false;
     if (/^\[.*\]$/.test(line)) return false; // IPA-only line
     return true;
   });
