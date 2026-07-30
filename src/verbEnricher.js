@@ -3,6 +3,7 @@ import { config, CONFIG_PATH_DISPLAY } from './lib/config.js';
 import { normalizeGermanForCompare } from './cardContent/german.js';
 import { normalizeWordIpa } from './cardContent/ipa.js';
 import { validateAiGeneratedIpa } from './cardContent/ipaValidation.js';
+import { refineAiGeneratedMeanings } from './cardContent/meaningValidation.js';
 import { resolveSecret } from './lib/secrets.js';
 
 let openai = null;
@@ -31,6 +32,7 @@ Rules:
 - Example: for "verbunden", return infinitive="verbinden", displayForm="verbunden", and dictionaryFormNeeded=true.
 - Use recommendedMode="picture-word" only for highly imageable, concrete action verbs with a stable one-frame depiction.
 - Use recommendedMode="sentence-form" for modal verbs, auxiliary verbs, abstract verbs, reflexive verbs, separable-prefix verbs that depend on context, and other verbs that are better learned through example sentences.
+- Russian lexical glosses must preserve distinctions from common German near-synonyms. Add a concise qualifier when a broad direct translation would hide differences in meaning, usage, register, argument structure, state versus action, or source of obligation.
 - For picture-word verbs, imageSearchTerms must be in German and should describe visible action scenes, not dictionary labels.
 - For sentence-form verbs, provide exactly 3 short natural example sentences in German with Russian translations.
 - dictionaryFormNeeded should be true when displayForm differs from infinitive or when the encountered form is likely non-obvious.
@@ -188,6 +190,14 @@ export async function enrichVerb(input) {
     const extra = JSON.parse(completion.choices[0].message.content);
     result.exampleSentences = mergeExampleSentences(result.exampleSentences, extra.exampleSentences);
   }
+
+  result.meanings = await refineAiGeneratedMeanings({
+    client,
+    germanTerm: result.infinitive,
+    lexicalType: 'verb',
+    meanings: result.meanings,
+    exampleSentences: result.exampleSentences,
+  });
 
   if (result.ipa) {
     const isValid = await validateAiGeneratedIpa({

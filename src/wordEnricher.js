@@ -4,6 +4,7 @@ import { getWordFrequencyInfo } from './lib/wordFrequency.js';
 import { normalizeGermanForCompare } from './cardContent/german.js';
 import { normalizeWordIpa } from './cardContent/ipa.js';
 import { validateAiGeneratedIpa } from './cardContent/ipaValidation.js';
+import { refineAiGeneratedMeanings } from './cardContent/meaningValidation.js';
 import { getCuratedFunctionWordAnalysis } from './cardContent/functionWords.js';
 import { isFunctionLexicalType, normalizeLexicalType } from './cardContent/lexicalTypes.js';
 import {
@@ -100,6 +101,7 @@ Rules:
 - Keep noun example sentences simple, concrete, and short.
 - For adjectives with multiple meanings, keep only the concrete visual sense that matches the intended picture card.
 - Russian glosses should be concise and represent a single intended sense.
+- Russian glosses must preserve distinctions from common German near-synonyms. Add a concise qualifier when a broad direct translation would hide differences in meaning, usage, register, argument structure, state versus action, direction, or typical construction.
 - English glosses are metadata and may be used only as a fallback for search.
 - imageSearchTerms must be written primarily in German, ordered from best visual search to broadest fallback.
 - Use English search phrases only as a last resort when there is no natural German phrase.
@@ -699,17 +701,30 @@ async function requestCompletedWordAnalysis(client, input, options = {}) {
   return completeWordAnalysisIfNeeded(client, result, options);
 }
 
-async function validateWordAnalysisIpa(client, result) {
-  if (!result?.ipa) {
-    return result;
+async function finalizeAiWordAnalysis(client, result) {
+  if (!result) return result;
+
+  const finalized = {
+    ...result,
+    meanings: await refineAiGeneratedMeanings({
+      client,
+      germanTerm: result.canonical,
+      lexicalType: result.lexicalType,
+      meanings: result.meanings,
+      exampleSentences: result.exampleSentences,
+    }),
+  };
+
+  if (!finalized.ipa) {
+    return finalized;
   }
 
   const isValid = await validateAiGeneratedIpa({
     client,
-    germanText: result.canonical,
-    ipa: result.ipa,
+    germanText: finalized.canonical,
+    ipa: finalized.ipa,
   });
-  return isValid ? result : { ...result, ipa: '' };
+  return isValid ? finalized : { ...finalized, ipa: '' };
 }
 
 async function completeWordAnalysisIfNeeded(client, result, options = {}) {
@@ -855,16 +870,16 @@ export async function enrichWord(input, options = {}) {
   if (shouldRetryFunctionWordRejection(input, completed)) {
     const retried = await requestCompletedWordAnalysis(client, input, { ...options, forceFunctionWordCandidate: true });
     if (retried.shouldCreateWordCard !== false || hasStructuredWordAnalysis(retried)) {
-      return validateWordAnalysisIpa(client, retried);
+      return finalizeAiWordAnalysis(client, retried);
     }
-    return validateWordAnalysisIpa(
+    return finalizeAiWordAnalysis(
       client,
       await completeWordAnalysisIfNeeded(client, buildFunctionWordFallback(input, retried), options)
     );
   }
 
   if (shouldRetryImageableNounRejection(input, completed)) {
-    return validateWordAnalysisIpa(
+    return finalizeAiWordAnalysis(
       client,
       await requestCompletedWordAnalysis(client, input, { ...options, forceVisibleNoun: true })
     );
@@ -873,7 +888,7 @@ export async function enrichWord(input, options = {}) {
   if (shouldRetryBareLexicalRejection(input, completed)) {
     const retried = await requestCompletedWordAnalysis(client, input, { ...options, forceBareLexicalCandidate: true });
     if (shouldFallbackBareAdverbRejection(input, retried)) {
-      return validateWordAnalysisIpa(
+      return finalizeAiWordAnalysis(
         client,
         await completeWordAnalysisIfNeeded(client, buildBareLexicalAdverbFallback(input, retried), options)
       );
@@ -881,30 +896,30 @@ export async function enrichWord(input, options = {}) {
     if (retried.shouldCreateWordCard === false) {
       const familyFallback = buildEverydayFamilyNounFallback(input, retried);
       if (familyFallback !== retried) {
-        return validateWordAnalysisIpa(client, familyFallback);
+        return finalizeAiWordAnalysis(client, familyFallback);
       }
     }
     if (shouldRetryBareLexicalRejection(input, retried)) {
-      return validateWordAnalysisIpa(
+      return finalizeAiWordAnalysis(
         client,
         await completeWordAnalysisIfNeeded(client, buildBareLexicalAdjectiveFallback(input, retried), options)
       );
     }
-    return validateWordAnalysisIpa(client, retried);
+    return finalizeAiWordAnalysis(client, retried);
   }
 
   if (completed.shouldCreateWordCard === false) {
     if (shouldFallbackBareAdverbRejection(input, completed)) {
-      return validateWordAnalysisIpa(
+      return finalizeAiWordAnalysis(
         client,
         await completeWordAnalysisIfNeeded(client, buildBareLexicalAdverbFallback(input, completed), options)
       );
     }
     const familyFallback = buildEverydayFamilyNounFallback(input, completed);
     if (familyFallback !== completed) {
-      return validateWordAnalysisIpa(client, familyFallback);
+      return finalizeAiWordAnalysis(client, familyFallback);
     }
   }
 
-  return validateWordAnalysisIpa(client, completed);
+  return finalizeAiWordAnalysis(client, completed);
 }
