@@ -220,13 +220,19 @@ export async function generateVerbFormSentence({
   infinitive,
   pronounLabel,
   pronoun,
+  pronounRole = '',
+  russianPronoun = '',
   form,
   particle = null,
   meaning = '',
+  extraGuidance = '',
 }) {
   const client = await getClient();
   const particleRule = particle
     ? `\n- This is a separable verb. The sentence must include the separated particle "${particle}" in natural clause-final position.`
+    : '';
+  const pronounPlacementRule = pronoun === 'sie' && russianPronoun === 'они'
+    ? '\n- Put lowercase "sie" after the first word, never at sentence start, so it is unambiguously plural "they" rather than singular "she" or formal "Sie".'
     : '';
 
   const response = await client.chat.completions.create({
@@ -244,7 +250,9 @@ Rules:
 - Russian translation must be natural Russian.
 - The "russian" field must translate the whole German sentence, with all time/place/object information.
 - Never put only the infinitive meaning in "russian"; for "Wir fangen um acht Uhr an.", use a sentence translation like "Мы начинаем в восемь часов.", not "начинать".
-- The "formRussian" field must translate only the target pronoun + finite verb form.${particleRule}`,
+- The "formRussian" field must translate only the target pronoun + finite verb form.
+- Preserve the exact grammatical person and number specified for the target pronoun in both Russian fields.${russianPronoun ? `
+- Both Russian fields must contain the subject pronoun "${russianPronoun}"; do not replace it with another pronoun.` : ''}${pronounPlacementRule}${particleRule}`,
       },
       {
         role: 'user',
@@ -252,8 +260,10 @@ Rules:
 Meaning: ${meaning}
 Pronoun label: ${pronounLabel}
 Target pronoun to use: ${pronoun}
+Target pronoun role: ${pronounRole || 'use the grammatical role implied by the target pronoun'}
+Required Russian subject pronoun: ${russianPronoun || 'translate the target pronoun exactly'}
 Target finite form: ${form}
-Return {"german":"","russian":"","focusForm":"${form}","formRussian":""}.
+${extraGuidance ? `Additional correction: ${extraGuidance}\n` : ''}Return {"german":"","russian":"","focusForm":"${form}","formRussian":""}.
 "russian" must translate the whole sentence.
 "formRussian" must translate only the target pronoun + finite verb form, not the whole sentence.
 Example: for German "Du nimmst das Buch.", russian is "Ты берёшь книгу.", formRussian is "ты берёшь".

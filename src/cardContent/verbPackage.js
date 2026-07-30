@@ -30,6 +30,42 @@ function hasSeparatedParticle(sentence, form, particle) {
   return formIndex >= 0 && particleIndex > formIndex;
 }
 
+function containsRussianPronoun(text = '', pronoun = '') {
+  const expected = String(pronoun || '').trim().toLowerCase();
+  if (!expected) return true;
+
+  return String(text || '')
+    .toLowerCase()
+    .split(/[^\p{L}]+/u)
+    .filter(Boolean)
+    .includes(expected);
+}
+
+/**
+ * Checks that generated Russian text preserves the person/number of the target form.
+ */
+export function validateVerbFormRussianAgreement(sentence = {}, formSpec = {}) {
+  const expected = formSpec.russianPronoun;
+  if (!expected) return true;
+
+  const sentenceMatches = containsRussianPronoun(sentence.russian, expected);
+  const formMatches = !sentence.formRussian || containsRussianPronoun(sentence.formRussian, expected);
+  return sentenceMatches && formMatches;
+}
+
+function validateUnambiguousGermanPronoun(german = '', formSpec = {}) {
+  if (formSpec.key !== 'sie' || formSpec.russianPronoun !== 'они') {
+    return true;
+  }
+
+  const tokens = String(german || '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  return tokens.slice(1).includes('sie');
+}
+
 /**
  * Validates that a generated sentence really trains the selected verb form.
  */
@@ -44,7 +80,9 @@ export function validateVerbFormSentence(sentence, formSpec, morphology) {
     isSimpleSentence(german) &&
     tokens.includes(pronoun) &&
     tokens.includes(form) &&
-    hasSeparatedParticle(german, formSpec.form, morphology.particle)
+    hasSeparatedParticle(german, formSpec.form, morphology.particle) &&
+    validateUnambiguousGermanPronoun(german, formSpec) &&
+    validateVerbFormRussianAgreement(sentence, formSpec)
   );
 }
 

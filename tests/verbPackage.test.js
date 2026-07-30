@@ -1,4 +1,4 @@
-import { buildStrongVerbPackagePlan, validateVerbFormSentence } from "../src/cardContent/verbPackage.js"
+import { buildStrongVerbPackagePlan, validateVerbFormRussianAgreement, validateVerbFormSentence } from "../src/cardContent/verbPackage.js"
 import { buildVerbFormClozeExtra, buildVerbFormClozeText } from "../src/templates/verb/cloze.js"
 import { buildVerbKeyFormProductionBack, buildVerbKeyFormRecognitionBack } from "../src/templates/verb/keyForm.js"
 
@@ -76,6 +76,41 @@ describe("strong verb package planning", () => {
       "wollt",
       "wollen",
     ])
+  })
+
+  test("rejects Russian pronouns that disagree with the target German form", () => {
+    const formSpec = {
+      key: "sie",
+      pronoun: "sie",
+      label: "sie/Sie",
+      form: "müssen",
+      russianPronoun: "они",
+    }
+    const modalMorphology = { particle: null }
+
+    expect(validateVerbFormRussianAgreement({
+      russian: "Они должны учиться.",
+      formRussian: "они должны",
+    }, formSpec)).toBe(true)
+    expect(validateVerbFormRussianAgreement({
+      russian: "Она должна учиться.",
+      formRussian: "она должна",
+    }, formSpec)).toBe(false)
+    expect(validateVerbFormSentence({
+      german: "Sie müssen lernen.",
+      russian: "Они должны учиться.",
+      formRussian: "они должны",
+    }, formSpec, modalMorphology)).toBe(false)
+    expect(validateVerbFormSentence({
+      german: "Heute müssen sie lernen.",
+      russian: "Они должны сегодня учиться.",
+      formRussian: "они должны",
+    }, formSpec, modalMorphology)).toBe(true)
+    expect(validateVerbFormSentence({
+      german: "Heute muss sie lernen.",
+      russian: "Она должна учиться.",
+      formRussian: "она должна",
+    }, formSpec, modalMorphology)).toBe(false)
   })
 
   test("returns null when a required sentence is invalid", () => {

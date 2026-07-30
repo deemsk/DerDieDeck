@@ -15,12 +15,12 @@ const CORE_IRREGULAR_VERBS = new Set([
 ]);
 
 const CORE_FORM_SPECS = [
-  { key: 'ich', pronoun: 'ich', label: 'ich' },
-  { key: 'du', pronoun: 'du', label: 'du' },
-  { key: 'er', pronoun: 'er', label: 'er/sie/es' },
-  { key: 'wir', pronoun: 'wir', label: 'wir' },
-  { key: 'ihr', pronoun: 'ihr', label: 'ihr' },
-  { key: 'sie', pronoun: 'sie', label: 'sie/Sie' },
+  { key: 'ich', pronoun: 'ich', label: 'ich', pronounRole: 'first-person singular (I)', russianPronoun: 'я' },
+  { key: 'du', pronoun: 'du', label: 'du', pronounRole: 'second-person singular informal (you)', russianPronoun: 'ты' },
+  { key: 'er', pronoun: 'er', label: 'er/sie/es', pronounRole: 'third-person singular masculine (he)', russianPronoun: 'он' },
+  { key: 'wir', pronoun: 'wir', label: 'wir', pronounRole: 'first-person plural (we)', russianPronoun: 'мы' },
+  { key: 'ihr', pronoun: 'ihr', label: 'ihr', pronounRole: 'second-person plural informal (you)', russianPronoun: 'вы' },
+  { key: 'sie', pronoun: 'sie', label: 'sie/Sie', pronounRole: 'third-person plural (they), not singular she and not formal Sie', russianPronoun: 'они' },
 ];
 
 const CORE_IRREGULAR_PRESENT_FORMS = {
@@ -37,9 +37,9 @@ const CORE_IRREGULAR_PRESENT_FORMS = {
 };
 
 const TARGET_FORM_SPECS = [
-  { key: 'du', pronoun: 'du', label: 'du' },
-  { key: 'er', pronoun: 'er', label: 'er/sie/es' },
-  { key: 'ihr', pronoun: 'ihr', label: 'ihr' },
+  { key: 'du', pronoun: 'du', label: 'du', pronounRole: 'second-person singular informal (you)', russianPronoun: 'ты' },
+  { key: 'er', pronoun: 'er', label: 'er/sie/es', pronounRole: 'third-person singular masculine (he)', russianPronoun: 'он' },
+  { key: 'ihr', pronoun: 'ihr', label: 'ihr', pronounRole: 'second-person plural informal (you)', russianPronoun: 'вы' },
 ];
 
 const REGULAR_PRESENT_ENDINGS = {

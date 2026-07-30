@@ -8,7 +8,7 @@ import { getWordFrequencyInfo } from './lib/wordFrequency.js';
 import { normalizeGermanForCompare, toTagSlug } from './cardContent/german.js';
 import { applyChosenSentenceGloss } from './cardContent/wordLexical.js';
 import { buildVerbMorphologyTags, resolveVerbMorphology } from './cardContent/verbMorphology.js';
-import { buildStrongVerbPackagePlan, buildVerbFormContext } from './cardContent/verbPackage.js';
+import { buildStrongVerbPackagePlan, buildVerbFormContext, validateVerbFormSentence } from './cardContent/verbPackage.js';
 import { buildContrastHint, buildContrastTags } from './cardContent/interference.js';
 import { buildLearningIntentTags, buildSiblingStageTags } from './cardContent/learningDesign.js';
 import { formatPlainWord, formatPronunciationField } from './templates/shared/components.js';
@@ -561,14 +561,27 @@ async function prepareStrongVerbPackage({ verbData, selectedMeaning, route, freq
   const sentenceCandidates = [];
   for (const formSpec of morphology.selectedForms) {
     spinner.start(`Generating ${formSpec.label} sentence...`);
-    const generated = options.packageSentences?.[formSpec.key] || await generateVerbFormSentence({
-      infinitive: verbData.infinitive,
-      pronounLabel: formSpec.label,
-      pronoun: formSpec.pronoun,
-      form: formSpec.form,
-      particle: morphology.particle,
-      meaning: selectedMeaning.russian || selectedMeaning.english || '',
-    });
+    let generated = options.packageSentences?.[formSpec.key] || null;
+    if (!generated) {
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        generated = await generateVerbFormSentence({
+          infinitive: verbData.infinitive,
+          pronounLabel: formSpec.label,
+          pronoun: formSpec.pronoun,
+          pronounRole: formSpec.pronounRole,
+          russianPronoun: formSpec.russianPronoun,
+          form: formSpec.form,
+          particle: morphology.particle,
+          meaning: selectedMeaning.russian || selectedMeaning.english || '',
+          extraGuidance: attempt === 0
+            ? ''
+            : `The previous result did not preserve ${formSpec.pronounRole || formSpec.label}. Use Russian subject pronoun "${formSpec.russianPronoun}".`,
+        });
+        if (validateVerbFormSentence(generated, formSpec, morphology)) {
+          break;
+        }
+      }
+    }
     const sentenceData = applyVerbFormSentenceGloss(
       await enrich(generated.german),
       generated,

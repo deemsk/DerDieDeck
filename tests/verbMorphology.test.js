@@ -148,6 +148,12 @@ describe("verb morphology resolution", () => {
       ["ihr", "dürft"],
       ["sie", "dürfen"],
     ])
+    expect(morphology.selectedForms.find((entry) => entry.key === "sie")).toEqual(
+      expect.objectContaining({
+        pronounRole: "third-person plural (they), not singular she and not formal Sie",
+        russianPronoun: "они",
+      })
+    )
   })
 
   test("strips leading pronouns from WiktApi finite forms before validation", async () => {

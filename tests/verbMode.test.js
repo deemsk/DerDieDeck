@@ -347,6 +347,70 @@ describe("verb mode sentence flow", () => {
     }))
   })
 
+  test("retries a generated form sentence when Russian person and number disagree", async () => {
+    mockChooseMeaning.mockResolvedValueOnce({
+      russian: "быть вынужденным по необходимости",
+      english: "must; have to",
+    })
+    mockResolveVerbMorphology.mockResolvedValueOnce({
+      infinitive: "müssen",
+      classification: "core-irregular",
+      forms: { sie: "müssen" },
+      isSeparable: false,
+      particle: null,
+      source: "curated-core-fallback",
+      confidence: "high",
+      selectedForms: [{
+        key: "sie",
+        pronoun: "sie",
+        label: "sie/Sie",
+        pronounRole: "third-person plural (they), not singular she and not formal Sie",
+        russianPronoun: "они",
+        form: "müssen",
+        displayForm: "müssen",
+      }],
+    })
+    mockGenerateVerbFormSentence
+      .mockResolvedValueOnce({
+        german: "Sie müssen lernen.",
+        russian: "Она должна учиться.",
+        focusForm: "müssen",
+        formRussian: "она должна",
+      })
+      .mockResolvedValueOnce({
+        german: "Heute müssen sie lernen.",
+        russian: "Они должны сегодня учиться.",
+        focusForm: "müssen",
+        formRussian: "они должны",
+      })
+
+    const added = await runVerbWorkflow("müssen", {
+      analysisResult: {
+        shouldCreateVerbCard: true,
+        infinitive: "müssen",
+        displayForm: "müssen",
+        ipa: "[ˈmʏsn̩]",
+        recommendedMode: "sentence-form",
+        meanings: [{ russian: "быть вынужденным по необходимости", english: "must; have to" }],
+      },
+      deck: "German::Test",
+      skipHeader: true,
+    })
+
+    expect(added).toBe(true)
+    expect(mockGenerateVerbFormSentence).toHaveBeenCalledTimes(2)
+    expect(mockGenerateVerbFormSentence.mock.calls[1][0]).toEqual(expect.objectContaining({
+      pronounRole: "third-person plural (they), not singular she and not formal Sie",
+      russianPronoun: "они",
+      extraGuidance: expect.stringContaining("Use Russian subject pronoun \"они\""),
+    }))
+    expect(mockCreateNote).toHaveBeenCalledWith(expect.objectContaining({
+      german: "Heute müssen sie lernen.",
+      russian: "Они должны сегодня учиться.",
+      context: "sie/Sie müssen → müssen",
+    }))
+  })
+
   test("runVerbWorkflow honors explicit sentence input instead of creating a package", async () => {
     mockResolveVerbMorphology.mockResolvedValueOnce({
       infinitive: "sprechen",
