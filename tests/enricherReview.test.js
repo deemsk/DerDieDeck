@@ -100,6 +100,7 @@ describe("AI preview review helper", () => {
     expect(mockGenerateGermanIpa).toHaveBeenCalledWith("Das ist besser.", {
       fallbackIpa: "das ɪst ˈbɛsɐ",
       preferFallbackIpa: false,
+      validateFallbackIpa: expect.any(Function),
     })
 
     const call = mockCreate.mock.calls[0][0]
@@ -141,6 +142,7 @@ describe("AI preview review helper", () => {
     expect(mockGenerateGermanIpa).toHaveBeenCalledWith("Der Kaffee ist gut.", {
       fallbackIpa: "[deːr ˈkafeː ɪst ɡuːt]",
       preferFallbackIpa: false,
+      validateFallbackIpa: expect.any(Function),
     })
     const [{ messages }] = mockCreate.mock.calls.map(([call]) => call)
     const systemPrompt = messages.find((message) => message.role === "system")?.content ?? ""
@@ -168,6 +170,7 @@ describe("AI preview review helper", () => {
     expect(mockGenerateGermanIpa).toHaveBeenCalledWith("Das ist neu.", {
       fallbackIpa: "",
       preferFallbackIpa: false,
+      validateFallbackIpa: expect.any(Function),
     })
   })
 })

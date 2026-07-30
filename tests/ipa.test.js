@@ -29,11 +29,27 @@ describe("German IPA generation", () => {
   })
 
   test("uses clean model fallback IPA before espeak-ng", async () => {
+    const validateFallbackIpa = jest.fn(async () => true)
     const ipa = await generateGermanIpa("Ich gehe nach Hause.", {
       fallbackIpa: "[ɪç ˈɡeːə nax ˈhaʊzə]",
+      validateFallbackIpa,
     })
 
     expect(ipa).toBe("[ɪç ˈɡeːə nax ˈhaʊzə]")
+    expect(validateFallbackIpa).toHaveBeenCalledWith("[ɪç ˈɡeːə nax ˈhaʊzə]")
+    expect(mockExecFile).not.toHaveBeenCalled()
+  })
+
+  test("rejects model fallback IPA when its validator does not reconstruct the text", async () => {
+    const validateFallbackIpa = jest.fn(async () => false)
+
+    const ipa = await generateGermanIpa("Ich gehe nach Hause.", {
+      fallbackIpa: "[vɪʁ ˈɡeːən nax ˈhaʊzə]",
+      validateFallbackIpa,
+    })
+
+    expect(ipa).toBe("")
+    expect(validateFallbackIpa).toHaveBeenCalledTimes(1)
     expect(mockExecFile).not.toHaveBeenCalled()
   })
 
@@ -51,6 +67,22 @@ describe("German IPA generation", () => {
       expect.objectContaining({ timeout: 5000 }),
       expect.any(Function)
     )
+  })
+
+  test("does not validate an unused model fallback when espeak-ng succeeds", async () => {
+    const validateFallbackIpa = jest.fn(async () => true)
+    mockExecFile.mockImplementation((_cmd, _args, _options, callback) => {
+      callback(null, "ɪç ˈɡeːə nax ˈhaʊzə\n", "")
+    })
+
+    const ipa = await generateGermanIpa("Ich gehe nach Hause.", {
+      fallbackIpa: "[wrong fallback]",
+      preferFallbackIpa: false,
+      validateFallbackIpa,
+    })
+
+    expect(ipa).toBe("[ɪç ˈɡeːə nax ˈhaʊzə]")
+    expect(validateFallbackIpa).not.toHaveBeenCalled()
   })
 
   test("prefers clean fallback IPA when espeak-ng emits non-standard German tap r", async () => {

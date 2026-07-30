@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import { config, CONFIG_PATH_DISPLAY } from './lib/config.js';
 import { normalizeGermanForCompare } from './cardContent/german.js';
 import { normalizeWordIpa } from './cardContent/ipa.js';
+import { validateAiGeneratedIpa } from './cardContent/ipaValidation.js';
 import { resolveSecret } from './lib/secrets.js';
 
 let openai = null;
@@ -186,6 +187,17 @@ export async function enrichVerb(input) {
     });
     const extra = JSON.parse(completion.choices[0].message.content);
     result.exampleSentences = mergeExampleSentences(result.exampleSentences, extra.exampleSentences);
+  }
+
+  if (result.ipa) {
+    const isValid = await validateAiGeneratedIpa({
+      client,
+      germanText: result.infinitive,
+      ipa: result.ipa,
+    });
+    if (!isValid) {
+      result.ipa = '';
+    }
   }
 
   return result;

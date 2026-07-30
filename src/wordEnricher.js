@@ -3,6 +3,7 @@ import { config, CONFIG_PATH_DISPLAY } from './lib/config.js';
 import { getWordFrequencyInfo } from './lib/wordFrequency.js';
 import { normalizeGermanForCompare } from './cardContent/german.js';
 import { normalizeWordIpa } from './cardContent/ipa.js';
+import { validateAiGeneratedIpa } from './cardContent/ipaValidation.js';
 import { getCuratedFunctionWordAnalysis } from './cardContent/functionWords.js';
 import { isFunctionLexicalType, normalizeLexicalType } from './cardContent/lexicalTypes.js';
 import {
@@ -698,6 +699,19 @@ async function requestCompletedWordAnalysis(client, input, options = {}) {
   return completeWordAnalysisIfNeeded(client, result, options);
 }
 
+async function validateWordAnalysisIpa(client, result) {
+  if (!result?.ipa) {
+    return result;
+  }
+
+  const isValid = await validateAiGeneratedIpa({
+    client,
+    germanText: result.canonical,
+    ipa: result.ipa,
+  });
+  return isValid ? result : { ...result, ipa: '' };
+}
+
 async function completeWordAnalysisIfNeeded(client, result, options = {}) {
   const withMeanings = await completeMeaningsIfNeeded(client, result);
   const withExamples = await completeSentenceExamplesIfNeeded(client, withMeanings, options);
@@ -841,41 +855,56 @@ export async function enrichWord(input, options = {}) {
   if (shouldRetryFunctionWordRejection(input, completed)) {
     const retried = await requestCompletedWordAnalysis(client, input, { ...options, forceFunctionWordCandidate: true });
     if (retried.shouldCreateWordCard !== false || hasStructuredWordAnalysis(retried)) {
-      return retried;
+      return validateWordAnalysisIpa(client, retried);
     }
-    return completeWordAnalysisIfNeeded(client, buildFunctionWordFallback(input, retried), options);
+    return validateWordAnalysisIpa(
+      client,
+      await completeWordAnalysisIfNeeded(client, buildFunctionWordFallback(input, retried), options)
+    );
   }
 
   if (shouldRetryImageableNounRejection(input, completed)) {
-    return requestCompletedWordAnalysis(client, input, { ...options, forceVisibleNoun: true });
+    return validateWordAnalysisIpa(
+      client,
+      await requestCompletedWordAnalysis(client, input, { ...options, forceVisibleNoun: true })
+    );
   }
 
   if (shouldRetryBareLexicalRejection(input, completed)) {
     const retried = await requestCompletedWordAnalysis(client, input, { ...options, forceBareLexicalCandidate: true });
     if (shouldFallbackBareAdverbRejection(input, retried)) {
-      return completeWordAnalysisIfNeeded(client, buildBareLexicalAdverbFallback(input, retried), options);
+      return validateWordAnalysisIpa(
+        client,
+        await completeWordAnalysisIfNeeded(client, buildBareLexicalAdverbFallback(input, retried), options)
+      );
     }
     if (retried.shouldCreateWordCard === false) {
       const familyFallback = buildEverydayFamilyNounFallback(input, retried);
       if (familyFallback !== retried) {
-        return familyFallback;
+        return validateWordAnalysisIpa(client, familyFallback);
       }
     }
     if (shouldRetryBareLexicalRejection(input, retried)) {
-      return completeWordAnalysisIfNeeded(client, buildBareLexicalAdjectiveFallback(input, retried), options);
+      return validateWordAnalysisIpa(
+        client,
+        await completeWordAnalysisIfNeeded(client, buildBareLexicalAdjectiveFallback(input, retried), options)
+      );
     }
-    return retried;
+    return validateWordAnalysisIpa(client, retried);
   }
 
   if (completed.shouldCreateWordCard === false) {
     if (shouldFallbackBareAdverbRejection(input, completed)) {
-      return completeWordAnalysisIfNeeded(client, buildBareLexicalAdverbFallback(input, completed), options);
+      return validateWordAnalysisIpa(
+        client,
+        await completeWordAnalysisIfNeeded(client, buildBareLexicalAdverbFallback(input, completed), options)
+      );
     }
     const familyFallback = buildEverydayFamilyNounFallback(input, completed);
     if (familyFallback !== completed) {
-      return familyFallback;
+      return validateWordAnalysisIpa(client, familyFallback);
     }
   }
 
-  return completed;
+  return validateWordAnalysisIpa(client, completed);
 }

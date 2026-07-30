@@ -136,14 +136,20 @@ export async function generateGermanIpa(germanText, options = {}) {
 
   const preferFallbackIpa = options.preferFallbackIpa ?? true;
   if (preferFallbackIpa && fallback && !hasSuspiciousGermanIpa(fallback)) {
-    return normalizeGermanIpaSymbols(fallback);
+    const validated = options.validateFallbackIpa
+      ? await options.validateFallbackIpa(fallback)
+      : true;
+    return validated ? normalizeGermanIpaSymbols(fallback) : '';
   }
 
   try {
     const generated = await generateEspeakIpa(text, options);
     if (generated) {
       if (hasSuspiciousGermanIpa(generated) && fallback && !hasSuspiciousGermanIpa(fallback)) {
-        return fallback;
+        const validated = options.validateFallbackIpa
+          ? await options.validateFallbackIpa(fallback)
+          : true;
+        return validated ? fallback : '';
       }
 
       return normalizeGermanIpaSymbols(generated);
@@ -155,5 +161,12 @@ export async function generateGermanIpa(germanText, options = {}) {
     }
   }
 
-  return normalizeSentenceIpa(options.fallbackIpa || '');
+  if (!fallback) {
+    return '';
+  }
+
+  const validated = options.validateFallbackIpa
+    ? await options.validateFallbackIpa(fallback)
+    : true;
+  return validated ? fallback : '';
 }

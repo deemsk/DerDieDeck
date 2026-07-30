@@ -3,6 +3,7 @@ import { config, CONFIG_PATH_DISPLAY } from './lib/config.js';
 import { estimateCEFR } from './cardContent/cefr.js';
 import { resolveSecret } from './lib/secrets.js';
 import { generateGermanIpa, normalizeSentenceIpa } from './cardContent/ipa.js';
+import { validateAiGeneratedIpa } from './cardContent/ipaValidation.js';
 import { normalizeGermanForCompare } from './cardContent/german.js';
 
 let openai = null;
@@ -187,6 +188,11 @@ Examples of corrections:
   const ipa = await generateGermanIpa(german, {
     fallbackIpa: result.ipa || '',
     preferFallbackIpa: false,
+    validateFallbackIpa: (candidate) => validateAiGeneratedIpa({
+      client,
+      germanText: german,
+      ipa: candidate,
+    }),
   });
   const cefr = await estimateCEFR(german);
 
@@ -281,6 +287,11 @@ ${responseShape}`;
   const ipa = await generateGermanIpa(german, {
     fallbackIpa: normalizeIpa(fallbackIpa),
     preferFallbackIpa: false,
+    validateFallbackIpa: (candidate) => validateAiGeneratedIpa({
+      client,
+      germanText: german,
+      ipa: candidate,
+    }),
   });
   const russian = String(result.russian || currentData.russian || '').trim();
   const cefr = await estimateCEFR(german);
