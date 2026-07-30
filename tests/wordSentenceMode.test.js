@@ -48,6 +48,8 @@ const mockBuildWordGoogleImagesSearch = jest.fn(() => ({
   queryVariants: ["großes Haus"],
 }))
 const mockReviewEnrichedText = jest.fn()
+const mockVerifyLexicalClozeUniqueness = jest.fn()
+const mockGenerateUnambiguousLexicalClozeSentence = jest.fn()
 const mockEnrich = jest.fn(async () => ({
   german: "Das Haus ist groß.",
   ipa: "[das haʊs ɪst ɡʁoːs]",
@@ -117,6 +119,11 @@ jest.unstable_mockModule("../src/enricher.js", () => ({
   reviewEnrichedText: mockReviewEnrichedText,
 }))
 
+jest.unstable_mockModule("../src/lexicalClozeEnricher.js", () => ({
+  generateUnambiguousLexicalClozeSentence: mockGenerateUnambiguousLexicalClozeSentence,
+  verifyLexicalClozeUniqueness: mockVerifyLexicalClozeUniqueness,
+}))
+
 jest.unstable_mockModule("../src/cefr.js", () => ({
   estimateLexicalCEFR: jest.fn(async () => null),
 }))
@@ -156,6 +163,8 @@ describe("word mode sentence flow", () => {
       queryVariants: ["großes Haus"],
     })
     mockReviewEnrichedText.mockReset()
+    mockVerifyLexicalClozeUniqueness.mockResolvedValue({ valid: true, unique: true, answer: "test" })
+    mockGenerateUnambiguousLexicalClozeSentence.mockReset()
     mockEnrich.mockResolvedValue({
       german: "Das Haus ist groß.",
       ipa: "[das haʊs ɪst ɡʁoːs]",
@@ -338,6 +347,52 @@ describe("word mode sentence flow", () => {
     expect(mockCreateClozeNote.mock.calls[0][0].extra).toContain("yt2anki-word")
     expect(mockCreateClozeNote.mock.calls[0][0].extra).toContain("Pattern:")
     expect(mockCreateClozeNote.mock.calls[0][0].extra).toContain("Я устал, но я приду.")
+  })
+
+  test("rewrites an AI cloze when more than one answer fits the learner-visible front", async () => {
+    mockChooseMeaning.mockResolvedValue({ russian: "ему", english: "him, to him" })
+    mockChooseWordSentence.mockResolvedValue({
+      german: "Sie glaubt ihm nicht.",
+      russian: "Она ему не верит.",
+      focusForm: "ihm",
+    })
+    mockVerifyLexicalClozeUniqueness
+      .mockResolvedValueOnce({ valid: false, unique: false, answer: "" })
+      .mockResolvedValueOnce({ valid: true, unique: true, answer: "ihm" })
+    mockGenerateUnambiguousLexicalClozeSentence.mockResolvedValue({
+      german: "Der Mann sagt die Wahrheit, aber sie glaubt ihm nicht.",
+      russian: "Мужчина говорит правду, но она ему не верит.",
+      focusForm: "ihm",
+    })
+    mockEnrich.mockResolvedValue({
+      german: "Der Mann sagt die Wahrheit, aber sie glaubt ihm nicht.",
+      ipa: "[deːɐ̯ man zaːkt diː ˈvaːɐ̯haɪ̯t ˈaːbɐ ziː ɡlaʊ̯pt iːm nɪçt]",
+      russian: "Мужчина говорит правду, но она ему не верит.",
+      cefr: { level: "A2" },
+    })
+
+    const added = await runWordWorkflow("ihm", {
+      analysisResult: {
+        shouldCreateWordCard: true,
+        isImageable: false,
+        recommendedMode: "cloze-form",
+        lexicalType: "pronoun",
+        canonical: "ihm",
+        lemma: "ihm",
+        clozeHint: "dative pronoun",
+        meanings: [{ russian: "ему", english: "him, to him" }],
+        exampleSentences: [{ german: "Sie glaubt ihm nicht.", russian: "Она ему не верит.", focusForm: "ihm" }],
+      },
+      meaning: "ему",
+      deck: "German::Test",
+      skipHeader: true,
+    })
+
+    expect(added).toBe(true)
+    expect(mockVerifyLexicalClozeUniqueness).toHaveBeenCalledTimes(2)
+    expect(mockCreateClozeNote).toHaveBeenCalledWith(expect.objectContaining({
+      text: expect.stringContaining("Der Mann sagt die Wahrheit, aber sie glaubt {{c1::ihm::dative pronoun}} nicht."),
+    }))
   })
 
   test("runWordWorkflow creates cloze notes for non-curated LLM-classified connectors", async () => {

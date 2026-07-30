@@ -40,6 +40,7 @@ import {
 } from './anki.js';
 import { generateSimpleSpeech, generateSpeech } from './lib/tts.js';
 import { enrich, reviewEnrichedText } from './enricher.js';
+import { generateUnambiguousLexicalClozeSentence, verifyLexicalClozeUniqueness } from './lexicalClozeEnricher.js';
 
 const DEFAULT_WORD_NOTE_TYPE = config.wordNoteType || '2. Picture Words';
 const SENTENCE_NOUN_PHRASE_PATTERN = /\b(der|die|das|den|dem|des|ein|eine|einen|einem|einer|eines|kein|keine|keinen|keinem|keiner|keines|mein(?:e|en|em|er|es)?|dein(?:e|en|em|er|es)?|sein(?:e|en|em|er|es)?|ihr(?:e|en|em|er|es)?|unser(?:e|en|em|er|es)?|euer(?:e|en|em|er|es)?)\s+([A-ZÄÖÜ][\p{L}-]+)/gu;
@@ -483,7 +484,7 @@ async function prepareWord(rawInput, options, spinner) {
   }
 
   if (route === 'cloze-form') {
-    const chosenSentence = await chooseWordSentence(wordData, options.sentence);
+    let chosenSentence = await chooseWordSentence(wordData, options.sentence);
     if (!chosenSentence) {
       console.log(chalk.yellow('Skipped: no cloze sentence selected'));
       return { rejected: true };
@@ -493,6 +494,28 @@ async function prepareWord(rawInput, options, spinner) {
       console.log(chalk.yellow(`Skipped: "${chosenSentence.german}" does not use ${wordData.canonical} as a valid ${wordData.lexicalType}`));
       return { rejected: true };
     }
+
+    spinner.start('Checking that the cloze has one answer...');
+    let uniqueness = await verifyLexicalClozeUniqueness(chosenSentence, wordData);
+    if (!uniqueness.valid && !options.sentence) {
+      try {
+        const rewritten = await generateUnambiguousLexicalClozeSentence(chosenSentence, wordData);
+        if (validateLexicalClozeSentence(rewritten, wordData)) {
+          const rewrittenUniqueness = await verifyLexicalClozeUniqueness(rewritten, wordData);
+          if (rewrittenUniqueness.valid) {
+            chosenSentence = rewritten;
+            uniqueness = rewrittenUniqueness;
+          }
+        }
+      } catch {
+        // Fail closed below: ambiguous cloze cards must not reach Anki.
+      }
+    }
+    if (!uniqueness.valid) {
+      spinner.warn(`Skipped: the cloze for "${wordData.canonical}" allows multiple reasonable answers`);
+      return { rejected: true };
+    }
+    spinner.succeed('Cloze answer is uniquely recoverable');
 
     const selectedMeaning = await chooseMeaning(wordData, options.meaning, {
       manualPrompt: `Enter the intended meaning/gloss for "${wordData.canonical}" (not an example sentence), or press Enter to skip: `,

@@ -92,6 +92,11 @@ jest.unstable_mockModule("../src/enricher.js", () => ({
   reviewEnrichedText: jest.fn(),
 }))
 
+jest.unstable_mockModule("../src/lexicalClozeEnricher.js", () => ({
+  generateUnambiguousLexicalClozeSentence: jest.fn(),
+  verifyLexicalClozeUniqueness: jest.fn(async () => ({ valid: true, unique: true, answer: "" })),
+}))
+
 jest.unstable_mockModule("../src/cefr.js", () => ({
   estimateLexicalCEFR: jest.fn(async () => null),
 }))
