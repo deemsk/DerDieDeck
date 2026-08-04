@@ -139,6 +139,15 @@ describe("lexical cloze templates", () => {
     expect(text).toBe("{{c1::Wenn::subordinate-clause connector}} ich Zeit habe, komme ich.")
   })
 
+  test("buildLexicalClozeText recognizes targets that begin with an umlaut", () => {
+    const text = buildLexicalClozeText(
+      { german: "Wir sprechen über das Wetter.", focusForm: "über" },
+      { canonical: "über", lexicalType: "preposition", clozeHint: "предлог с Akkusativ или Dativ" }
+    )
+
+    expect(text).toBe("Wir sprechen {{c1::über::предлог с Akkusativ или Dativ}} das Wetter.")
+  })
+
   test("buildLexicalClozeText repairs inflected manual focus forms", () => {
     const wordData = getCuratedFunctionWordAnalysis("kein")
     const sentence = { german: "Ich habe keine Zeit.", focusForm: "kein" }

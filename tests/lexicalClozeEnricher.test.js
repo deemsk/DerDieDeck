@@ -57,6 +57,8 @@ describe('lexical cloze uniqueness verification', () => {
     }))
     expect(request.messages.map(({ content }) => content).join('\n')).not.toContain('ihm')
     expect(request.messages[0].content).toContain('Do not choose merely the most likely answer')
+    expect(request.messages[0].content).toContain('hint may be written in Russian')
+    expect(request.messages[0].content).toContain('binding constraint')
   })
 
   test('accepts only a unique reconstruction that matches the hidden target', async () => {
@@ -105,6 +107,7 @@ describe('lexical cloze uniqueness verification', () => {
         german: 'Der Mann sagt die Wahrheit, aber sie glaubt ihm nicht.',
         russian: 'Мужчина говорит правду, но она ему не верит.',
         focusForm: 'ihm',
+        clozeHint: 'ему, местоимение в Dativ',
       }) } }],
     })
 
@@ -122,6 +125,7 @@ describe('lexical cloze uniqueness verification', () => {
     })
 
     expect(result.german).toContain('Der Mann')
+    expect(result.clozeHint).toBe('ему, местоимение в Dativ')
     expect(JSON.parse(mockCreate.mock.calls[0][0].messages[1].content)).toEqual(
       expect.objectContaining({
         target: 'ihm',
@@ -130,5 +134,34 @@ describe('lexical cloze uniqueness verification', () => {
       })
     )
     expect(mockCreate.mock.calls[0][0].messages[0].content).toContain('governing verb')
+  })
+
+  test('does not let the generator replace the intended focus form', async () => {
+    mockCreate.mockResolvedValue({
+      choices: [{ message: { content: JSON.stringify({
+        german: 'Sie spricht darüber.',
+        russian: 'Она говорит об этом.',
+        focusForm: 'darüber',
+        clozeHint: 'о чём-либо',
+      }) } }],
+    })
+
+    const result = await generateUnambiguousLexicalClozeSentence({
+      german: 'Wir sprechen über das Wetter.',
+      russian: 'Мы говорим о погоде.',
+      focusForm: 'über',
+    }, {
+      canonical: 'über',
+      lemma: 'über',
+      lexicalType: 'preposition',
+      clozeHint: 'предлог с Akkusativ или Dativ',
+    })
+
+    expect(result).toEqual({
+      german: 'Sie spricht darüber.',
+      russian: 'Она говорит об этом.',
+      focusForm: 'über',
+      clozeHint: 'о чём-либо',
+    })
   })
 })

@@ -51,8 +51,9 @@ const REWRITE_RESPONSE_FORMAT = {
         german: { type: 'string' },
         russian: { type: 'string' },
         focusForm: { type: 'string' },
+        clozeHint: { type: 'string' },
       },
-      required: ['german', 'russian', 'focusForm'],
+      required: ['german', 'russian', 'focusForm', 'clozeHint'],
       additionalProperties: false,
     },
   },
@@ -90,7 +91,7 @@ export async function verifyLexicalClozeUniqueness(sentence = {}, wordData = {})
           role: 'system',
           content: `You validate German cloze flashcards from the learner's perspective.
 
-You see exactly the German front text with one blank and its hint. Consider every natural German word or inflected form that could fill the blank while matching the hint and producing a grammatical, semantically plausible sentence.
+You see exactly the German front text with one blank and its learner-visible hint. The hint may be written in Russian. Treat every semantic gloss, case label, and construction named in the hint as a binding constraint, not optional commentary. Consider every natural German word or inflected form that could fill the blank while satisfying the full hint and producing a grammatical, semantically plausible sentence.
 
 Set unique=true only when exactly one lexical answer is reasonably recoverable from the visible context. If multiple answers could work because a referent, gender, meaning, connector, preposition, particle, or other distinction is missing, set unique=false and answer="". Do not choose merely the most likely answer when alternatives remain valid.
 
@@ -151,7 +152,9 @@ For pronominal adverbs such as darauf, daran, darüber, davon, and damit, use a 
 
 The previous version failed an independent uniqueness check. Use its diagnosis to preserve the target and rule out every listed answer other than the target. The listed answers may include the target because the verifier did not know which answer was intended. Do not merely paraphrase the same ambiguous structure.
 
-Keep the sentence natural and concise. Include the exact target once. Return a natural Russian translation and JSON only.`,
+You may also refine clozeHint. The hint is visible on the card, so use it together with the German sentence to make the answer unique. Write it concisely in Russian and include the intended meaning, case, or governing construction when useful. Do not include the German target itself or a transliteration of it.
+
+Keep the sentence natural and concise. Include the exact target as a standalone token exactly once; do not inflect it, expand it into a compound, or replace it with a related form. Set focusForm to exactly the supplied target. Return a natural Russian translation and JSON only.`,
       },
       {
         role: 'user',
@@ -181,6 +184,9 @@ Keep the sentence natural and concise. Include the exact target once. Return a n
   return {
     german: String(result.german || '').trim(),
     russian: String(result.russian || '').trim(),
-    focusForm: String(result.focusForm || target).trim(),
+    focusForm: String(target || '').trim(),
+    clozeHint: /[А-Яа-яЁё]/.test(String(result.clozeHint || ''))
+      ? String(result.clozeHint).trim()
+      : String(wordData.clozeHint || '').trim(),
   };
 }

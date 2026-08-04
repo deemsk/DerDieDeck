@@ -24,15 +24,16 @@ export function buildLexicalClozeText(sentence = {}, wordData = {}) {
   }
 
   const hint = String(wordData.clozeHint || wordData.lexicalType || 'word').trim();
-  const pattern = new RegExp(`\\b(${escapeRegex(target)})\\b`, 'i');
+  const pattern = new RegExp(`(^|[^\\p{L}\\p{N}])(${escapeRegex(target)})(?=[^\\p{L}\\p{N}]|$)`, 'iu');
   const match = german.match(pattern);
   if (!match || match.index === undefined) {
     return escapeHtml(german);
   }
 
-  const before = german.slice(0, match.index);
-  const matched = german.slice(match.index, match.index + match[0].length);
-  const after = german.slice(match.index + match[0].length);
+  const targetIndex = match.index + match[1].length;
+  const before = german.slice(0, targetIndex);
+  const matched = match[2];
+  const after = german.slice(targetIndex + matched.length);
 
   return `${escapeHtml(before)}{{c1::${escapeHtml(matched)}::${escapeHtml(hint)}}}${escapeHtml(after)}`;
 }

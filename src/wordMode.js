@@ -62,6 +62,16 @@ function formatWordPreviewSummary(chalk, wordData, translation, cefrLevel = null
   return translation ? `${head} ${chalk.dim('—')} ${translation}` : head;
 }
 
+function buildMeaningAwareClozeHint(wordData = {}, selectedMeaning = {}) {
+  const hint = String(wordData.clozeHint || '').trim();
+  const russian = String(selectedMeaning?.russian || '').trim();
+  if (!russian || hint.toLocaleLowerCase('ru').includes(russian.toLocaleLowerCase('ru'))) {
+    return hint;
+  }
+
+  return [russian, hint].filter(Boolean).join('; ');
+}
+
 export function resolveWordAudioPlan(wordData = {}) {
   return {
     spokenText: String(wordData.canonical || getWordLemma(wordData) || '').trim(),
@@ -498,6 +508,17 @@ async function prepareWord(rawInput, options, spinner) {
 
     spinner.start('Checking that the cloze has one answer...');
     let uniqueness = await verifyLexicalClozeUniqueness(chosenSentence, wordData);
+    let selectedMeaning = null;
+    if (!uniqueness.valid) {
+      selectedMeaning = await chooseMeaning(wordData, options.meaning, {
+        manualPrompt: `Enter the intended meaning/gloss for "${wordData.canonical}" (not an example sentence), or press Enter to skip: `,
+        editPrompt: 'Enter the intended meaning/gloss (not an example sentence): ',
+        allowBlank: true,
+      });
+      wordData.clozeHint = buildMeaningAwareClozeHint(wordData, selectedMeaning);
+      uniqueness = await verifyLexicalClozeUniqueness(chosenSentence, wordData);
+    }
+
     let repairAttempts = 0;
     while (!uniqueness.valid && repairAttempts < MAX_LEXICAL_CLOZE_REPAIR_ATTEMPTS) {
       repairAttempts += 1;
@@ -506,18 +527,24 @@ async function prepareWord(rawInput, options, spinner) {
           diagnosis: uniqueness,
           attempt: repairAttempts,
         });
+        chosenSentence = rewritten;
+        if (rewritten.clozeHint) {
+          wordData.clozeHint = buildMeaningAwareClozeHint({
+            ...wordData,
+            clozeHint: rewritten.clozeHint,
+          }, selectedMeaning);
+        }
         if (!validateLexicalClozeSentence(rewritten, wordData)) {
           uniqueness = {
             valid: false,
             unique: false,
             answer: '',
             alternatives: [],
-            reason: `The rewritten sentence did not contain a valid ${wordData.canonical} target.`,
+            reason: `The rewritten sentence did not contain the exact target ${wordData.canonical}.`,
           };
           continue;
         }
 
-        chosenSentence = rewritten;
         uniqueness = await verifyLexicalClozeUniqueness(rewritten, wordData);
       } catch (err) {
         uniqueness = {
@@ -539,11 +566,13 @@ async function prepareWord(rawInput, options, spinner) {
       ? `Cloze repaired and verified after ${repairAttempts} attempt${repairAttempts === 1 ? '' : 's'}`
       : 'Cloze answer is uniquely recoverable');
 
-    const selectedMeaning = await chooseMeaning(wordData, options.meaning, {
-      manualPrompt: `Enter the intended meaning/gloss for "${wordData.canonical}" (not an example sentence), or press Enter to skip: `,
-      editPrompt: 'Enter the intended meaning/gloss (not an example sentence): ',
-      allowBlank: true,
-    });
+    if (!selectedMeaning) {
+      selectedMeaning = await chooseMeaning(wordData, options.meaning, {
+        manualPrompt: `Enter the intended meaning/gloss for "${wordData.canonical}" (not an example sentence), or press Enter to skip: `,
+        editPrompt: 'Enter the intended meaning/gloss (not an example sentence): ',
+        allowBlank: true,
+      });
+    }
 
     let duplicateInfo = { exactMatches: [], headwordMatches: [] };
     spinner.start('Checking duplicates...');

@@ -358,6 +358,7 @@ describe("word mode sentence flow", () => {
     })
     mockVerifyLexicalClozeUniqueness
       .mockResolvedValueOnce({ valid: false, unique: false, answer: "" })
+      .mockResolvedValueOnce({ valid: false, unique: false, answer: "" })
       .mockResolvedValueOnce({ valid: true, unique: true, answer: "ihm" })
     mockGenerateUnambiguousLexicalClozeSentence.mockResolvedValue({
       german: "Der Mann sagt die Wahrheit, aber sie glaubt ihm nicht.",
@@ -389,9 +390,10 @@ describe("word mode sentence flow", () => {
     })
 
     expect(added).toBe(true)
-    expect(mockVerifyLexicalClozeUniqueness).toHaveBeenCalledTimes(2)
+    expect(mockVerifyLexicalClozeUniqueness).toHaveBeenCalledTimes(3)
+    expect(mockGenerateUnambiguousLexicalClozeSentence).toHaveBeenCalledTimes(1)
     expect(mockCreateClozeNote).toHaveBeenCalledWith(expect.objectContaining({
-      text: expect.stringContaining("Der Mann sagt die Wahrheit, aber sie glaubt {{c1::ihm::dative pronoun}} nicht."),
+      text: expect.stringContaining("Der Mann sagt die Wahrheit, aber sie glaubt {{c1::ihm::ему; dative pronoun}} nicht."),
     }))
   })
 
@@ -418,6 +420,13 @@ describe("word mode sentence flow", () => {
         reason: "The governing construction is still unclear.",
       })
       .mockResolvedValueOnce({
+        valid: false,
+        unique: false,
+        answer: "",
+        alternatives: ["daran"],
+        reason: "The governing construction is still unclear.",
+      })
+      .mockResolvedValueOnce({
         valid: true,
         unique: true,
         answer: "darauf",
@@ -429,11 +438,13 @@ describe("word mode sentence flow", () => {
         german: "Ich freue mich darauf, dass du kommst.",
         russian: "Я рад, что ты придёшь.",
         focusForm: "darauf",
+        clozeHint: "на это; местоименное наречие",
       })
       .mockResolvedValueOnce({
         german: "Wir warten darauf, dass der Zug endlich kommt.",
         russian: "Мы ждём, когда наконец придёт поезд.",
         focusForm: "darauf",
+        clozeHint: "ждать этого; местоименное наречие",
       })
     mockEnrich.mockResolvedValue({
       german: "Wir warten darauf, dass der Zug endlich kommt.",
@@ -469,7 +480,7 @@ describe("word mode sentence flow", () => {
       attempt: 2,
     })
     expect(mockCreateClozeNote).toHaveBeenCalledWith(expect.objectContaining({
-      text: expect.stringContaining("Wir warten {{c1::darauf::местоименное наречие}}, dass der Zug endlich kommt."),
+      text: expect.stringContaining("Wir warten {{c1::darauf::на это; ждать этого; местоименное наречие}}, dass der Zug endlich kommt."),
     }))
   })
 
@@ -490,6 +501,7 @@ describe("word mode sentence flow", () => {
       german: "Ich denke darauf.",
       russian: "Я думаю об этом.",
       focusForm: "darauf",
+      clozeHint: "местоименное наречие",
     })
 
     const added = await runWordWorkflow("darauf", {
@@ -511,8 +523,84 @@ describe("word mode sentence flow", () => {
 
     expect(added).toBe(false)
     expect(mockGenerateUnambiguousLexicalClozeSentence).toHaveBeenCalledTimes(3)
-    expect(mockVerifyLexicalClozeUniqueness).toHaveBeenCalledTimes(4)
+    expect(mockVerifyLexicalClozeUniqueness).toHaveBeenCalledTimes(5)
     expect(mockCreateClozeNote).not.toHaveBeenCalled()
+  })
+
+  test("uses an invalid rewrite as feedback for the next cloze repair", async () => {
+    mockChooseMeaning.mockResolvedValue({ russian: "над", english: "above" })
+    mockChooseWordSentence.mockResolvedValue({
+      german: "Das Bild hängt über dem Sofa.",
+      russian: "Картина висит над диваном.",
+      focusForm: "über",
+    })
+    mockVerifyLexicalClozeUniqueness
+      .mockResolvedValueOnce({
+        valid: false,
+        unique: false,
+        answer: "",
+        alternatives: ["hinter", "neben"],
+        reason: "Several spatial prepositions fit.",
+      })
+      .mockResolvedValueOnce({
+        valid: false,
+        unique: false,
+        answer: "",
+        alternatives: ["hinter", "neben"],
+        reason: "Several spatial prepositions fit.",
+      })
+      .mockResolvedValueOnce({
+        valid: true,
+        unique: true,
+        answer: "über",
+        alternatives: [],
+        reason: "The construction selects über.",
+      })
+    mockGenerateUnambiguousLexicalClozeSentence
+      .mockResolvedValueOnce({
+        german: "Das Bild hängt oberhalb des Sofas.",
+        russian: "Картина висит над диваном.",
+        focusForm: "über",
+        clozeHint: "над чем-либо, Dativ",
+      })
+      .mockResolvedValueOnce({
+        german: "Wir sprechen über das Wetter.",
+        russian: "Мы говорим о погоде.",
+        focusForm: "über",
+        clozeHint: "говорить о чём-либо, Akkusativ",
+      })
+    mockEnrich.mockResolvedValue({
+      german: "Wir sprechen über das Wetter.",
+      ipa: "[viːɐ̯ ˈʃpʁɛçn̩ ˈyːbɐ das ˈvɛtɐ]",
+      russian: "Мы говорим о погоде.",
+      cefr: { level: "A2" },
+    })
+
+    const added = await runWordWorkflow("über", {
+      analysisResult: {
+        shouldCreateWordCard: true,
+        isImageable: false,
+        recommendedMode: "cloze-form",
+        lexicalType: "preposition",
+        canonical: "über",
+        lemma: "über",
+        clozeHint: "предлог с Akkusativ или Dativ",
+        meanings: [{ russian: "над; о; через", english: "above; about; across" }],
+        exampleSentences: [{ german: "Das Bild hängt über dem Sofa.", russian: "Картина висит над диваном.", focusForm: "über" }],
+      },
+      meaning: "над",
+      deck: "German::Test",
+      skipHeader: true,
+    })
+
+    expect(added).toBe(true)
+    expect(mockGenerateUnambiguousLexicalClozeSentence).toHaveBeenCalledTimes(2)
+    expect(mockGenerateUnambiguousLexicalClozeSentence.mock.calls[1][0]).toEqual(
+      expect.objectContaining({ german: "Das Bild hängt oberhalb des Sofas." })
+    )
+    expect(mockCreateClozeNote).toHaveBeenCalledWith(expect.objectContaining({
+      text: expect.stringContaining("Wir sprechen {{c1::über::над; говорить о чём-либо, Akkusativ}} das Wetter."),
+    }))
   })
 
   test("runWordWorkflow creates cloze notes for non-curated LLM-classified connectors", async () => {
