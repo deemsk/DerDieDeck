@@ -20,6 +20,7 @@ const mockChooseGoogleImage = jest.fn(async () => ({
 const mockConfirmSentenceWordSelection = jest.fn(async () => ({
   confirmed: true,
 }))
+const mockShowWordDictionarySummary = jest.fn()
 
 const mockCheckConnection = jest.fn(async () => true)
 const mockGetNoteTypes = jest.fn(async () => ["2. Picture Words", "Basic (optional reversed card)"])
@@ -74,6 +75,7 @@ jest.unstable_mockModule("../src/wordConfirm.js", () => ({
   chooseWordSentence: mockChooseWordSentence,
   confirmSentenceWordSelection: mockConfirmSentenceWordSelection,
   confirmWordSelection: jest.fn(),
+  showWordDictionarySummary: mockShowWordDictionarySummary,
 }))
 
 jest.unstable_mockModule("../src/anki.js", () => ({
@@ -157,6 +159,7 @@ describe("word mode sentence flow", () => {
     mockConfirmSentenceWordSelection.mockResolvedValue({
       confirmed: true,
     })
+    mockShowWordDictionarySummary.mockReset()
     mockBuildWordGoogleImagesSearch.mockReturnValue({
       query: "großes Haus",
       url: "https://images.google.com/search?tbm=isch&q=gro%C3%9Fes+Haus",
@@ -232,6 +235,7 @@ describe("word mode sentence flow", () => {
     expect(payload.context).toBeUndefined()
     expect(payload.frontFooterHtml).toContain("Различие")
     expect(payload.frontFooterHtml).toContain("klein")
+    expect(mockShowWordDictionarySummary).toHaveBeenCalledWith(expect.objectContaining({ canonical: "groß" }))
   })
 
   test("runWordWorkflow creates sentence-form adverb notes with a main word card", async () => {

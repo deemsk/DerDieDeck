@@ -1,6 +1,51 @@
-import { chooseMeaning, chooseWordSentence } from "../src/wordConfirm.js"
+import { jest } from "@jest/globals"
+import { chooseMeaning, chooseWordSentence, formatWordDictionarySummary, showWordDictionarySummary } from "../src/wordConfirm.js"
 
 describe("word confirmation helpers", () => {
+  test("formats a short dictionary summary before sentence selection", () => {
+    expect(formatWordDictionarySummary({
+      canonical: "über",
+      lemma: "über",
+      lexicalType: "preposition",
+      ipa: "[ˈyːbɐ]",
+      meanings: [{ russian: "над; через; о", english: "above; across; about" }],
+      patternHint: "Предлог с Akkusativ или Dativ в зависимости от значения.",
+    })).toBe([
+      "über · предлог",
+      "Значение: над; через; о",
+      "IPA: [ˈyːbɐ]",
+      "Грамматика: Предлог с Akkusativ или Dativ в зависимости от значения.",
+    ].join("\n"))
+  })
+
+  test("includes noun plural information in the dictionary summary", () => {
+    expect(formatWordDictionarySummary({
+      canonical: "das Wasser",
+      lemma: "Wasser",
+      lexicalType: "noun",
+      meanings: [{ russian: "вода" }],
+      noPlural: true,
+    })).toContain("Множественное число: обычно без множественного числа")
+  })
+
+  test("renders the dictionary summary as a compact framed block", () => {
+    const log = jest.spyOn(console, "log").mockImplementation(() => {})
+
+    showWordDictionarySummary({
+      canonical: "über",
+      lexicalType: "preposition",
+      meanings: [{ russian: "над; через; о" }],
+      ipa: "[ˈyːbɐ]",
+    })
+
+    const output = log.mock.calls.map(([line = ""]) => line).join("\n")
+    log.mockRestore()
+
+    expect(output).toContain("┌─ Кратко о слове")
+    expect(output).toContain("│  über · предлог")
+    expect(output).toContain("└─")
+  })
+
   test("chooseMeaning accepts a preferred gloss even when analysis has no meaning list", async () => {
     const meaning = await chooseMeaning(
       {

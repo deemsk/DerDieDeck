@@ -47,6 +47,7 @@ jest.unstable_mockModule("../src/wordConfirm.js", () => ({
   chooseWordSentence: jest.fn(),
   confirmSentenceWordSelection: jest.fn(),
   confirmWordSelection: mockConfirmWordSelection,
+  showWordDictionarySummary: jest.fn(),
 }))
 
 jest.unstable_mockModule("../src/anki.js", () => ({

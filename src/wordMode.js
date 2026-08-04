@@ -20,7 +20,14 @@ import { buildLexicalClozeExtra, buildLexicalClozeText } from './templates/word/
 import { formatWordDisplay, isNounWord } from './templates/word/pictureWord.js';
 import { buildWordSentenceFrontFooter } from './templates/word/sentenceWord.js';
 import { canProceedWithWeakWordCard, enrichWord, hasStructuredWordAnalysis } from './wordEnricher.js';
-import { chooseGoogleImage, chooseMeaning, chooseWordSentence, confirmSentenceWordSelection, confirmWordSelection } from './wordConfirm.js';
+import {
+  chooseGoogleImage,
+  chooseMeaning,
+  chooseWordSentence,
+  confirmSentenceWordSelection,
+  confirmWordSelection,
+  showWordDictionarySummary,
+} from './wordConfirm.js';
 import { buildWordGoogleImagesSearch, resolveImageAsset, resolveWordPronunciation } from './lib/wordSources.js';
 import { consumeLearnerProfileWarning, getLearnerProfilePromptContext } from './knowledgeProfile/index.js';
 import {
@@ -434,6 +441,8 @@ async function prepareWord(rawInput, options, spinner) {
   if (articleNormalizationWarning) {
     console.log(chalk.yellow(articleNormalizationWarning));
   }
+
+  showWordDictionarySummary(wordData);
 
   const frequencyInfo = getWordFrequencyInfo(getWordLemma(wordData));
 

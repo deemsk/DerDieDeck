@@ -9,7 +9,7 @@ import { pathToFileURL } from 'url';
 import { config } from './lib/config.js';
 import { escapeHtml } from './cardContent/html.js';
 import { normalizeGermanForCompare } from './cardContent/german.js';
-import { formatLexicalTypeLabel } from './cardContent/lexicalTypes.js';
+import { formatLexicalTypeLabel, formatRussianLexicalTypeLabel } from './cardContent/lexicalTypes.js';
 import { formatPluralLabel, getPrimaryExampleSentence, getWordLemma, inferFocusFormFromSentence } from './cardContent/wordLexical.js';
 import { askReviewFeedback, playAudio } from './confirm.js';
 import { cachePreviewImages, manualLocalSelection, manualRemoteSelection } from './lib/wordSources.js';
@@ -59,6 +59,64 @@ function buildWordSummaryLine(wordData, translation, cefrLevel = null) {
   const head = `${chalk.bold.cyan(wordData.canonical)} ${chalk.dim(`(${meta.join(', ')})`)}`;
 
   return translation ? `${head} ${chalk.dim('—')} ${translation}` : head;
+}
+
+function buildWordDictionarySummary(wordData = {}) {
+  const canonical = String(wordData.canonical || wordData.lemma || '').trim();
+  const lexicalType = formatRussianLexicalTypeLabel(wordData.lexicalType);
+  const meanings = Array.isArray(wordData.meanings)
+    ? [...new Set(wordData.meanings.map((meaning) => String(meaning?.russian || '').trim()).filter(Boolean))].slice(0, 3)
+    : [];
+  const rows = [];
+
+  if (meanings.length > 0) {
+    rows.push([meanings.length === 1 ? 'Значение' : 'Значения', meanings.join('; ')]);
+  }
+  if (wordData.ipa) {
+    rows.push(['IPA', wordData.ipa]);
+  }
+  if (wordData.lexicalType === 'noun') {
+    const plural = wordData.noPlural
+      ? 'обычно без множественного числа'
+      : String(wordData.plural || '').trim();
+    if (plural) {
+      rows.push(['Множественное число', plural]);
+    }
+  }
+  if (wordData.anchorPhrase) {
+    rows.push(['Конструкция', wordData.anchorPhrase]);
+  }
+  if (wordData.opposite) {
+    rows.push(['Антоним', wordData.opposite]);
+  }
+
+  const grammarHint = String(wordData.patternHint || wordData.clozeHint || '').trim();
+  if (grammarHint && grammarHint.toLocaleLowerCase('ru') !== lexicalType.toLocaleLowerCase('ru')) {
+    rows.push(['Грамматика', grammarHint]);
+  }
+
+  return { canonical, lexicalType, rows };
+}
+
+export function formatWordDictionarySummary(wordData = {}) {
+  const { canonical, lexicalType, rows } = buildWordDictionarySummary(wordData);
+  return [
+    `${canonical} · ${lexicalType}`,
+    ...rows.map(([name, value]) => `${name}: ${value}`),
+  ].join('\n');
+}
+
+export function showWordDictionarySummary(wordData = {}) {
+  const { canonical, lexicalType, rows } = buildWordDictionarySummary(wordData);
+  const labelWidth = rows.reduce((width, [name]) => Math.max(width, name.length), 0);
+
+  console.log();
+  console.log(`${chalk.cyan('┌─')} ${chalk.bold('Кратко о слове')}`);
+  console.log(`${chalk.cyan('│')}  ${chalk.bold.cyan(canonical)} ${chalk.dim(`· ${lexicalType}`)}`);
+  rows.forEach(([name, value]) => {
+    console.log(`${chalk.cyan('│')}  ${chalk.dim(name.padEnd(labelWidth))}  ${value}`);
+  });
+  console.log(chalk.cyan('└─'));
 }
 
 async function openFile(filePath) {
