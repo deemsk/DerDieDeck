@@ -32,7 +32,12 @@ describe('lexical cloze uniqueness verification', () => {
 
   test('shows the verifier only the learner-visible masked front', async () => {
     mockCreate.mockResolvedValue({
-      choices: [{ message: { content: JSON.stringify({ unique: false, answer: '' }) } }],
+      choices: [{ message: { content: JSON.stringify({
+        unique: false,
+        answer: '',
+        alternatives: ['ihr', 'ihnen'],
+        reason: 'The antecedent does not identify the recipient.',
+      }) } }],
     })
     const sentence = { german: 'Sie glaubt ihm nicht.', focusForm: 'ihm' }
 
@@ -41,6 +46,8 @@ describe('lexical cloze uniqueness verification', () => {
       valid: false,
       unique: false,
       answer: '',
+      alternatives: ['ihr', 'ihnen'],
+      reason: 'The antecedent does not identify the recipient.',
     })
 
     const request = mockCreate.mock.calls[0][0]
@@ -54,20 +61,42 @@ describe('lexical cloze uniqueness verification', () => {
 
   test('accepts only a unique reconstruction that matches the hidden target', async () => {
     mockCreate.mockResolvedValueOnce({
-      choices: [{ message: { content: JSON.stringify({ unique: true, answer: 'ihm' }) } }],
+      choices: [{ message: { content: JSON.stringify({
+        unique: true,
+        answer: 'ihm',
+        alternatives: [],
+        reason: 'The masculine antecedent fixes the dative pronoun.',
+      }) } }],
     })
     await expect(verifyLexicalClozeUniqueness({
       german: 'Der Mann sagt die Wahrheit, aber sie glaubt ihm nicht.',
       focusForm: 'ihm',
-    }, ihmWord)).resolves.toEqual({ valid: true, unique: true, answer: 'ihm' })
+    }, ihmWord)).resolves.toEqual({
+      valid: true,
+      unique: true,
+      answer: 'ihm',
+      alternatives: [],
+      reason: 'The masculine antecedent fixes the dative pronoun.',
+    })
 
     mockCreate.mockResolvedValueOnce({
-      choices: [{ message: { content: JSON.stringify({ unique: true, answer: 'ihr' }) } }],
+      choices: [{ message: { content: JSON.stringify({
+        unique: true,
+        answer: 'ihr',
+        alternatives: [],
+        reason: 'The feminine antecedent fixes the dative pronoun.',
+      }) } }],
     })
     await expect(verifyLexicalClozeUniqueness({
       german: 'Die Frau sagt die Wahrheit, aber sie glaubt ihm nicht.',
       focusForm: 'ihm',
-    }, ihmWord)).resolves.toEqual({ valid: false, unique: true, answer: 'ihr' })
+    }, ihmWord)).resolves.toEqual({
+      valid: false,
+      unique: true,
+      answer: 'ihr',
+      alternatives: [],
+      reason: 'The feminine antecedent fixes the dative pronoun.',
+    })
   })
 
   test('rewrites an ambiguous example with the target available only to the generator', async () => {
@@ -83,11 +112,23 @@ describe('lexical cloze uniqueness verification', () => {
       german: 'Sie glaubt ihm nicht.',
       russian: 'Она ему не верит.',
       focusForm: 'ihm',
-    }, ihmWord)
+    }, ihmWord, {
+      diagnosis: {
+        answer: '',
+        alternatives: ['ihr', 'ihnen'],
+        reason: 'The recipient is not identified.',
+      },
+      attempt: 2,
+    })
 
     expect(result.german).toContain('Der Mann')
     expect(JSON.parse(mockCreate.mock.calls[0][0].messages[1].content)).toEqual(
-      expect.objectContaining({ target: 'ihm' })
+      expect.objectContaining({
+        target: 'ihm',
+        repairAttempt: 2,
+        previousDiagnosis: expect.objectContaining({ alternatives: ['ihr', 'ihnen'] }),
+      })
     )
+    expect(mockCreate.mock.calls[0][0].messages[0].content).toContain('governing verb')
   })
 })

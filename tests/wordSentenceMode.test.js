@@ -395,6 +395,126 @@ describe("word mode sentence flow", () => {
     }))
   })
 
+  test("keeps repairing an ambiguous cloze until an independent check accepts it", async () => {
+    mockChooseMeaning.mockResolvedValue({ russian: "на это", english: "on it" })
+    mockChooseWordSentence.mockResolvedValue({
+      german: "Ich denke darauf.",
+      russian: "Я думаю об этом.",
+      focusForm: "darauf",
+    })
+    mockVerifyLexicalClozeUniqueness
+      .mockResolvedValueOnce({
+        valid: false,
+        unique: false,
+        answer: "",
+        alternatives: ["daran", "darüber"],
+        reason: "Several pronominal adverbs fit.",
+      })
+      .mockResolvedValueOnce({
+        valid: false,
+        unique: false,
+        answer: "",
+        alternatives: ["daran"],
+        reason: "The governing construction is still unclear.",
+      })
+      .mockResolvedValueOnce({
+        valid: true,
+        unique: true,
+        answer: "darauf",
+        alternatives: [],
+        reason: "warten auf selects darauf.",
+      })
+    mockGenerateUnambiguousLexicalClozeSentence
+      .mockResolvedValueOnce({
+        german: "Ich freue mich darauf, dass du kommst.",
+        russian: "Я рад, что ты придёшь.",
+        focusForm: "darauf",
+      })
+      .mockResolvedValueOnce({
+        german: "Wir warten darauf, dass der Zug endlich kommt.",
+        russian: "Мы ждём, когда наконец придёт поезд.",
+        focusForm: "darauf",
+      })
+    mockEnrich.mockResolvedValue({
+      german: "Wir warten darauf, dass der Zug endlich kommt.",
+      ipa: "[viːɐ̯ ˈvaʁtn̩ daˈʁaʊ̯f das deːɐ̯ tsuːk ˈɛntlɪç kɔmt]",
+      russian: "Мы ждём, когда наконец придёт поезд.",
+      cefr: { level: "B1" },
+    })
+
+    const added = await runWordWorkflow("darauf", {
+      analysisResult: {
+        shouldCreateWordCard: true,
+        isImageable: false,
+        recommendedMode: "cloze-form",
+        lexicalType: "adverb",
+        canonical: "darauf",
+        lemma: "darauf",
+        clozeHint: "местоименное наречие",
+        meanings: [{ russian: "на это", english: "on it" }],
+        exampleSentences: [{ german: "Ich denke darauf.", russian: "Я думаю об этом.", focusForm: "darauf" }],
+      },
+      meaning: "на это",
+      deck: "German::Test",
+      skipHeader: true,
+    })
+
+    expect(added).toBe(true)
+    expect(mockGenerateUnambiguousLexicalClozeSentence).toHaveBeenCalledTimes(2)
+    expect(mockGenerateUnambiguousLexicalClozeSentence.mock.calls[1][2]).toEqual({
+      diagnosis: expect.objectContaining({
+        alternatives: ["daran"],
+        reason: "The governing construction is still unclear.",
+      }),
+      attempt: 2,
+    })
+    expect(mockCreateClozeNote).toHaveBeenCalledWith(expect.objectContaining({
+      text: expect.stringContaining("Wir warten {{c1::darauf::местоименное наречие}}, dass der Zug endlich kommt."),
+    }))
+  })
+
+  test("stops after three failed cloze repairs without creating an ambiguous note", async () => {
+    mockChooseWordSentence.mockResolvedValue({
+      german: "Ich denke darauf.",
+      russian: "Я думаю об этом.",
+      focusForm: "darauf",
+    })
+    mockVerifyLexicalClozeUniqueness.mockResolvedValue({
+      valid: false,
+      unique: false,
+      answer: "",
+      alternatives: ["daran", "darüber"],
+      reason: "Several pronominal adverbs still fit.",
+    })
+    mockGenerateUnambiguousLexicalClozeSentence.mockResolvedValue({
+      german: "Ich denke darauf.",
+      russian: "Я думаю об этом.",
+      focusForm: "darauf",
+    })
+
+    const added = await runWordWorkflow("darauf", {
+      analysisResult: {
+        shouldCreateWordCard: true,
+        isImageable: false,
+        recommendedMode: "cloze-form",
+        lexicalType: "adverb",
+        canonical: "darauf",
+        lemma: "darauf",
+        clozeHint: "местоименное наречие",
+        meanings: [{ russian: "на это", english: "on it" }],
+        exampleSentences: [{ german: "Ich denke darauf.", russian: "Я думаю об этом.", focusForm: "darauf" }],
+      },
+      meaning: "на это",
+      deck: "German::Test",
+      skipHeader: true,
+    })
+
+    expect(added).toBe(false)
+    expect(mockGenerateUnambiguousLexicalClozeSentence).toHaveBeenCalledTimes(3)
+    expect(mockVerifyLexicalClozeUniqueness).toHaveBeenCalledTimes(4)
+    expect(mockCreateClozeNote).not.toHaveBeenCalled()
+  })
+
   test("runWordWorkflow creates cloze notes for non-curated LLM-classified connectors", async () => {
     mockChooseMeaning.mockResolvedValue({
       russian: "чтобы",

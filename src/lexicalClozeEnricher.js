@@ -27,8 +27,14 @@ const UNIQUENESS_RESPONSE_FORMAT = {
       properties: {
         unique: { type: 'boolean' },
         answer: { type: 'string' },
+        alternatives: {
+          type: 'array',
+          items: { type: 'string' },
+          maxItems: 5,
+        },
+        reason: { type: 'string' },
       },
-      required: ['unique', 'answer'],
+      required: ['unique', 'answer', 'alternatives', 'reason'],
       additionalProperties: false,
     },
   },
@@ -72,7 +78,7 @@ export async function verifyLexicalClozeUniqueness(sentence = {}, wordData = {})
   const front = buildMaskedLexicalCloze(sentence, wordData);
   const expected = resolveSentenceFocusForm(sentence, wordData);
   if (!front || !expected) {
-    return { valid: false, unique: false, answer: '' };
+    return { valid: false, unique: false, answer: '', alternatives: [], reason: 'The cloze could not be built.' };
   }
 
   try {
@@ -88,7 +94,7 @@ You see exactly the German front text with one blank and its hint. Consider ever
 
 Set unique=true only when exactly one lexical answer is reasonably recoverable from the visible context. If multiple answers could work because a referent, gender, meaning, connector, preposition, particle, or other distinction is missing, set unique=false and answer="". Do not choose merely the most likely answer when alternatives remain valid.
 
-When unique=true, return that one answer. Return JSON only.`,
+When unique=false, list up to five concrete reasonable answers and briefly explain what context is missing. Because you do not know the intended answer, this list may include it. When unique=true, return that one answer, an empty alternatives array, and a concise reason. Return JSON only.`,
         },
         {
           role: 'user',
@@ -103,17 +109,33 @@ When unique=true, return that one answer. Return JSON only.`,
     });
     const result = JSON.parse(response.choices[0].message.content);
     const answer = String(result.answer || '').trim();
+    const alternatives = Array.isArray(result.alternatives)
+      ? result.alternatives.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 5)
+      : [];
     return {
       valid: result.unique === true && normalizeGermanForCompare(answer) === normalizeGermanForCompare(expected),
       unique: result.unique === true,
       answer,
+      alternatives,
+      reason: String(result.reason || '').trim(),
     };
   } catch (err) {
-    return { valid: false, unique: false, answer: '', error: err.message };
+    return {
+      valid: false,
+      unique: false,
+      answer: '',
+      alternatives: [],
+      reason: 'The uniqueness check failed.',
+      error: err.message,
+    };
   }
 }
 
-export async function generateUnambiguousLexicalClozeSentence(sentence = {}, wordData = {}) {
+export async function generateUnambiguousLexicalClozeSentence(
+  sentence = {},
+  wordData = {},
+  { diagnosis = null, attempt = 1 } = {}
+) {
   const client = await getClient();
   const target = resolveSentenceFocusForm(sentence, wordData) || wordData.canonical;
   const response = await client.chat.completions.create({
@@ -125,6 +147,10 @@ export async function generateUnambiguousLexicalClozeSentence(sentence = {}, wor
 
 Add concise context that rules out grammatical or semantic alternatives. For pronouns, include an explicit antecedent that fixes person, number, and gender. For case forms, make the governing verb or preposition clear. For connectors, particles, determiners, prepositions, and adverbs, make the intended relation or meaning uniquely recoverable.
 
+For pronominal adverbs such as darauf, daran, darüber, davon, and damit, use a governing verb, adjective, noun, or fixed construction that selects the target preposition. Add a following dass-clause or infinitive clause when it makes the construction explicit. Do not rely only on broad topic context if competing pronominal adverbs would still be grammatical.
+
+The previous version failed an independent uniqueness check. Use its diagnosis to preserve the target and rule out every listed answer other than the target. The listed answers may include the target because the verifier did not know which answer was intended. Do not merely paraphrase the same ambiguous structure.
+
 Keep the sentence natural and concise. Include the exact target once. Return a natural Russian translation and JSON only.`,
       },
       {
@@ -133,8 +159,18 @@ Keep the sentence natural and concise. Include the exact target once. Return a n
           target,
           lexicalType: wordData.lexicalType || null,
           hint: wordData.clozeHint || null,
+          patternHint: wordData.patternHint || null,
+          russianMeanings: Array.isArray(wordData.meanings)
+            ? wordData.meanings.map((meaning) => meaning?.russian).filter(Boolean)
+            : [],
           previousGerman: sentence.german || '',
           previousRussian: sentence.russian || '',
+          previousDiagnosis: diagnosis ? {
+            reason: diagnosis.reason || null,
+            alternatives: diagnosis.alternatives || [],
+            reconstructedAnswer: diagnosis.answer || null,
+          } : null,
+          repairAttempt: attempt,
         }),
       },
     ],
