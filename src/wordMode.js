@@ -48,6 +48,7 @@ import {
 import { generateSimpleSpeech, generateSpeech } from './lib/tts.js';
 import { enrich, reviewEnrichedText } from './enricher.js';
 import { generateUnambiguousLexicalClozeSentence, verifyLexicalClozeUniqueness } from './lexicalClozeEnricher.js';
+import { RecoverableWorkflowError } from './workflowRecovery.js';
 
 const DEFAULT_WORD_NOTE_TYPE = config.wordNoteType || '2. Picture Words';
 const MAX_LEXICAL_CLOZE_REPAIR_ATTEMPTS = 3;
@@ -407,22 +408,34 @@ async function prepareWord(rawInput, options, spinner) {
 
   if (!wordData.shouldCreateWordCard && !structuredAnalysis && !recoverableWeakCandidate) {
     spinner.warn(`Rejected: ${wordData.rejectionReason}`);
-    return { rejected: true };
+    throw new RecoverableWorkflowError(
+      wordData.rejectionReason || `AI could not recognize "${rawInput}" as a usable German word`,
+      { code: 'word-analysis-rejected', workflow: 'word' }
+    );
   }
 
   if (route === 'picture-word' && !wordData.isImageable && !recoverableWeakCandidate) {
     spinner.warn(`Rejected: ${wordData.imageabilityReason || 'not imageable enough for picture-word cards'}`);
-    return { rejected: true };
+    throw new RecoverableWorkflowError(
+      wordData.imageabilityReason || 'AI could not build a suitable picture-word card',
+      { code: 'word-route-rejected', workflow: 'word' }
+    );
   }
 
   if (route === 'sentence-form' && !structuredAnalysis) {
     spinner.warn(`Rejected: ${wordData.rejectionReason || 'not enough lexical analysis for sentence cards'}`);
-    return { rejected: true };
+    throw new RecoverableWorkflowError(
+      wordData.rejectionReason || 'AI returned incomplete lexical analysis for a sentence card',
+      { code: 'word-analysis-incomplete', workflow: 'word', allowManualSentence: true }
+    );
   }
 
   if (route === 'cloze-form' && !structuredAnalysis) {
     spinner.warn(`Rejected: ${wordData.rejectionReason || 'not enough lexical analysis for cloze cards'}`);
-    return { rejected: true };
+    throw new RecoverableWorkflowError(
+      wordData.rejectionReason || 'AI returned incomplete lexical analysis for a cloze card',
+      { code: 'cloze-analysis-incomplete', workflow: 'word', allowManualSentence: true }
+    );
   }
 
   if (route === 'sentence-form' && (!wordData.shouldCreateWordCard || !wordData.isImageable)) {
@@ -510,13 +523,17 @@ async function prepareWord(rawInput, options, spinner) {
       return { rejected: true };
     }
 
-    if (!validateLexicalClozeSentence(chosenSentence, wordData)) {
-      console.log(chalk.yellow(`Skipped: "${chosenSentence.german}" does not use ${wordData.canonical} as a valid ${wordData.lexicalType}`));
-      return { rejected: true };
-    }
-
     spinner.start('Checking that the cloze has one answer...');
-    let uniqueness = await verifyLexicalClozeUniqueness(chosenSentence, wordData);
+    const sentenceIsStructurallyValid = validateLexicalClozeSentence(chosenSentence, wordData);
+    let uniqueness = sentenceIsStructurallyValid
+      ? await verifyLexicalClozeUniqueness(chosenSentence, wordData)
+      : {
+          valid: false,
+          unique: false,
+          answer: '',
+          alternatives: [],
+          reason: `The sentence did not use ${wordData.canonical} as a valid ${wordData.lexicalType}.`,
+        };
     let selectedMeaning = null;
     if (!uniqueness.valid) {
       selectedMeaning = await chooseMeaning(wordData, options.meaning, {
@@ -525,7 +542,9 @@ async function prepareWord(rawInput, options, spinner) {
         allowBlank: true,
       });
       wordData.clozeHint = buildMeaningAwareClozeHint(wordData, selectedMeaning);
-      uniqueness = await verifyLexicalClozeUniqueness(chosenSentence, wordData);
+      if (sentenceIsStructurallyValid) {
+        uniqueness = await verifyLexicalClozeUniqueness(chosenSentence, wordData);
+      }
     }
 
     let repairAttempts = 0;
@@ -568,8 +587,11 @@ async function prepareWord(rawInput, options, spinner) {
     }
     if (!uniqueness.valid) {
       const detail = uniqueness.reason ? `: ${uniqueness.reason}` : '';
-      spinner.warn(`Skipped: could not make the cloze for "${wordData.canonical}" unambiguous after ${repairAttempts} attempts${detail}`);
-      return { rejected: true };
+      spinner.warn(`Could not make the cloze for "${wordData.canonical}" unambiguous after ${repairAttempts} attempts${detail}`);
+      throw new RecoverableWorkflowError(
+        `Could not build an unambiguous cloze for "${wordData.canonical}"${detail}`,
+        { code: 'cloze-repair-failed', workflow: 'word', allowManualSentence: true }
+      );
     }
     spinner.succeed(repairAttempts > 0
       ? `Cloze repaired and verified after ${repairAttempts} attempt${repairAttempts === 1 ? '' : 's'}`
@@ -815,8 +837,10 @@ async function finalizeLexicalCloze(prepared, options, spinner) {
     focusForm: chosenSentence?.focusForm,
   }, wordData);
   if (!text.includes('{{c1::')) {
-    console.log(chalk.yellow(`Skipped: "${sentenceData.german}" does not contain ${wordData.canonical}`));
-    return false;
+    throw new RecoverableWorkflowError(
+      `The final sentence does not contain a usable form of ${wordData.canonical}`,
+      { code: 'cloze-finalization-failed', workflow: 'word', allowManualSentence: true }
+    );
   }
 
   const extra = buildLexicalClozeExtra({
@@ -1053,6 +1077,10 @@ export async function runWordWorkflow(rawInput, options = {}) {
     }
     return finalizePictureWord(prepared, options, spinner);
   } catch (err) {
+    if (err instanceof RecoverableWorkflowError) {
+      spinner.stop();
+      throw err;
+    }
     spinner.fail(err.message);
     throw err;
   }

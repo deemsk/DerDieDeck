@@ -8,6 +8,7 @@ import { shouldCheckLexicalCorrection, suggestLexicalCorrections } from './lexic
 import { classifyLexicalRoute } from './lexicalRouter.js';
 import { runWordWorkflow } from './wordMode.js';
 import { runVerbWorkflow } from './verbMode.js';
+import { runWithWorkflowRecovery } from './workflowRecovery.js';
 
 function ask(question) {
   const rl = createInterface({
@@ -384,8 +385,23 @@ async function detectLexicalRoute(rawInput, options = {}) {
   };
 }
 
-async function processLexicalEntry(rawInput, options = {}) {
+async function processLexicalEntryAttempt(rawInput, options = {}, recovery = {}) {
   showLexicalHeader(rawInput);
+  if (recovery.forcedRoute === 'word') {
+    return runWordWorkflow(rawInput, {
+      ...options,
+      analysisResult: null,
+      skipHeader: true,
+    });
+  }
+  if (recovery.forcedRoute === 'verb') {
+    return runVerbWorkflow(rawInput, {
+      ...options,
+      analysisResult: null,
+      skipHeader: true,
+    });
+  }
+
   const correction = await resolveLexicalInputCorrection(rawInput);
   if (correction.skipped) {
     console.log(chalk.yellow('Skipped: no correction selected'));
@@ -418,6 +434,17 @@ async function processLexicalEntry(rawInput, options = {}) {
     ...options,
     analysisResult: classification.analysisResult,
     skipHeader: true,
+  });
+}
+
+export async function processLexicalEntry(rawInput, options = {}) {
+  return runWithWorkflowRecovery({
+    input: rawInput,
+    options,
+    ask,
+    write: (line) => console.log(line ? chalk.yellow(line) : ''),
+    runAttempt: ({ input, options: attemptOptions, forcedRoute }) =>
+      processLexicalEntryAttempt(input, attemptOptions, { forcedRoute }),
   });
 }
 

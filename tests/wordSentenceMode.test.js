@@ -488,7 +488,59 @@ describe("word mode sentence flow", () => {
     }))
   })
 
-  test("stops after three failed cloze repairs without creating an ambiguous note", async () => {
+  test("repairs an initial cloze sentence that does not contain the target", async () => {
+    mockChooseMeaning.mockResolvedValue({ russian: "на это", english: "on it" })
+    mockChooseWordSentence.mockResolvedValue({
+      german: "Ich denke daran.",
+      russian: "Я думаю об этом.",
+      focusForm: "daran",
+    })
+    mockGenerateUnambiguousLexicalClozeSentence.mockResolvedValue({
+      german: "Wir warten darauf, dass der Zug kommt.",
+      russian: "Мы ждём, когда придёт поезд.",
+      focusForm: "darauf",
+      clozeHint: "ждать этого",
+    })
+    mockVerifyLexicalClozeUniqueness.mockResolvedValue({
+      valid: true,
+      unique: true,
+      answer: "darauf",
+      alternatives: [],
+      reason: "warten auf selects darauf.",
+    })
+    mockEnrich.mockResolvedValue({
+      german: "Wir warten darauf, dass der Zug kommt.",
+      ipa: "[viːɐ̯ ˈvaʁtn̩ daˈʁaʊ̯f das deːɐ̯ tsuːk kɔmt]",
+      russian: "Мы ждём, когда придёт поезд.",
+      cefr: { level: "A2" },
+    })
+
+    const added = await runWordWorkflow("darauf", {
+      analysisResult: {
+        shouldCreateWordCard: true,
+        isImageable: false,
+        recommendedMode: "cloze-form",
+        lexicalType: "adverb",
+        canonical: "darauf",
+        lemma: "darauf",
+        clozeHint: "местоименное наречие",
+        meanings: [{ russian: "на это", english: "on it" }],
+        exampleSentences: [],
+      },
+      meaning: "на это",
+      deck: "German::Test",
+      skipHeader: true,
+    })
+
+    expect(added).toBe(true)
+    expect(mockGenerateUnambiguousLexicalClozeSentence).toHaveBeenCalledTimes(1)
+    expect(mockVerifyLexicalClozeUniqueness).toHaveBeenCalledTimes(1)
+    expect(mockCreateClozeNote).toHaveBeenCalledWith(expect.objectContaining({
+      text: expect.stringContaining("Wir warten {{c1::darauf"),
+    }))
+  })
+
+  test("reports a recoverable error after three failed cloze repairs without creating an ambiguous note", async () => {
     mockChooseWordSentence.mockResolvedValue({
       german: "Ich denke darauf.",
       russian: "Я думаю об этом.",
@@ -508,7 +560,7 @@ describe("word mode sentence flow", () => {
       clozeHint: "местоименное наречие",
     })
 
-    const added = await runWordWorkflow("darauf", {
+    const result = runWordWorkflow("darauf", {
       analysisResult: {
         shouldCreateWordCard: true,
         isImageable: false,
@@ -525,7 +577,7 @@ describe("word mode sentence flow", () => {
       skipHeader: true,
     })
 
-    expect(added).toBe(false)
+    await expect(result).rejects.toThrow('Could not build an unambiguous cloze for "darauf"')
     expect(mockGenerateUnambiguousLexicalClozeSentence).toHaveBeenCalledTimes(3)
     expect(mockVerifyLexicalClozeUniqueness).toHaveBeenCalledTimes(5)
     expect(mockCreateClozeNote).not.toHaveBeenCalled()

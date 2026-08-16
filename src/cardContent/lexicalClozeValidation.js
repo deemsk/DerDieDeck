@@ -1,5 +1,5 @@
 import { normalizeGermanForCompare } from './german.js';
-import { resolveSentenceFocusForm } from './wordLexical.js';
+import { inferFocusFormFromSentence } from './wordLexical.js';
 import { COMMON_EARLY_FINITE_FORMS, SUBJUNCTION_VALIDATION_PRONOUNS } from '../data/wordForms.js';
 
 /**
@@ -14,8 +14,7 @@ function tokenizeGerman(text = '') {
  */
 function findTargetIndex(tokens = [], sentence = {}, wordData = {}) {
   const candidates = [
-    resolveSentenceFocusForm(sentence, wordData),
-    sentence.focusForm,
+    inferFocusFormFromSentence(sentence.german, wordData),
     wordData.canonical,
     wordData.lemma,
   ]

@@ -130,6 +130,13 @@ describe("lexical cloze templates", () => {
     )).toBe(true)
   })
 
+  test("validateLexicalClozeSentence does not trust an unrelated AI focusForm", () => {
+    expect(validateLexicalClozeSentence(
+      { german: "Ich denke daran.", focusForm: "daran" },
+      { canonical: "darauf", lemma: "darauf", lexicalType: "adverb" }
+    )).toBe(false)
+  })
+
   test("buildLexicalClozeText clozes subordinate connectors case-insensitively", () => {
     const text = buildLexicalClozeText(
       { german: "Wenn ich Zeit habe, komme ich.", focusForm: "Wenn" },

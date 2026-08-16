@@ -39,6 +39,7 @@ import {
 } from './anki.js';
 import { generateSimpleSpeech, generateSpeech } from './lib/tts.js';
 import { enrich, reviewEnrichedText } from './enricher.js';
+import { RecoverableWorkflowError } from './workflowRecovery.js';
 
 const DEFAULT_WORD_NOTE_TYPE = config.wordNoteType || '2. Picture Words';
 
@@ -686,7 +687,10 @@ async function prepareVerb(rawInput, options, spinner) {
       }
     }
     spinner.warn(`Rejected: ${verbData.rejectionReason}`);
-    return { rejected: true };
+    throw new RecoverableWorkflowError(
+      verbData.rejectionReason || `AI could not recognize "${rawInput}" as a usable German verb`,
+      { code: 'verb-analysis-rejected', workflow: 'verb' }
+    );
   }
 
   if (!verbData.shouldCreateVerbCard && recoverable) {
@@ -1206,6 +1210,10 @@ export async function runVerbWorkflow(rawInput, options = {}) {
     }
     return finalizeSentenceVerb(prepared, options, spinner);
   } catch (err) {
+    if (err instanceof RecoverableWorkflowError) {
+      spinner.stop();
+      throw err;
+    }
     spinner.fail(err.message);
     throw err;
   }
