@@ -1,8 +1,89 @@
 import OpenAI from 'openai';
 import { config } from './lib/config.js';
+import { OPENAI_MODEL_ROLES, withOpenAIModel } from './lib/openaiModels.js';
 import { resolveSecret } from './lib/secrets.js';
 
 let openai = null;
+
+const ANALYSIS_RESPONSE_FORMAT = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'flashcard_analysis',
+    strict: true,
+    schema: {
+      type: 'object',
+      properties: {
+        shouldGenerateAnyCard: { type: 'boolean' },
+        rejectionReason: { type: ['string', 'null'] },
+        wordCount: { type: 'integer' },
+        shouldSplit: { type: 'boolean' },
+        splitSuggestion: {
+          anyOf: [
+            { type: 'array', items: { type: 'string' } },
+            { type: 'null' },
+          ],
+        },
+        isConversationalPrompt: { type: 'boolean' },
+        isAnswer: { type: 'boolean' },
+        hasShortNaturalResponse: { type: 'boolean' },
+        dialogueResponse: {
+          anyOf: [
+            {
+              type: 'object',
+              properties: {
+                german: { type: 'string' },
+                russian: { type: 'string' },
+              },
+              required: ['german', 'russian'],
+              additionalProperties: false,
+            },
+            { type: 'null' },
+          ],
+        },
+        isHighValueForActiveUse: { type: 'boolean' },
+        isSpeakableByLearner: { type: 'boolean' },
+        situation: { type: ['string', 'null'] },
+        patternFamily: { type: ['string', 'null'] },
+        patternStrength: { type: 'string', enum: ['weak', 'medium', 'strong'] },
+        patternExamples: {
+          anyOf: [
+            { type: 'array', items: { type: 'string' } },
+            { type: 'null' },
+          ],
+        },
+        clozeCandidate: {
+          anyOf: [
+            {
+              type: 'object',
+              properties: {
+                word: { type: 'string' },
+                category: { type: 'string' },
+              },
+              required: ['word', 'category'],
+              additionalProperties: false,
+            },
+            { type: 'null' },
+          ],
+        },
+        clozeReason: { type: ['string', 'null'] },
+        isGuessable: { type: 'boolean' },
+        dialogueValue: { type: 'integer', minimum: 0, maximum: 10 },
+        productionValue: { type: 'integer', minimum: 0, maximum: 10 },
+        patternValue: { type: 'integer', minimum: 0, maximum: 10 },
+        clozeValue: { type: 'integer', minimum: 0, maximum: 10 },
+      },
+      required: [
+        'shouldGenerateAnyCard', 'rejectionReason', 'wordCount', 'shouldSplit',
+        'splitSuggestion', 'isConversationalPrompt', 'isAnswer',
+        'hasShortNaturalResponse', 'dialogueResponse', 'isHighValueForActiveUse',
+        'isSpeakableByLearner', 'situation', 'patternFamily', 'patternStrength',
+        'patternExamples', 'clozeCandidate', 'clozeReason', 'isGuessable',
+        'dialogueValue', 'productionValue', 'patternValue', 'clozeValue',
+      ],
+      additionalProperties: false,
+    },
+  },
+};
 
 async function getClient() {
   if (!openai) {
@@ -110,15 +191,14 @@ Russian: ${data.russian}
 Recent pattern families used: ${sessionState.recentPatternFamilies?.join(', ') || 'none'}
 Units since last pattern: ${sessionState.acceptedUnitsSinceLastPattern || 0}`;
 
-  const response = await client.chat.completions.create({
-    model: config.openaiModel,
+  const response = await client.chat.completions.create(withOpenAIModel(OPENAI_MODEL_ROLES.utility, {
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
     ],
-    response_format: { type: 'json_object' },
+    response_format: ANALYSIS_RESPONSE_FORMAT,
     temperature: 0.3,
-  });
+  }));
 
   const content = response.choices[0].message.content;
   return JSON.parse(content);

@@ -26,7 +26,7 @@ function mockLevel(sentence) {
 const mockCreate = jest.fn(async ({ messages, response_format }) => {
   const userMessage = messages.find((m) => m.role === "user")?.content ?? ""
 
-  if (response_format?.type === "json_object") {
+  if (response_format?.json_schema?.name === "cefr_levels") {
     // Batch call — numbered sentences
     const lines = userMessage.split("\n").filter(Boolean)
     const results = lines.map((line) => {
@@ -34,11 +34,11 @@ const mockCreate = jest.fn(async ({ messages, response_format }) => {
       if (!match) return null
       return { id: parseInt(match[1]), level: mockLevel(match[2]) }
     }).filter(Boolean)
-    return { choices: [{ message: { content: JSON.stringify(results) } }] }
+    return { choices: [{ message: { content: JSON.stringify({ results }) } }] }
   }
 
   // Single call
-  return { choices: [{ message: { content: mockLevel(userMessage) } }] }
+  return { choices: [{ message: { content: JSON.stringify({ level: mockLevel(userMessage) }) } }] }
 })
 
 jest.unstable_mockModule("openai", () => ({
@@ -186,6 +186,11 @@ describe("CEFR estimation", () => {
     expect(["A1", "A2", "B1", "B2", "C1"]).toContain(result.level)
     expect(result.confidence).toBeDefined()
     expect(result.signals.llm).toBe(result.level)
+    expect(mockCreate.mock.calls.at(-1)[0]).toEqual(expect.objectContaining({
+      model: "gpt-5.6-luna",
+      reasoning_effort: "none",
+      response_format: expect.objectContaining({ type: "json_schema" }),
+    }))
   })
 
   test("level is valid CEFR", async () => {

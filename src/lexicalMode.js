@@ -5,6 +5,7 @@ import { enrichWord, hasStructuredWordAnalysis } from './wordEnricher.js';
 import { enrichVerb, hasStructuredVerbAnalysis } from './verbEnricher.js';
 import { getCuratedFunctionWordAnalysis } from './cardContent/functionWords.js';
 import { shouldCheckLexicalCorrection, suggestLexicalCorrections } from './lexicalCorrection.js';
+import { classifyLexicalRoute } from './lexicalRouter.js';
 import { runWordWorkflow } from './wordMode.js';
 import { runVerbWorkflow } from './verbMode.js';
 
@@ -87,6 +88,40 @@ export function chooseLexicalRouteFromAnalyses(wordAnalysis = {}, verbAnalysis =
     verbAnalysis,
     reason: wordPlausible && verbPlausible ? 'both-plausible' : 'both-weak',
   };
+}
+
+export async function analyzeLexicalCandidates(
+  rawInput,
+  routeHint = {},
+  { analyzeWord = enrichWord, analyzeVerb = enrichVerb } = {}
+) {
+  const confidentRoute = routeHint.confidence >= 0.85 && ['word', 'verb'].includes(routeHint.route)
+    ? routeHint.route
+    : null;
+
+  if (!confidentRoute) {
+    const [wordAnalysis, verbAnalysis] = await Promise.all([
+      analyzeWord(rawInput),
+      analyzeVerb(rawInput),
+    ]);
+    return chooseLexicalRouteFromAnalyses(wordAnalysis, verbAnalysis);
+  }
+
+  if (confidentRoute === 'word') {
+    const wordAnalysis = await analyzeWord(rawInput);
+    if (isPlausibleWordAnalysis(wordAnalysis)) {
+      return chooseLexicalRouteFromAnalyses(wordAnalysis, {});
+    }
+    const verbAnalysis = await analyzeVerb(rawInput);
+    return chooseLexicalRouteFromAnalyses(wordAnalysis, verbAnalysis);
+  }
+
+  const verbAnalysis = await analyzeVerb(rawInput);
+  if (isPlausibleVerbAnalysis(verbAnalysis)) {
+    return chooseLexicalRouteFromAnalyses({}, verbAnalysis);
+  }
+  const wordAnalysis = await analyzeWord(rawInput);
+  return chooseLexicalRouteFromAnalyses(wordAnalysis, verbAnalysis);
 }
 
 function describeWordAnalysis(result = {}) {
@@ -294,12 +329,13 @@ async function detectLexicalRoute(rawInput, options = {}) {
     };
   }
 
-  const [wordAnalysis, verbAnalysis] = await Promise.all([
-    enrichWord(rawInput),
-    enrichVerb(rawInput),
-  ]);
-
-  const classification = chooseLexicalRouteFromAnalyses(wordAnalysis, verbAnalysis);
+  let routeHint = { route: 'ambiguous', confidence: 0 };
+  try {
+    routeHint = await classifyLexicalRoute(rawInput);
+  } catch {
+    // A routing failure falls back to the existing two-analysis behavior.
+  }
+  const classification = await analyzeLexicalCandidates(rawInput, routeHint);
 
   if (classification.route) {
     spinner.succeed(`Using ${classification.route === 'word' ? 'word' : 'verb'} workflow`);

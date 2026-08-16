@@ -104,7 +104,11 @@ describe("AI preview review helper", () => {
     })
 
     const call = mockCreate.mock.calls[0][0]
-    expect(call.temperature).toBe(0)
+    expect(call).toEqual(expect.objectContaining({
+      model: "gpt-5.6-terra",
+      reasoning_effort: "low",
+    }))
+    expect(call.temperature).toBeUndefined()
     expect(call.response_format).toEqual(expect.objectContaining({
       type: "json_schema",
     }))

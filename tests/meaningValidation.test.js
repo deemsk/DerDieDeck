@@ -40,6 +40,10 @@ describe('AI-generated lexical meaning validation', () => {
     }])
 
     const request = client.chat.completions.create.mock.calls[0][0]
+    expect(request).toEqual(expect.objectContaining({
+      model: 'gpt-5.6-sol',
+      reasoning_effort: 'low',
+    }))
     expect(request.messages[0].content).toContain('closest commonly confused German words')
     expect(request.messages[0].content).toContain('do not invent a distinction')
     expect(JSON.parse(request.messages[1].content)).toEqual(expect.objectContaining({

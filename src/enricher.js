@@ -5,6 +5,7 @@ import { resolveSecret } from './lib/secrets.js';
 import { generateGermanIpa, normalizeSentenceIpa } from './cardContent/ipa.js';
 import { validateAiGeneratedIpa } from './cardContent/ipaValidation.js';
 import { normalizeGermanForCompare } from './cardContent/german.js';
+import { OPENAI_MODEL_ROLES, withOpenAIModel } from './lib/openaiModels.js';
 
 let openai = null;
 
@@ -165,8 +166,7 @@ Examples of corrections:
     systemPrompt += `\n\nBroader video subtitle context:\n${subtitleContext.slice(0, 2000)}`;
   }
 
-  const response = await client.chat.completions.create({
-    model: config.openaiModel,
+  const response = await client.chat.completions.create(withOpenAIModel(OPENAI_MODEL_ROLES.generation, {
     messages: [
       {
         role: 'system',
@@ -179,7 +179,7 @@ Examples of corrections:
     ],
     response_format: ENRICH_RESPONSE_FORMAT,
     temperature: 0,
-  });
+  }));
 
   const content = response.choices[0].message.content;
   const result = JSON.parse(content);
@@ -262,8 +262,7 @@ User feedback: ${feedback}
 Return JSON in this shape:
 ${responseShape}`;
 
-  const response = await client.chat.completions.create({
-    model: config.openaiModel,
+  const response = await client.chat.completions.create(withOpenAIModel(OPENAI_MODEL_ROLES.validation, {
     messages: [
       {
         role: 'system',
@@ -276,7 +275,7 @@ ${responseShape}`;
     ],
     response_format: buildReviewResponseFormat(includeImageBrief),
     temperature: 0,
-  });
+  }));
 
   const content = response.choices[0].message.content;
   const result = JSON.parse(content);

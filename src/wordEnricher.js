@@ -19,8 +19,50 @@ import {
   VISUAL_SCENE_NOUNS,
 } from './data/wordEnricherStatic.js';
 import { resolveSecret } from './lib/secrets.js';
+import { OPENAI_MODEL_ROLES, withOpenAIModel } from './lib/openaiModels.js';
+import {
+  exampleSentenceSchema,
+  jsonSchemaResponse,
+  lexicalMeaningSchema,
+  nullableStringSchema,
+  strictObject,
+} from './lib/openaiSchemas.js';
 
 let openai = null;
+
+const EXAMPLE_SENTENCES_RESPONSE_FORMAT = jsonSchemaResponse('lexical_examples', strictObject({
+  exampleSentences: { type: 'array', items: exampleSentenceSchema },
+}));
+
+const MEANINGS_RESPONSE_FORMAT = jsonSchemaResponse('lexical_meanings', strictObject({
+  meanings: { type: 'array', items: lexicalMeaningSchema },
+}));
+
+const WORD_ANALYSIS_RESPONSE_FORMAT = jsonSchemaResponse('word_analysis', strictObject({
+  shouldCreateWordCard: { type: 'boolean' },
+  rejectionReason: nullableStringSchema,
+  lexicalType: {
+    type: 'string',
+    enum: ['noun', 'adjective', 'adverb', 'preposition', 'conjunction', 'subjunction', 'pronoun', 'determiner', 'particle', 'numeral', 'interjection'],
+  },
+  canonical: { type: 'string' },
+  lemma: { type: 'string' },
+  article: nullableStringSchema,
+  gender: { type: ['string', 'null'], enum: ['masculine', 'feminine', 'neuter', null] },
+  ipa: { type: 'string' },
+  register: { type: 'string', enum: ['neutral', 'colloquial', 'formal', 'specialized'] },
+  isImageable: { type: 'boolean' },
+  imageabilityReason: { type: 'string' },
+  recommendedMode: { type: 'string', enum: ['picture-word', 'sentence-form', 'cloze-form'] },
+  plural: nullableStringSchema,
+  noPlural: { type: 'boolean' },
+  anchorPhrase: nullableStringSchema,
+  opposite: nullableStringSchema,
+  clozeHint: nullableStringSchema,
+  patternHint: nullableStringSchema,
+  meanings: { type: 'array', items: lexicalMeaningSchema },
+  exampleSentences: { type: 'array', items: exampleSentenceSchema },
+}));
 
 async function getClient() {
   if (!openai) {
@@ -692,8 +734,7 @@ export function buildEverydayFamilyNounFallback(input, result = {}) {
 }
 
 async function requestWordAnalysis(client, input, options = {}) {
-  const response = await client.chat.completions.create({
-    model: config.openaiModel,
+  const response = await client.chat.completions.create(withOpenAIModel(OPENAI_MODEL_ROLES.generation, {
     messages: [
       { role: 'system', content: buildWordSystemPrompt(options) },
       {
@@ -701,9 +742,9 @@ async function requestWordAnalysis(client, input, options = {}) {
         content: `German lexical input: ${JSON.stringify(String(input || '').trim())}\nTreat the quoted input as German. Analyze that German word; do not translate it into another German word.`,
       },
     ],
-    response_format: { type: 'json_object' },
+    response_format: WORD_ANALYSIS_RESPONSE_FORMAT,
     temperature: 0.2,
-  });
+  }));
 
   return hydrateFallbackModifierAnalysis(
     input,
@@ -753,8 +794,7 @@ async function completeMeaningsIfNeeded(client, result) {
     return result;
   }
 
-  const completion = await client.chat.completions.create({
-    model: config.openaiModel,
+  const completion = await client.chat.completions.create(withOpenAIModel(OPENAI_MODEL_ROLES.generation, {
     messages: [
       {
         role: 'system',
@@ -765,9 +805,9 @@ async function completeMeaningsIfNeeded(client, result) {
         content: `German target word: ${result.canonical}\nLexical type: ${result.lexicalType}\nEnglish hint, if any: ${result.meanings?.map((meaning) => meaning?.english).filter(Boolean).join('; ') || 'none'}\nExample sentences:\n${result.exampleSentences?.map((sentence) => `- ${sentence.german}${sentence.russian ? ` = ${sentence.russian}` : ''}`).join('\n') || '- none'}\nReturn 1-3 options as {"meanings":[{"russian":"","english":"","imageSearchTerms":[]}]}.`,
       },
     ],
-    response_format: { type: 'json_object' },
+    response_format: MEANINGS_RESPONSE_FORMAT,
     temperature: 0.2,
-  });
+  }));
   const extra = JSON.parse(completion.choices[0].message.content);
 
   return {
@@ -785,8 +825,7 @@ async function completeSentenceExamplesIfNeeded(client, result, options = {}) {
     return result;
   }
 
-  const completion = await client.chat.completions.create({
-    model: config.openaiModel,
+  const completion = await client.chat.completions.create(withOpenAIModel(OPENAI_MODEL_ROLES.generation, {
     messages: [
       {
         role: 'system',
@@ -797,9 +836,9 @@ async function completeSentenceExamplesIfNeeded(client, result, options = {}) {
         content: `German target word: ${result.canonical}\nLexical type: ${result.lexicalType}\nEvery German example must contain this target word or a direct German inflected/surface form of it. Do not substitute a synonym or translation.\nExisting examples to avoid:\n${result.exampleSentences.map((sentence) => `- ${sentence.german}`).join('\n') || '- none'}\nReturn exactly ${3 - result.exampleSentences.length} additional examples as {"exampleSentences":[{"german":"","russian":"","focusForm":"","imageBrief":{"searchQuery":"","queryVariants":[],"sceneSummary":"","focusRole":"","mustShow":[],"avoid":[],"imagePrompt":""}}]}.`,
       },
     ],
-    response_format: { type: 'json_object' },
+    response_format: EXAMPLE_SENTENCES_RESPONSE_FORMAT,
     temperature: 0.2,
-  });
+  }));
   const extra = JSON.parse(completion.choices[0].message.content);
 
   return {
@@ -824,8 +863,7 @@ async function tuneExampleSentencesForLearnerIfNeeded(client, result, options = 
   }
 
   try {
-    const completion = await client.chat.completions.create({
-      model: config.openaiModel,
+    const completion = await client.chat.completions.create(withOpenAIModel(OPENAI_MODEL_ROLES.generation, {
       messages: [
         {
           role: 'system',
@@ -851,9 +889,9 @@ ${result.exampleSentences.map((sentence, index) => `${index + 1}. ${sentence.ger
 Return up to 3 examples as {"exampleSentences":[{"german":"","russian":"","focusForm":"","imageBrief":{"searchQuery":"","queryVariants":[],"sceneSummary":"","focusRole":"","mustShow":[],"avoid":[],"imagePrompt":""}}]}.`,
         },
       ],
-      response_format: { type: 'json_object' },
+      response_format: EXAMPLE_SENTENCES_RESPONSE_FORMAT,
       temperature: 0.25,
-    });
+    }));
     const reviewed = JSON.parse(completion.choices[0].message.content);
 
     return {

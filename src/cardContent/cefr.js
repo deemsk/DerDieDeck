@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { config } from '../lib/config.js';
+import { OPENAI_MODEL_ROLES, withOpenAIModel } from '../lib/openaiModels.js';
 import { resolveSecret } from '../lib/secrets.js';
 
 let openai = null;
@@ -16,6 +17,48 @@ async function getClient() {
 }
 
 const LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1'];
+const CEFR_RESPONSE_FORMAT = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'cefr_level',
+    strict: true,
+    schema: {
+      type: 'object',
+      properties: {
+        level: { type: 'string', enum: LEVELS },
+      },
+      required: ['level'],
+      additionalProperties: false,
+    },
+  },
+};
+
+const CEFR_BATCH_RESPONSE_FORMAT = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'cefr_levels',
+    strict: true,
+    schema: {
+      type: 'object',
+      properties: {
+        results: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'integer' },
+              level: { type: 'string', enum: LEVELS },
+            },
+            required: ['id', 'level'],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ['results'],
+      additionalProperties: false,
+    },
+  },
+};
 
 export async function estimateCEFR(sentence) {
   const level = await getLLMLevel(sentence);
@@ -49,14 +92,13 @@ export async function estimateCEFRBatch(sentences) {
 async function getLLMLevel(sentence) {
   const client = await getClient();
 
-  const response = await client.chat.completions.create({
-    model: config.openaiModel,
+  const response = await client.chat.completions.create(withOpenAIModel(OPENAI_MODEL_ROLES.utility, {
     messages: [
       {
         role: 'system',
         content: `You are a German language expert. Classify the CEFR level of this German sentence.
 
-Reply with ONLY the level: A1, A2, B1, B2, or C1.
+Return the level as JSON.
 
 Guidelines:
 - A1: Basic phrases, present tense, very simple vocabulary (ich, du, sein, haben, gut, schlecht)
@@ -75,11 +117,12 @@ Important:
         content: sentence,
       },
     ],
-    max_tokens: 5,
+    response_format: CEFR_RESPONSE_FORMAT,
+    max_completion_tokens: 20,
     temperature: 0,
-  });
+  }));
 
-  const level = response.choices[0].message.content.trim().toUpperCase();
+  const level = String(JSON.parse(response.choices[0].message.content)?.level || '').toUpperCase();
   return LEVELS.includes(level) ? level : 'B1';
 }
 
@@ -88,14 +131,13 @@ async function getLexicalLLMLevel(german, options = {}) {
   const lexicalType = String(options.lexicalType || '').trim() || 'word';
   const meaning = String(options.meaning || '').trim();
 
-  const response = await client.chat.completions.create({
-    model: config.openaiModel,
+  const response = await client.chat.completions.create(withOpenAIModel(OPENAI_MODEL_ROLES.utility, {
     messages: [
       {
         role: 'system',
         content: `You are a German language expert. Classify the CEFR difficulty of a single German lexical item for a learner.
 
-Reply with ONLY one level: A1, A2, B1, B2, or C1.
+Return one level as JSON.
 
 Guidelines:
 - A1: very basic everyday words most beginners learn immediately
@@ -115,11 +157,12 @@ Important:
 Type: ${lexicalType}${meaning ? `\nMeaning: ${meaning}` : ''}`,
       },
     ],
-    max_tokens: 5,
+    response_format: CEFR_RESPONSE_FORMAT,
+    max_completion_tokens: 20,
     temperature: 0,
-  });
+  }));
 
-  const level = response.choices[0].message.content.trim().toUpperCase();
+  const level = String(JSON.parse(response.choices[0].message.content)?.level || '').toUpperCase();
   return LEVELS.includes(level) ? level : 'B1';
 }
 
@@ -132,21 +175,20 @@ async function getLLMLevelBatch(sentences) {
   const client = await getClient();
   const numberedSentences = sentences.map((s, i) => `${i + 1}. ${s}`).join('\n');
 
-  const response = await client.chat.completions.create({
-    model: config.openaiModel,
+  const response = await client.chat.completions.create(withOpenAIModel(OPENAI_MODEL_ROLES.utility, {
     messages: [
       {
         role: 'system',
         content: `You are a German language expert. Classify the CEFR level of each German sentence.
 
-Reply with JSON array only.
+Return JSON with a results array.
 
 Example input:
 1. Ich bin Student.
 2. Obwohl es regnet, gehe ich spazieren.
 
 Example output:
-[{"id":1,"level":"A1"},{"id":2,"level":"B2"}]
+{"results":[{"id":1,"level":"A1"},{"id":2,"level":"B2"}]}
 
 Guidelines:
 - A1: Basic phrases, present tense, very simple vocabulary
@@ -164,14 +206,14 @@ Important:
         content: numberedSentences,
       },
     ],
-    response_format: { type: 'json_object' },
+    response_format: CEFR_BATCH_RESPONSE_FORMAT,
     temperature: 0,
-  });
+  }));
 
   try {
     const content = response.choices[0].message.content;
     const parsed = JSON.parse(content);
-    const results = Array.isArray(parsed) ? parsed : parsed.results || parsed.levels || [];
+    const results = parsed.results || [];
 
     const levelMap = new Map();
     for (const item of results) {

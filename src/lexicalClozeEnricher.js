@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { config, CONFIG_PATH_DISPLAY } from './lib/config.js';
+import { OPENAI_MODEL_ROLES, withOpenAIModel } from './lib/openaiModels.js';
 import { normalizeGermanForCompare } from './cardContent/german.js';
 import { resolveSentenceFocusForm } from './cardContent/wordLexical.js';
 import { resolveSecret } from './lib/secrets.js';
@@ -84,8 +85,7 @@ export async function verifyLexicalClozeUniqueness(sentence = {}, wordData = {})
 
   try {
     const client = await getClient();
-    const response = await client.chat.completions.create({
-      model: config.openaiModel,
+    const response = await client.chat.completions.create(withOpenAIModel(OPENAI_MODEL_ROLES.validation, {
       messages: [
         {
           role: 'system',
@@ -107,7 +107,7 @@ When unique=false, list up to five concrete reasonable answers and briefly expla
       ],
       response_format: UNIQUENESS_RESPONSE_FORMAT,
       temperature: 0,
-    });
+    }));
     const result = JSON.parse(response.choices[0].message.content);
     const answer = String(result.answer || '').trim();
     const alternatives = Array.isArray(result.alternatives)
@@ -139,8 +139,7 @@ export async function generateUnambiguousLexicalClozeSentence(
 ) {
   const client = await getClient();
   const target = resolveSentenceFocusForm(sentence, wordData) || wordData.canonical;
-  const response = await client.chat.completions.create({
-    model: config.openaiModel,
+  const response = await client.chat.completions.create(withOpenAIModel(OPENAI_MODEL_ROLES.generation, {
     messages: [
       {
         role: 'system',
@@ -179,7 +178,7 @@ Keep the sentence natural and concise. Include the exact target as a standalone 
     ],
     response_format: REWRITE_RESPONSE_FORMAT,
     temperature: 0,
-  });
+  }));
   const result = JSON.parse(response.choices[0].message.content);
   return {
     german: String(result.german || '').trim(),

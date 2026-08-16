@@ -1,4 +1,5 @@
-import { chooseLexicalRouteFromAnalyses, normalizeLexicalInput } from "../src/lexicalMode.js"
+import { jest } from "@jest/globals"
+import { analyzeLexicalCandidates, chooseLexicalRouteFromAnalyses, normalizeLexicalInput } from "../src/lexicalMode.js"
 
 describe("lexical mode router", () => {
   test("normalizeLexicalInput joins variadic command parts into one lexical item", () => {
@@ -148,5 +149,62 @@ describe("lexical mode router", () => {
         reason: "both-weak",
       })
     )
+  })
+
+  test("a confident utility route runs only the matching expensive analysis", async () => {
+    const analyzeWord = jest.fn(async () => ({
+      lexicalType: "preposition",
+      canonical: "über",
+      shouldCreateWordCard: true,
+      meanings: [{ russian: "над" }],
+    }))
+    const analyzeVerb = jest.fn()
+
+    const result = await analyzeLexicalCandidates("über", {
+      route: "word",
+      confidence: 0.98,
+    }, { analyzeWord, analyzeVerb })
+
+    expect(result.route).toBe("word")
+    expect(analyzeWord).toHaveBeenCalledTimes(1)
+    expect(analyzeVerb).not.toHaveBeenCalled()
+  })
+
+  test("an uncertain route preserves the two-analysis fallback", async () => {
+    const analyzeWord = jest.fn(async () => ({ shouldCreateWordCard: false }))
+    const analyzeVerb = jest.fn(async () => ({
+      infinitive: "laufen",
+      displayForm: "laufen",
+      shouldCreateVerbCard: true,
+      meanings: [{ russian: "бежать" }],
+    }))
+
+    const result = await analyzeLexicalCandidates("laufen", {
+      route: "verb",
+      confidence: 0.6,
+    }, { analyzeWord, analyzeVerb })
+
+    expect(result.route).toBe("verb")
+    expect(analyzeWord).toHaveBeenCalledTimes(1)
+    expect(analyzeVerb).toHaveBeenCalledTimes(1)
+  })
+
+  test("a weak confident route checks the other analysis before giving up", async () => {
+    const analyzeWord = jest.fn(async () => ({ shouldCreateWordCard: false }))
+    const analyzeVerb = jest.fn(async () => ({
+      infinitive: "gehen",
+      displayForm: "geht",
+      shouldCreateVerbCard: true,
+      meanings: [{ russian: "идти" }],
+    }))
+
+    const result = await analyzeLexicalCandidates("geht", {
+      route: "word",
+      confidence: 0.95,
+    }, { analyzeWord, analyzeVerb })
+
+    expect(result.route).toBe("verb")
+    expect(analyzeWord).toHaveBeenCalledTimes(1)
+    expect(analyzeVerb).toHaveBeenCalledTimes(1)
   })
 })

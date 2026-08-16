@@ -1,4 +1,4 @@
-import { config } from '../lib/config.js';
+import { OPENAI_MODEL_ROLES, withOpenAIModel } from '../lib/openaiModels.js';
 
 const MEANING_REVIEW_RESPONSE_FORMAT = {
   type: 'json_schema',
@@ -52,8 +52,7 @@ export async function refineAiGeneratedMeanings({
   }
 
   try {
-    const response = await client.chat.completions.create({
-      model: config.openaiModel,
+    const response = await client.chat.completions.create(withOpenAIModel(OPENAI_MODEL_ROLES.validation, {
       messages: [
         {
           role: 'system',
@@ -80,7 +79,7 @@ Keep one reviewed item for each input item, in the same order. Return Russian an
       ],
       response_format: MEANING_REVIEW_RESPONSE_FORMAT,
       temperature: 0,
-    });
+    }));
 
     const reviewed = JSON.parse(response.choices[0].message.content)?.meanings;
     if (!Array.isArray(reviewed) || reviewed.length !== original.length) {

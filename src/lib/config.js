@@ -2,6 +2,28 @@ import { homedir, tmpdir } from 'os';
 import { join } from 'path';
 import { readFileSync, existsSync } from 'fs';
 
+const OPENAI_ROLE_MODEL_KEYS = [
+  'openaiGenerationModel',
+  'openaiValidationModel',
+  'openaiUtilityModel',
+];
+
+export function migrateLegacyOpenAIModelSettings(userConfig = {}) {
+  const migrated = { ...userConfig };
+  const legacyModel = String(migrated.openaiModel || '').trim();
+  const hasRoleModel = OPENAI_ROLE_MODEL_KEYS.some((key) => Object.hasOwn(migrated, key));
+
+  // The former default moves to the new role-based defaults. Preserve other
+  // explicit legacy choices as a global custom-model selection.
+  if (legacyModel && legacyModel !== 'gpt-4o-mini' && !hasRoleModel) {
+    for (const key of OPENAI_ROLE_MODEL_KEYS) {
+      migrated[key] = legacyModel;
+    }
+  }
+
+  return migrated;
+}
+
 const PRIMARY_CONFIG_PATH = join(homedir(), '.derdiedeck.json');
 const LEGACY_CONFIG_PATH = join(homedir(), '.yt2anki.json');
 
@@ -32,7 +54,13 @@ const defaults = {
 
   // OpenAI
   openaiApiKey: '',
-  openaiModel: 'gpt-4o-mini',
+  openaiModel: '', // Legacy fallback; prefer the role-specific settings below.
+  openaiGenerationModel: 'gpt-5.6-terra',
+  openaiValidationModel: 'gpt-5.6-sol',
+  openaiUtilityModel: 'gpt-5.6-luna',
+  openaiGenerationReasoningEffort: 'low',
+  openaiValidationReasoningEffort: 'low',
+  openaiUtilityReasoningEffort: 'none',
 
   // Wiktionary-derived morphology
   wiktApiBaseUrl: 'https://api.wiktapi.dev',
@@ -84,7 +112,7 @@ function loadConfig() {
     }
   }
 
-  return { ...defaults, ...userConfig };
+  return { ...defaults, ...migrateLegacyOpenAIModelSettings(userConfig) };
 }
 
 /**

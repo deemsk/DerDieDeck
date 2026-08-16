@@ -5,8 +5,39 @@ import { normalizeWordIpa } from './cardContent/ipa.js';
 import { validateAiGeneratedIpa } from './cardContent/ipaValidation.js';
 import { refineAiGeneratedMeanings } from './cardContent/meaningValidation.js';
 import { resolveSecret } from './lib/secrets.js';
+import { OPENAI_MODEL_ROLES, withOpenAIModel } from './lib/openaiModels.js';
+import {
+  jsonSchemaResponse,
+  lexicalMeaningSchema,
+  nullableStringSchema,
+  strictObject,
+  verbExampleSentenceSchema,
+  verbFormSentenceSchema,
+} from './lib/openaiSchemas.js';
 
 let openai = null;
+
+const VERB_EXAMPLES_RESPONSE_FORMAT = jsonSchemaResponse('verb_examples', strictObject({
+  exampleSentences: { type: 'array', items: verbExampleSentenceSchema },
+}));
+
+const VERB_FORM_SENTENCE_RESPONSE_FORMAT = jsonSchemaResponse('verb_form_sentence', verbFormSentenceSchema);
+
+const VERB_ANALYSIS_RESPONSE_FORMAT = jsonSchemaResponse('verb_analysis', strictObject({
+  shouldCreateVerbCard: { type: 'boolean' },
+  rejectionReason: nullableStringSchema,
+  canonical: { type: 'string' },
+  infinitive: { type: 'string' },
+  displayForm: { type: 'string' },
+  ipa: { type: 'string' },
+  register: { type: 'string', enum: ['neutral', 'colloquial', 'formal', 'specialized'] },
+  isImageable: { type: 'boolean' },
+  imageabilityReason: { type: 'string' },
+  recommendedMode: { type: 'string', enum: ['picture-word', 'sentence-form'] },
+  dictionaryFormNeeded: { type: 'boolean' },
+  meanings: { type: 'array', items: lexicalMeaningSchema },
+  exampleSentences: { type: 'array', items: verbExampleSentenceSchema },
+}));
 
 async function getClient() {
   if (!openai) {
@@ -155,15 +186,14 @@ export function hasStructuredVerbAnalysis(result = {}) {
 
 export async function enrichVerb(input) {
   const client = await getClient();
-  const response = await client.chat.completions.create({
-    model: config.openaiModel,
+  const response = await client.chat.completions.create(withOpenAIModel(OPENAI_MODEL_ROLES.generation, {
     messages: [
       { role: 'system', content: buildVerbSystemPrompt() },
       { role: 'user', content: input },
     ],
-    response_format: { type: 'json_object' },
+    response_format: VERB_ANALYSIS_RESPONSE_FORMAT,
     temperature: 0.2,
-  });
+  }));
 
   const result = sanitizeVerbAnalysis(JSON.parse(response.choices[0].message.content));
 
@@ -172,8 +202,7 @@ export async function enrichVerb(input) {
     result.recommendedMode === 'sentence-form' &&
     result.exampleSentences.length < 3
   ) {
-    const completion = await client.chat.completions.create({
-      model: config.openaiModel,
+    const completion = await client.chat.completions.create(withOpenAIModel(OPENAI_MODEL_ROLES.generation, {
       messages: [
         {
           role: 'system',
@@ -184,9 +213,9 @@ export async function enrichVerb(input) {
           content: `Verb: ${result.infinitive}\nEncountered/display form: ${result.displayForm}\nExisting examples to avoid:\n${result.exampleSentences.map((sentence) => `- ${sentence.german}`).join('\n') || '- none'}\nReturn exactly ${3 - result.exampleSentences.length} additional examples as {"exampleSentences":[{"german":"","russian":"","focusForm":""}]}.`,
         },
       ],
-      response_format: { type: 'json_object' },
+      response_format: VERB_EXAMPLES_RESPONSE_FORMAT,
       temperature: 0.2,
-    });
+    }));
     const extra = JSON.parse(completion.choices[0].message.content);
     result.exampleSentences = mergeExampleSentences(result.exampleSentences, extra.exampleSentences);
   }
@@ -235,8 +264,7 @@ export async function generateVerbFormSentence({
     ? '\n- Put lowercase "sie" after the first word, never at sentence start, so it is unambiguously plural "they" rather than singular "she" or formal "Sie".'
     : '';
 
-  const response = await client.chat.completions.create({
-    model: config.openaiModel,
+  const response = await client.chat.completions.create(withOpenAIModel(OPENAI_MODEL_ROLES.generation, {
     messages: [
       {
         role: 'system',
@@ -270,9 +298,9 @@ Example: for German "Du nimmst das Buch.", russian is "Ты берёшь кни�
 Bad: russian="брать".`,
       },
     ],
-    response_format: { type: 'json_object' },
+    response_format: VERB_FORM_SENTENCE_RESPONSE_FORMAT,
     temperature: 0.2,
-  });
+  }));
 
   return sanitizeSentence(JSON.parse(response.choices[0].message.content));
 }

@@ -18,6 +18,7 @@ import { generateCards } from './cardTypes.js';
 import { processSingleGrammar } from './grammarMode.js';
 import { processLexicalCommand } from './lexicalMode.js';
 import { generateSpeech } from './lib/tts.js';
+import { getOpenAIModel, OPENAI_MODEL_ROLES, withOpenAIModel } from './lib/openaiModels.js';
 
 /**
  * Session state for tracking accepted units and pattern usage.
@@ -536,15 +537,21 @@ async function testIntegrations(options) {
       const OpenAI = (await import('openai')).default;
       const openai = new OpenAI({ apiKey });
 
-      // Make minimal API call to verify key works
-      const response = await openai.chat.completions.create({
-        model: config.openaiModel,
-        messages: [{ role: 'user', content: 'Reply with just: OK' }],
-        max_tokens: 5,
-      });
+      const roles = Object.values(OPENAI_MODEL_ROLES);
+      const checkedModels = new Set();
+      for (const role of roles) {
+        const model = getOpenAIModel(role);
+        if (checkedModels.has(model)) continue;
+        checkedModels.add(model);
 
-      if (response.choices[0].message.content) {
-        pass(`OpenAI API connected (model: ${config.openaiModel})`);
+        const response = await openai.chat.completions.create(withOpenAIModel(role, {
+          messages: [{ role: 'user', content: 'Reply with just: OK' }],
+          max_completion_tokens: 100,
+        }));
+
+        if (response.choices[0].message.content) {
+          pass(`OpenAI API connected (${role}: ${model})`);
+        }
       }
     } catch (err) {
       fail(`OpenAI API error: ${err.message}`, 'Check your API key and billing status');
@@ -725,7 +732,12 @@ async function initConfig() {
     ankiNoteType: 'Basic (optional reversed card)',
     wordNoteType: '2. Picture Words',
     grammarNoteType: 'Cloze',
-    openaiModel: 'gpt-4o-mini',
+    openaiGenerationModel: 'gpt-5.6-terra',
+    openaiValidationModel: 'gpt-5.6-sol',
+    openaiUtilityModel: 'gpt-5.6-luna',
+    openaiGenerationReasoningEffort: 'low',
+    openaiValidationReasoningEffort: 'low',
+    openaiUtilityReasoningEffort: 'none',
     ipaBinary: 'espeak-ng',
     ipaVoice: 'de',
     ipaFallbackToModel: true,
@@ -756,7 +768,9 @@ async function initConfig() {
   console.log(chalk.dim('  ankiNoteType  - Sentence note type to use'));
   console.log(chalk.dim('  wordNoteType  - Word note type to use (default: 2. Picture Words)'));
   console.log(chalk.dim('  grammarNoteType - Grammar cloze note type to use (default: Cloze)'));
-  console.log(chalk.dim('  openaiModel   - OpenAI model (default: gpt-4o-mini)'));
+  console.log(chalk.dim('  openaiGenerationModel - Main content model (default: gpt-5.6-terra)'));
+  console.log(chalk.dim('  openaiValidationModel - Critical review model (default: gpt-5.6-sol)'));
+  console.log(chalk.dim('  openaiUtilityModel - Classification model (default: gpt-5.6-luna)'));
   console.log(chalk.dim('  ipaBinary     - IPA command (default: espeak-ng)'));
   console.log(chalk.dim('  ipaVoice      - eSpeak voice for IPA (default: de)'));
   console.log(chalk.dim('  ipaFallbackToModel - Use model IPA if eSpeak is unavailable (default: true)'));

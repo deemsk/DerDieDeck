@@ -2,8 +2,13 @@ import OpenAI from 'openai';
 import { config, CONFIG_PATH_DISPLAY } from './lib/config.js';
 import { resolveSecret } from './lib/secrets.js';
 import { getWordFrequencyInfo } from './lib/wordFrequency.js';
+import { OPENAI_MODEL_ROLES, withOpenAIModel } from './lib/openaiModels.js';
+import { jsonSchemaResponse, strictObject, suggestionSchema } from './lib/openaiSchemas.js';
 
 let openai = null;
+const CORRECTION_RESPONSE_FORMAT = jsonSchemaResponse('lexical_corrections', strictObject({
+  suggestions: { type: 'array', items: suggestionSchema },
+}));
 
 async function getClient() {
   if (!openai) {
@@ -108,15 +113,14 @@ export async function suggestLexicalCorrections(input) {
   }
 
   const client = await getClient();
-  const response = await client.chat.completions.create({
-    model: config.openaiModel,
+  const response = await client.chat.completions.create(withOpenAIModel(OPENAI_MODEL_ROLES.utility, {
     messages: [
       { role: 'system', content: buildCorrectionPrompt() },
       { role: 'user', content: raw },
     ],
-    response_format: { type: 'json_object' },
+    response_format: CORRECTION_RESPONSE_FORMAT,
     temperature: 0,
-  });
+  }));
 
   return sanitizeLexicalCorrectionSuggestions(
     raw,

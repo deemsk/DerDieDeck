@@ -1,4 +1,4 @@
-import { config } from '../lib/config.js';
+import { OPENAI_MODEL_ROLES, withOpenAIModel } from '../lib/openaiModels.js';
 import { normalizeGermanForCompare } from './german.js';
 
 const IPA_RECONSTRUCTION_RESPONSE_FORMAT = {
@@ -28,8 +28,10 @@ export async function validateAiGeneratedIpa({ client, germanText, ipa }) {
   }
 
   try {
-    const response = await client.chat.completions.create({
-      model: config.openaiModel,
+    const role = /\s/.test(expected)
+      ? OPENAI_MODEL_ROLES.generation
+      : OPENAI_MODEL_ROLES.utility;
+    const response = await client.chat.completions.create(withOpenAIModel(role, {
       messages: [
         {
           role: 'system',
@@ -46,7 +48,7 @@ Return JSON only.`,
       ],
       response_format: IPA_RECONSTRUCTION_RESPONSE_FORMAT,
       temperature: 0,
-    });
+    }));
     const reconstructed = JSON.parse(response.choices[0].message.content)?.german;
     return normalizeGermanForCompare(reconstructed) === expected;
   } catch {

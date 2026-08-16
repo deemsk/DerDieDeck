@@ -51,6 +51,10 @@ describe('lexical cloze uniqueness verification', () => {
     })
 
     const request = mockCreate.mock.calls[0][0]
+    expect(request).toEqual(expect.objectContaining({
+      model: 'gpt-5.6-sol',
+      reasoning_effort: 'low',
+    }))
     expect(request.messages[1].content).toBe(JSON.stringify({
       front: 'Sie glaubt ___ nicht.',
       hint: 'dative pronoun',
@@ -134,6 +138,10 @@ describe('lexical cloze uniqueness verification', () => {
       })
     )
     expect(mockCreate.mock.calls[0][0].messages[0].content).toContain('governing verb')
+    expect(mockCreate.mock.calls[0][0]).toEqual(expect.objectContaining({
+      model: 'gpt-5.6-terra',
+      reasoning_effort: 'low',
+    }))
   })
 
   test('does not let the generator replace the intended focus form', async () => {

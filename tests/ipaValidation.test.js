@@ -32,6 +32,10 @@ describe('AI-generated IPA validation', () => {
     expect(request.response_format.json_schema.schema.properties).toEqual({
       german: { type: 'string' },
     })
+    expect(request).toEqual(expect.objectContaining({
+      model: 'gpt-5.6-terra',
+      reasoning_effort: 'low',
+    }))
   })
 
   test('rejects a different reconstruction', async () => {
@@ -53,5 +57,16 @@ describe('AI-generated IPA validation', () => {
       germanText: 'Haus',
       ipa: '[haʊ̯s]',
     })).resolves.toBe(false)
+  })
+
+  test('uses the utility model for a single lexical item', async () => {
+    const client = buildClient('Haus')
+
+    await validateAiGeneratedIpa({ client, germanText: 'Haus', ipa: '[haʊ̯s]' })
+
+    expect(client.chat.completions.create.mock.calls[0][0]).toEqual(expect.objectContaining({
+      model: 'gpt-5.6-luna',
+      reasoning_effort: 'none',
+    }))
   })
 })
