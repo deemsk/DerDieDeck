@@ -1,0 +1,31 @@
+schema: spec-driven
+
+context: |
+  DerDieDeck is a Node.js ESM CLI for creating German Anki notes from clips,
+  text, lexical items, and grammar prompts. Learner-facing translations are Russian.
+  Read openspec/README.md for the product overview, baseline provenance, and known gaps.
+  Current behavior lives in openspec/specs; future behavior belongs in change delta specs.
+  Always write all specifications and supporting OpenSpec documents in English,
+  including titles, explanations, requirements, scenarios, proposals, designs, and tasks.
+  Preserve German examples, Russian learner translations, and exact product strings
+  in their original languages when used as specification data.
+  Keep existing requirement IDs stable.
+  Distinguish Anki notes from generated review cards. Sibling tags do not schedule cards.
+  Use plain JavaScript, existing workflow modules, shared card templates, and AnkiConnect.
+  Run focused Jest tests for affected behavior; run npm test for shared-module changes.
+  Behavior changes apply to new notes by default. Ask explicitly before adding or running
+  a migration of existing Anki notes. Do not bypass duplicate checks without authorization.
+
+rules:
+  proposal:
+    - Identify the user-visible problem, affected capabilities, and scope for existing notes.
+    - Separate observed behavior, inferred intent, and proposed behavior.
+  specs:
+    - Give each requirement at least one concrete GIVEN/WHEN/THEN scenario.
+    - Include relevant failure, dismissal, duplicate, and dry-run scenarios.
+    - Record code and test evidence; identify behavior without direct test coverage.
+    - Keep known defects in the baseline gap register rather than prescribing them with SHALL.
+  design:
+    - Use the module map in the project guide and reuse existing template and integration helpers.
+  tasks:
+    - Include focused verification and updates to affected specifications and evidence links.
