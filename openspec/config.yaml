@@ -5,6 +5,9 @@ context: |
   text, lexical items, and grammar prompts. Learner-facing translations are Russian.
   Read openspec/README.md for the product overview, baseline provenance, and known gaps.
   Current behavior lives in openspec/specs; future behavior belongs in change delta specs.
+  For behavior changes, draft the OpenSpec proposal and affected delta specs first,
+  let the user review the proposed contract, and implement only after that review.
+  Update the baseline specs after implementation and verification, not in advance.
   Always write all specifications and supporting OpenSpec documents in English,
   including titles, explanations, requirements, scenarios, proposals, designs, and tasks.
   Preserve German examples, Russian learner translations, and exact product strings

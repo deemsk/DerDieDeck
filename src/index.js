@@ -17,6 +17,7 @@ import { analyzeSentence, selectCards } from './analyzer.js';
 import { generateCards } from './cardTypes.js';
 import { processSingleGrammar } from './grammarMode.js';
 import { processLexicalCommand } from './lexicalMode.js';
+import { runVerbDictionaryMigration } from './verbDictionaryMigration.js';
 import { generateSpeech } from './lib/tts.js';
 import { getOpenAIModel, OPENAI_MODEL_ROLES, withOpenAIModel } from './lib/openaiModels.js';
 
@@ -159,6 +160,22 @@ program
   .description('Install or update synced DerDieDeck CSS on configured Anki note types')
   .option('-n, --dry-run', 'Preview note type styling changes without updating Anki')
   .action(runStyleInstall);
+
+program
+  .command('migrate-verb-dictionary')
+  .description('Preview explained verb-form answers, or apply a saved plan with a backup')
+  .option('--output <directory>', 'Local directory for previews, backups, and results')
+  .option('--note-id <ids...>', 'Preview only these tagged note IDs')
+  .option('--apply <plan>', 'Apply the exact updates in a reviewed JSON plan')
+  .option('--backup <file>', 'Backup path for apply (must not already exist)')
+  .action(async (options) => {
+    try {
+      await runVerbDictionaryMigration(options);
+    } catch (error) {
+      console.error(chalk.red(`Migration failed: ${error.message}`));
+      process.exitCode = 1;
+    }
+  });
 
 program
   .command('clip')

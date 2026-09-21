@@ -213,6 +213,39 @@ During sentence previews, use `[R]eview` to tell AI what looks wrong and let it 
 | `E` | Copy clips to clipboard |
 | `H` | Hide/show panel |
 
+## Explain existing verb-form cards
+
+New optional verb dictionary cards explain the encountered form in Russian:
+meaning, grammar, usage, and a translated German example, followed by the
+infinitive and its pronunciation. The complete answer is previewed before writing;
+you can regenerate it or skip the optional card.
+
+To upgrade existing `mode-verb-dictionary` notes, keep Anki open and prepare a
+read-only preview (uses the configured OpenAI generation and validation models):
+
+```bash
+node src/index.js migrate-verb-dictionary
+# Optional small batch:
+node src/index.js migrate-verb-dictionary --note-id 1234567890123 1234567890124
+```
+
+Review the printed answers or the generated HTML report, then apply the exact
+saved JSON plan:
+
+```bash
+node src/index.js migrate-verb-dictionary --apply /path/to/preview.json
+```
+
+Plans, HTML previews, backups, and result reports default to
+`~/.derdiedeck/migrations`; use `--output <directory>` to change that location.
+Apply writes a new backup before any updates (`--backup <file>` overrides its
+path; existing files are never overwritten). Only `Back` changes. Note/card IDs,
+Front, tags, note type, deck, scheduling, review history, and existing media remain
+intact. Notes edited after preview are skipped; already upgraded notes are not
+regenerated. Unknown legacy formats and individual failures are reported by note
+ID. Rerun preview to retry unfinished notes. Sync Anki normally to see the updated
+answers on other devices.
+
 ## Configuration
 
 DerDieDeck prefers `~/.derdiedeck.json` and still reads `~/.yt2anki.json` as a legacy fallback.

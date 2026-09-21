@@ -15,6 +15,7 @@ import { formatPlainWord, formatPronunciationField } from './templates/shared/co
 import { buildWordExtraInfo } from './templates/word/extraInfo.js';
 import { buildVerbFormClozeExtra, buildVerbFormClozeText } from './templates/verb/cloze.js';
 import { buildVerbDictionaryNote } from './templates/verb/dictionary.js';
+import { prepareVerbDictionaryExplanation } from './verbDictionaryPreview.js';
 import { buildVerbKeyFormProductionBack, buildVerbKeyFormProductionFront, buildVerbKeyFormRecognitionBack, buildVerbKeyFormRecognitionFront } from './templates/verb/keyForm.js';
 import { enrichVerb, generateVerbFormSentence, hasStructuredVerbAnalysis, shouldOfferDictionaryFormCard } from './verbEnricher.js';
 import { shouldSuggestVerbInfinitive, suggestVerbInfinitives } from './verbCorrection.js';
@@ -371,11 +372,12 @@ function buildDictionaryFormContext(verbData, focusForm = null) {
   return `${form} → ${verbData.infinitive}`;
 }
 
-async function createDictionaryFormNote(verbData, selectedMeaning, focusForm, deck, audioFilename = null) {
+async function createDictionaryFormNote(verbData, selectedMeaning, focusForm, deck, audioFilename, formExplanation) {
   const note = buildVerbDictionaryNote({
     verbData,
     selectedMeaning,
     focusForm,
+    formExplanation,
     pronunciationField: formatPronunciationField(audioFilename, verbData.ipa),
   });
 
@@ -902,6 +904,12 @@ async function finalizePictureVerb(prepared, options, spinner) {
   }
 
   const imageChoice = await choosePictureVerbImage(prepared, spinner);
+  const formExplanation = confirmation.addDictionaryForm
+    ? await prepareVerbDictionaryExplanation({
+      verbData, selectedMeaning, focusForm: verbData.displayForm,
+      selectedSentence: verbData.exampleSentences?.[0] || null,
+    })
+    : null;
 
   const metadata = {
     canonical: verbData.infinitive,
@@ -929,7 +937,7 @@ async function finalizePictureVerb(prepared, options, spinner) {
     console.log(`  ${chalk.cyan('Frequency:')} ${frequencyInfo.bandLabel}${frequencyInfo.rank ? ` (#${frequencyInfo.rank})` : ''}`);
     console.log(`  ${chalk.cyan('Audio:')} ${audio.source}`);
     console.log(`  ${chalk.cyan('Image:')} ${imageChoice ? (imageChoice.source || imageChoice.type || 'image') : 'none'}`);
-    console.log(`  ${chalk.cyan('Dictionary form card:')} ${confirmation.addDictionaryForm ? 'yes' : 'no'}`);
+    console.log(`  ${chalk.cyan('Dictionary form card:')} ${formExplanation ? 'yes' : 'no'}`);
     console.log(chalk.yellow('\n⚡ DRY RUN: Verb note previewed'));
     return true;
   }
@@ -969,8 +977,8 @@ async function finalizePictureVerb(prepared, options, spinner) {
     ],
   });
 
-  if (confirmation.addDictionaryForm) {
-    await createDictionaryFormNote(verbData, selectedMeaning, verbData.displayForm, options.deck, audioFilename);
+  if (formExplanation) {
+    await createDictionaryFormNote(verbData, selectedMeaning, verbData.displayForm, options.deck, audioFilename, formExplanation);
   }
 
   spinner.succeed(`Created ${verbData.infinitive}`);
@@ -1024,6 +1032,14 @@ async function finalizeSentenceVerb(prepared, options, spinner) {
     addDictionaryForm,
   } = current;
 
+  const formExplanation = addDictionaryForm
+    ? await prepareVerbDictionaryExplanation({
+      verbData, selectedMeaning,
+      focusForm: chosenSentence.focusForm || verbData.displayForm,
+      selectedSentence: { german: sentenceData.german, russian: sentenceData.russian },
+    })
+    : null;
+
   if (options.dryRun) {
     console.log();
     console.log(chalk.bold('Verb sentence preview'));
@@ -1039,7 +1055,7 @@ async function finalizeSentenceVerb(prepared, options, spinner) {
     if (focusForm) {
       console.log(`  ${chalk.cyan('Focus form:')} ${focusForm}`);
     }
-    console.log(`  ${chalk.cyan('Dictionary form card:')} ${addDictionaryForm ? 'yes' : 'no'}`);
+    console.log(`  ${chalk.cyan('Dictionary form card:')} ${formExplanation ? 'yes' : 'no'}`);
     console.log(chalk.yellow('\n⚡ DRY RUN: Verb sentence previewed'));
     return true;
   }
@@ -1072,7 +1088,7 @@ async function finalizeSentenceVerb(prepared, options, spinner) {
     ],
   });
 
-  if (addDictionaryForm) {
+  if (formExplanation) {
     const dictionaryAudio = await buildVerbAudio(verbData, spinner);
     const dictionaryAudioFilename = await storeAudio(dictionaryAudio.audioPath);
     await createDictionaryFormNote(
@@ -1080,7 +1096,8 @@ async function finalizeSentenceVerb(prepared, options, spinner) {
       selectedMeaning,
       chosenSentence.focusForm || verbData.displayForm,
       options.deck,
-      dictionaryAudioFilename
+      dictionaryAudioFilename,
+      formExplanation
     );
   }
 

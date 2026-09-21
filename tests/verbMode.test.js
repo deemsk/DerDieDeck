@@ -48,6 +48,13 @@ const mockCreateClozeNote = jest.fn(async () => 654)
 const mockGenerateSimpleSpeech = jest.fn(async () => {})
 const mockGenerateSpeech = jest.fn(async () => {})
 const mockGenerateVerbFormSentence = jest.fn()
+const mockPrepareDictionary = jest.fn(async ({ verbData, focusForm, selectedSentence }) => ({
+  form: focusForm || verbData.displayForm, infinitive: verbData.infinitive,
+  formMeaning: "принадлежит", grammar: "Präsens, Indikativ, 3-е лицо ед. числа",
+  usage: "Состояние в настоящем.", ambiguity: null, contrast: null,
+  example: selectedSentence || { german: "Er läuft im Park.", russian: "Он бежит в парке." },
+}))
+const mockReviewEnrichedText = jest.fn()
 const mockEnrich = jest.fn(async () => ({
   german: "Der Hund gehört meiner Schwester.",
   ipa: "[deːɐ̯ hʊnt ɡəˈhøːrt ˈmaɪ̯nɐ ˈʃvɛstɐ]",
@@ -125,7 +132,11 @@ jest.unstable_mockModule("../src/lib/tts.js", () => ({
 
 jest.unstable_mockModule("../src/enricher.js", () => ({
   enrich: mockEnrich,
-  reviewEnrichedText: jest.fn(),
+  reviewEnrichedText: mockReviewEnrichedText,
+}))
+
+jest.unstable_mockModule("../src/verbDictionaryPreview.js", () => ({
+  prepareVerbDictionaryExplanation: mockPrepareDictionary,
 }))
 
 jest.unstable_mockModule("../src/cefr.js", () => ({
@@ -232,6 +243,9 @@ describe("verb mode sentence flow", () => {
       call[0].tags.includes("mode-verb-dictionary")
     )[0]
     expect(dictionaryNote.back).toContain("[sound:verb-target.mp3]")
+    expect(dictionaryNote.back).toContain("Präsens, Indikativ")
+    expect(dictionaryNote.back).toContain("Инфинитив")
+    expect(mockPrepareDictionary.mock.invocationCallOrder[0]).toBeLessThan(mockCreateNote.mock.invocationCallOrder[0])
     expect(mockResolveWordPronunciation).toHaveBeenCalledWith(expect.objectContaining({
       canonical: "gehören",
     }))
@@ -239,6 +253,54 @@ describe("verb mode sentence flow", () => {
       front: expect.stringContaining("yt2anki-word-display"),
       tags: expect.arrayContaining(["mode-verb-dictionary"]),
     }))
+  })
+
+  const dictionaryOptions = {
+    analysisResult: {
+      shouldCreateVerbCard: true, infinitive: "gehören", displayForm: "gehört",
+      recommendedMode: "sentence-form", meanings: [{ russian: "принадлежать", english: "belong" }],
+    },
+    sentence: "Der Hund gehört meiner Schwester.", skipHeader: true,
+  }
+
+  test("uses the final revised sentence in the dictionary preview", async () => {
+    mockConfirmSentenceVerbSelection.mockResolvedValueOnce({ reviewFeedback: "use Buch", addDictionaryForm: true })
+    mockReviewEnrichedText.mockResolvedValueOnce({ german: "Das Buch gehört mir.", russian: "Книга принадлежит мне.", ipa: "[test]" })
+    await runVerbWorkflow("gehört", dictionaryOptions)
+    expect(mockPrepareDictionary).toHaveBeenCalledTimes(1)
+    expect(mockPrepareDictionary).toHaveBeenCalledWith(expect.objectContaining({
+      selectedSentence: expect.objectContaining({ german: "Das Buch gehört mir.", russian: "Книга принадлежит мне." }),
+    }))
+    expect(mockCreateBasicNote.mock.calls[0][0].back).toContain("Das Buch gehört mir.")
+  })
+
+  test("skipping dictionary preview still creates the main note", async () => {
+    mockPrepareDictionary.mockResolvedValueOnce(null)
+    await runVerbWorkflow("gehört", dictionaryOptions)
+    expect(mockCreateNote).toHaveBeenCalledTimes(1)
+    expect(mockCreateBasicNote).not.toHaveBeenCalled()
+  })
+
+  test("dry run previews explanation without Anki note or media writes", async () => {
+    await runVerbWorkflow("gehört", { ...dictionaryOptions, dryRun: true })
+    expect(mockPrepareDictionary).toHaveBeenCalledTimes(1)
+    expect(mockCreateNote).not.toHaveBeenCalled()
+    expect(mockCreateBasicNote).not.toHaveBeenCalled()
+    expect(mockStoreAudio).not.toHaveBeenCalled()
+    expect(mockStoreMedia).not.toHaveBeenCalled()
+    expect(mockEnsureDeck).not.toHaveBeenCalled()
+  })
+
+  test("picture verbs use the same dictionary explanation before writing", async () => {
+    mockConfirmPictureVerbSelection.mockResolvedValueOnce({ confirmed: true, addDictionaryForm: true })
+    await runVerbWorkflow("läuft", {
+      analysisResult: { shouldCreateVerbCard: true, infinitive: "laufen", displayForm: "läuft",
+        recommendedMode: "picture-word", meanings: [{ russian: "бежать", english: "run" }],
+        exampleSentences: [{ german: "Er läuft im Park.", russian: "Он бежит в парке." }],
+      }, skipHeader: true,
+    })
+    expect(mockPrepareDictionary.mock.invocationCallOrder[0]).toBeLessThan(mockCreatePictureWordNote.mock.invocationCallOrder[0])
+    expect(mockCreateBasicNote.mock.calls[0][0].back).toContain("Er läuft im Park.")
   })
 
   test("runVerbWorkflow creates a strong verb package when trusted morphology is available", async () => {

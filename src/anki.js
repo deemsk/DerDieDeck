@@ -15,6 +15,67 @@ import { extractCanonicalWord, extractWordLexicalType, extractWordMeaning, parse
 import { buildLearningIntentTags, buildSiblingStageTags } from './cardContent/learningDesign.js';
 import { hasCurrentDerDieDeckStyles, mergeDerDieDeckStyles } from './templates/shared/styles.js';
 import { parseGrammarMetadataComment } from './grammar/utils.js';
+import { isCurrentVerbFormAnswer } from './cardContent/verbFormExplanation.js';
+
+export function snapshotNote(note) {
+  return {
+    noteId: note.noteId,
+    profile: note.profile || null,
+    modelName: note.modelName,
+    cards: [...(note.cards || [])].sort((a, b) => a - b),
+    tags: [...(note.tags || [])].sort(),
+    fields: Object.fromEntries(Object.keys(note.fields || {}).sort().map((name) => [name, note.fields[name].value])),
+  };
+}
+
+/** Apply reviewed Back-only updates. The caller must durably save the backup first. */
+export async function applyNoteBackUpdates(entries, { saveBackup, onResult = () => {} }) {
+  const ready = entries.filter((entry) => entry.status === 'ready');
+  const ids = new Set();
+  for (const entry of ready) {
+    if (!Number.isSafeInteger(entry.noteId) || entry.noteId <= 0 || ids.has(entry.noteId)
+        || entry.original?.noteId !== entry.noteId
+        || !entry.original.tags?.includes('mode-verb-dictionary')
+        || typeof entry.original.fields?.Front !== 'string'
+        || typeof entry.original.fields?.Back !== 'string'
+        || !isCurrentVerbFormAnswer(entry.newBack)) {
+      throw new Error('Invalid prepared dictionary migration entry');
+    }
+    ids.add(entry.noteId);
+  }
+  if (ready.length) {
+    if (typeof saveBackup !== 'function') throw new Error('A backup writer is required');
+    await saveBackup({ version: 1, createdAt: new Date().toISOString(), notes: ready.map((entry) => entry.original) });
+  }
+  const results = [];
+  for (const entry of entries) {
+    let result = { noteId: entry.noteId, status: entry.status, ...(entry.reason ? { reason: entry.reason } : {}) };
+    if (entry.status === 'ready') {
+      try {
+        const [fresh] = await getNotesInfo([entry.noteId]);
+        const current = fresh?.noteId === entry.noteId ? snapshotNote(fresh) : null;
+        const expected = { ...entry.original, fields: { ...entry.original.fields, Back: entry.newBack } };
+        if (current && JSON.stringify(current) === JSON.stringify(expected)) {
+          result = { noteId: entry.noteId, status: 'already-current' };
+        } else if (!current || JSON.stringify(current) !== JSON.stringify(entry.original)) {
+          result = { noteId: entry.noteId, status: 'skipped', reason: 'Note changed or disappeared after preview' };
+        } else {
+          await updateNoteFields(entry.noteId, { Back: entry.newBack });
+          const [saved] = await getNotesInfo([entry.noteId]);
+          if (!saved?.noteId || JSON.stringify(snapshotNote(saved)) !== JSON.stringify(expected)) {
+            throw new Error('Update verification failed; inspect the note and backup before retrying');
+          }
+          result = { noteId: entry.noteId, status: 'updated' };
+        }
+      } catch (error) {
+        result = { noteId: entry.noteId, status: 'failed', reason: error.message };
+      }
+    }
+    results.push(result);
+    onResult(result);
+  }
+  return results;
+}
 
 /**
  * Call AnkiConnect API

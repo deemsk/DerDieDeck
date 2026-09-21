@@ -87,6 +87,12 @@ describe("verb note helpers", () => {
       },
       selectedMeaning: { russian: "прибывать" },
       focusForm: "kommt an",
+      formExplanation: {
+        form: "kommt an", infinitive: "ankommen", formMeaning: "прибывает",
+        grammar: "Präsens, Indikativ, 3-е лицо ед. числа", usage: "Прибытие в настоящее время.",
+        ambiguity: "Также ihr: вы прибываете.", contrast: null,
+        example: { german: "Er kommt heute an.", russian: "Он приезжает сегодня." },
+      },
       pronunciationField: "[sound:ankommen.mp3]<br><span class=\"yt2anki-ipa ddd-ipa\">[ˈankɔmən]</span>",
     })
 
