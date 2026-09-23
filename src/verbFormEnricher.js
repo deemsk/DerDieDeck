@@ -19,16 +19,21 @@ formMeaning: Russian meaning of the FORM in the example, not merely the infiniti
 grammar: applicable German tense/mood, person and number with Russian explanation.
 For finite forms explicitly name the person numbers AND singular/plural (e.g. 1-е и 3-е лицо,
 единственное число); pronouns alone do not replace these labels. Non-finite forms have neither.
-usage: short Russian account of the construction and time reference.
-ambiguity: other applicable readings of the isolated form; distinguish them from the example's
+usage: one short Russian sentence explaining the construction or time reference in THIS example.
+Do not repeat the tense/person label or give a generic description of the verb's meaning.
+ambiguity: null when there is no meaningful alternative reading to explain. Never fill it with
+statements such as "других распространённых нормативных чтений нет" or restate the subject.
+Otherwise give common alternative readings of the isolated form; distinguish them from the example's
 reading even if a subject appears in that example. Do not pretend an ambiguous form has one person.
 Consider common finite/participle and indicative/imperative overlaps for the REQUESTED infinitive.
 Do not require readings belonging to unrelated lemmas. Formal Sie may address one or more people
 despite grammatical plural. Mention common useful alternatives, not every rare paradigm reading.
-contrast: short Russian contrast only when useful, otherwise null.
+contrast: one short Russian contrast only when it prevents confusion about the encountered FORM,
+otherwise null. Do not use this field for unrelated lexical constructions or preposition lists.
 Keep the whole answer compact: do not repeat the same information in grammar, usage and ambiguity.
-Aim for 45–65 words across all explanation fields. Use one sentence for usage, compact pronoun
-lists for ambiguity, and at most one short contrast. Do not restate grammar in the usage field.
+There is no minimum word count: straightforward forms need very little explanation. Prefer at most
+65 words across explanation fields, without deleting necessary distinctions or abbreviating the example.
+Use compact pronoun lists for real ambiguity and at most one short contrast.
 Generate examples of about 3–7 words when possible; retain a supplied selected sentence as-is.
 example: a short natural German sentence containing the exact target and a FULL natural Russian
 sentence translation, never just a word gloss. Separable targets may occur as ordered split tokens.
@@ -41,6 +46,10 @@ If feedback and previousExplanation are supplied, repair that previous answer to
 feedback while retaining correct parts. Do not introduce new errors while fixing the reported one.
 
 Accuracy rules:
+- denkst in Woran denkst du gerade?: думаешь; Präsens Indikativ, 2-е лицо, единственное число;
+  usage can be "Сейчас; в примере — думать о чём-то." Ambiguity and contrast should be null.
+  Do not pad this explanation with a statement that no other readings exist or a list like
+  "denken an — думать о; denken, dass — считать, полагать".
 - wäre: Konjunktiv II of sein, hypothetical/wished state, usually present/future, NOT ordinary past.
   Isolated wäre permits ich / er / sie / es. Ich wäre gern zu Hause. = Я хотел бы быть дома.
 - wurde: Präteritum Indikativ of werden, ich / er / sie / es. Contrast wurde with würde (Konjunktiv II).
@@ -99,6 +108,8 @@ export async function explainVerbForm({ form, infinitive, meaning, selectedSente
       Accept concise equivalent wording and natural alternative translations. This is a compact learning
       card, not an exhaustive paradigm: do not reject it solely for omitting a rare reading or an optional
       additional contrast. Reject false claims of uniqueness and missing common competing readings.
+      Also reject redundant absence-of-ambiguity statements, repeated grammar, and irrelevant construction
+      lists. Request null optional fields when they add no useful distinction; do not demand filler.
       Formal Sie is grammatically third-person plural, semantically polite second-person address.
       Return valid and a specific correction reason.\n${RULES}`,
       { form, infinitive, selectedSentence: context.selectedSentence, explanation: result });
