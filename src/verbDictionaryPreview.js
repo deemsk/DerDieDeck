@@ -2,6 +2,7 @@ import { createInterface } from 'node:readline/promises';
 import chalk from 'chalk';
 import { explainVerbForm } from './verbFormEnricher.js';
 import { validateVerbFormExplanation } from './cardContent/verbFormExplanation.js';
+import { askReviewFeedback } from './confirm.js';
 
 function wrapText(text, width) {
   const lines = [];
@@ -68,8 +69,9 @@ async function question(prompt) {
 
 export async function prepareVerbDictionaryExplanation({
   verbData, selectedMeaning, focusForm = null, selectedSentence = null,
-  formPronunciation = null,
-}, { generate = explainVerbForm, ask = question, log = console.log, chalkRef = chalk, columns = process.stdout.columns || 80 } = {}) {
+  formPronunciation = null, companionSentence = null,
+}, { generate = explainVerbForm, ask = question, askSentenceReview = askReviewFeedback,
+  log = console.log, chalkRef = chalk, columns = process.stdout.columns || 80 } = {}) {
   const context = {
     form: focusForm || verbData.displayForm || verbData.infinitive,
     infinitive: verbData.infinitive,
@@ -82,14 +84,27 @@ export async function prepareVerbDictionaryExplanation({
       log('Preparing dictionary form explanation...');
       explanation = validateVerbFormExplanation(await generate(context), context);
       log(`\n${formatVerbDictionaryPreview({ verbData, selectedMeaning, formExplanation: explanation, formPronunciation }, { chalkRef, columns })}\n`);
+      if (companionSentence) {
+        log('Accepting this card will also add an audio sentence card for the example above.');
+      }
     } catch (error) {
       explanation = null;
       log(`Dictionary card not prepared: ${error.message}`);
     }
     while (true) {
       const answer = String(await ask(explanation
-        ? 'Dictionary card: [Y]es, [R]egenerate, [S]kip: '
-        : 'Dictionary explanation failed: [R]etry, [S]kip this card: ')).trim().toLowerCase();
+        ? companionSentence
+          ? 'Dictionary card + sentence: [Y]es (add both), [R]egenerate, [E]dit sentence, [S]kip form (add sentence), [D]ismiss both: '
+          : 'Dictionary card: [Y]es, [R]egenerate, [S]kip: '
+        : companionSentence
+          ? 'Dictionary explanation failed: [R]etry, [S]kip form (add sentence), [D]ismiss both: '
+          : 'Dictionary explanation failed: [R]etry, [S]kip this card: ')).trim().toLowerCase();
+      if (companionSentence && ['d', 'dismiss'].includes(answer)) return false;
+      if (companionSentence && explanation && ['e', 'edit'].includes(answer)) {
+        const reviewFeedback = await askSentenceReview();
+        if (reviewFeedback) return { reviewFeedback };
+        continue;
+      }
       if (['s', 'skip', 'n', 'no'].includes(answer)) return null;
       if (['r', 'retry', 'regenerate'].includes(answer)) break;
       if (explanation && ['', 'y', 'yes'].includes(answer)) return explanation;

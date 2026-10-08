@@ -54,6 +54,33 @@ test('lets the learner dismiss the fully previewed card', async () => {
   })).toBeNull()
 })
 
+test('sentence companion is named in the complete preview and may be dismissed together', async () => {
+  const log = jest.fn()
+  const ask = jest.fn(async () => 'd')
+  const result = await prepareVerbDictionaryExplanation({
+    ...input,
+    companionSentence: { german: 'Ich wäre gern zu Hause.', russian: 'Я хотел бы быть дома.' },
+  }, { generate: async () => explanation, ask, log, chalkRef: new Chalk({ level: 0 }) })
+  expect(result).toBe(false)
+  const preview = log.mock.calls.flat().join('\n')
+  expect(preview).toContain('┌─ Dictionary card')
+  expect(preview).toContain('also add an audio sentence card')
+  expect(ask.mock.calls[0][0]).toContain('[D]ismiss both')
+})
+
+test('the complete preview can request sentence revision before either note is written', async () => {
+  const askSentenceReview = jest.fn(async () => 'use Buch')
+  const result = await prepareVerbDictionaryExplanation({
+    ...input,
+    companionSentence: { german: 'Ich wäre gern zu Hause.', russian: 'Я хотел бы быть дома.' },
+  }, {
+    generate: async () => explanation, ask: async () => 'e', askSentenceReview,
+    log: () => {}, chalkRef: new Chalk({ level: 0 }),
+  })
+  expect(result).toEqual({ reviewFeedback: 'use Buch' })
+  expect(askSentenceReview).toHaveBeenCalledTimes(1)
+})
+
 test('failed explanation offers retry; invalid content is never accepted', async () => {
   const generate = jest.fn().mockResolvedValueOnce({}).mockResolvedValueOnce(explanation)
   const ask = jest.fn().mockResolvedValueOnce('r').mockResolvedValueOnce('y')

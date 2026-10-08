@@ -287,11 +287,11 @@ describe("verb mode sentence flow", () => {
   }
 
   test("uses the final revised sentence in the dictionary preview", async () => {
-    mockConfirmSentenceVerbSelection.mockResolvedValueOnce({ reviewFeedback: "use Buch", addDictionaryForm: true })
+    mockPrepareDictionary.mockResolvedValueOnce({ reviewFeedback: "use Buch" })
     mockReviewEnrichedText.mockResolvedValueOnce({ german: "Das Buch gehört mir.", russian: "Книга принадлежит мне.", ipa: "[test]" })
     await runVerbWorkflow("gehört", dictionaryOptions)
-    expect(mockPrepareDictionary).toHaveBeenCalledTimes(1)
-    expect(mockPrepareDictionary).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockPrepareDictionary).toHaveBeenCalledTimes(2)
+    expect(mockPrepareDictionary.mock.calls[1][0]).toEqual(expect.objectContaining({
       selectedSentence: expect.objectContaining({ german: "Das Buch gehört mir.", russian: "Книга принадлежит мне." }),
     }))
     expect(mockCreateBasicNote.mock.calls[0][0].back).toContain("Das Buch gehört mir.")
@@ -922,6 +922,51 @@ describe("verb mode sentence flow", () => {
       context: "wäre → sein",
       tags: expect.arrayContaining(["mode-verb-sentence", "verb-form-waere"]),
     }))
+  })
+
+  test("hab goes directly to complete form review and reports the created sentence ID", async () => {
+    mockChooseMeaning.mockResolvedValue({ russian: "иметь" })
+    mockChooseVerbSentence.mockResolvedValue({
+      german: "Hab bitte Geduld.", russian: "Пожалуйста, имей терпение.", focusForm: "hab",
+    })
+    const log = jest.spyOn(console, "log").mockImplementation(() => {})
+    try {
+      const added = await runVerbWorkflow("hab", {
+        analysisResult: {
+          shouldCreateVerbCard: true, infinitive: "haben", displayForm: "hab",
+          recommendedMode: "sentence-form", meanings: [{ russian: "иметь" }],
+        },
+        meaning: "иметь", deck: "German::Test", skipHeader: true,
+      })
+      expect(added).toBe(true)
+      expect(mockConfirmSentenceVerbSelection).not.toHaveBeenCalled()
+      expect(mockPrepareDictionary).toHaveBeenCalledWith(expect.objectContaining({
+        focusForm: "hab",
+        selectedSentence: { german: "Hab bitte Geduld.", russian: "Пожалуйста, имей терпение." },
+        companionSentence: expect.objectContaining({ german: "Hab bitte Geduld." }),
+      }))
+      expect(log.mock.calls.flat().join("\n")).toContain("Added verb sentence for haben. Find in Anki Browse: nid:123")
+    } finally {
+      log.mockRestore()
+    }
+  })
+
+  test("dismissing the complete hab review writes neither form nor sentence", async () => {
+    mockChooseMeaning.mockResolvedValue({ russian: "иметь" })
+    mockChooseVerbSentence.mockResolvedValue({
+      german: "Hab bitte Geduld.", russian: "Пожалуйста, имей терпение.", focusForm: "hab",
+    })
+    mockPrepareDictionary.mockResolvedValue(false)
+    const added = await runVerbWorkflow("hab", {
+      analysisResult: {
+        shouldCreateVerbCard: true, infinitive: "haben", displayForm: "hab",
+        recommendedMode: "sentence-form", meanings: [{ russian: "иметь" }],
+      },
+      meaning: "иметь", deck: "German::Test", skipHeader: true,
+    })
+    expect(added).toBe(false)
+    expect(mockCreateBasicNote).not.toHaveBeenCalled()
+    expect(mockCreateNote).not.toHaveBeenCalled()
   })
 
   test("runVerbWorkflow omits synthetic fallback context when focus form matches the infinitive", async () => {

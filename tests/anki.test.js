@@ -19,7 +19,7 @@ describe("anki helpers", () => {
       }
     }
 
-    await createNote({
+    const noteId = await createNote({
       german: "Ich gehe nach Hause.",
       ipa: "[ɪç ˈɡeːə nax ˈhaʊ̯zə]",
       russian: "Я иду домой.",
@@ -30,6 +30,7 @@ describe("anki helpers", () => {
     expect(requests).toHaveLength(1)
     expect(requests[0].action).toBe("addNote")
     expect(requests[0].params.note.deckName).toBe("Custom::Deck")
+    expect(noteId).toBe(123)
   })
 
   test("createNote can embed image and hidden lexical metadata", async () => {

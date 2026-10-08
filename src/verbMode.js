@@ -1102,7 +1102,7 @@ async function finalizeSentenceVerb(prepared, options, spinner) {
   let current = prepared;
   let autoPlay = true;
 
-  while (true) {
+  while (!(resolveRequestedVerbForm(current.verbData) && current.addDictionaryForm)) {
     const confirmation = await confirmSentenceVerbSelection({
       verbData: current.verbData,
       selectedMeaning: current.selectedMeaning,
@@ -1136,6 +1136,34 @@ async function finalizeSentenceVerb(prepared, options, spinner) {
     break;
   }
 
+  let formExplanation = null;
+  let formPronunciation = null;
+  while (true) {
+    const requestedForm = resolveRequestedVerbForm(current.verbData);
+    const form = requestedForm || current.chosenSentence.focusForm || current.verbData.displayForm;
+    formPronunciation = current.addDictionaryForm
+      ? await previewVerbFormPronunciation(form, current.verbData.infinitive)
+      : null;
+    formExplanation = current.addDictionaryForm
+      ? await prepareVerbDictionaryExplanation({
+        verbData: current.verbData,
+        selectedMeaning: current.selectedMeaning,
+        focusForm: form,
+        formPronunciation,
+        selectedSentence: { german: current.sentenceData.german, russian: current.sentenceData.russian },
+        companionSentence: requestedForm ? current.sentenceData : null,
+      })
+      : null;
+    if (formExplanation?.reviewFeedback) {
+      current = {
+        ...await rebuildSentenceVerbPreview(current, formExplanation.reviewFeedback, options, spinner),
+        addDictionaryForm: current.addDictionaryForm,
+      };
+      continue;
+    }
+    break;
+  }
+
   const {
     verbData,
     selectedMeaning,
@@ -1146,18 +1174,11 @@ async function finalizeSentenceVerb(prepared, options, spinner) {
   } = current;
   const requestedForm = resolveRequestedVerbForm(verbData);
   const form = requestedForm || chosenSentence.focusForm || verbData.displayForm;
-  const formPronunciation = addDictionaryForm
-    ? await previewVerbFormPronunciation(form, verbData.infinitive)
-    : null;
 
-  const formExplanation = addDictionaryForm
-    ? await prepareVerbDictionaryExplanation({
-      verbData, selectedMeaning,
-      focusForm: form,
-      formPronunciation,
-      selectedSentence: { german: sentenceData.german, russian: sentenceData.russian },
-    })
-    : null;
+  if (formExplanation === false) {
+    console.log(chalk.yellow('Verb dismissed'));
+    return false;
+  }
 
   if (options.dryRun) {
     console.log();

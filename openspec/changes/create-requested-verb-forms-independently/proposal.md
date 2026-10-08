@@ -121,3 +121,13 @@ The existing `geh` card was confirmed to contain both form and infinitive audio.
 The migration now recognizes that exact signed two-audio layout and prepares a
 Back-only update that keeps the form explanation and recording while collapsing
 the infinitive to one text row. Unrecognized notes remain unchanged.
+
+The `hab` sentence route exposed one remaining duplicate confirmation: after
+the learner chooses `Hab bitte Geduld.`, the CLI displays a provisional
+Front/sentence plan and requires `Continue` before showing the complete
+dictionary-card preview. For a requested form with an accompanying sentence,
+the complete dictionary preview will be the first confirmation. It will say
+that acceptance also adds the already chosen audio sentence. The learner may
+accept both, skip only the form, regenerate the explanation, or dismiss both.
+The sentence result will show a real `nid:` query; `createNote` currently
+discards AnkiConnect's `addNote` ID, producing `nid:undefined`.

@@ -63,14 +63,15 @@ For a requested non-infinitive form, this card SHALL be enabled by default and
 independently creatable when a companion lemma or sentence note already exists.
 Preview SHALL identify the requested form and which outputs will be created or
 skipped as existing. For a requested form, the first confirmation SHALL show
-the exact Front and explain that the complete answer is reviewed before any
-write. An already represented infinitive SHALL be described as an existing
-card without repeating its duplicate list or showing a bare note ID, and its
-German word SHALL be visually emphasized when terminal color is available.
-When that existing infinitive leaves only the requested form to create, the
-complete form-card preview SHALL replace the preliminary plan and offer direct
-accept, regenerate, or skip choices. If a separate plan is needed for another
-output, its action SHALL say that it continues to the form-card review.
+the complete dictionary-card answer before any write, including when an audio
+sentence card is also prepared. The learner SHALL see that accepting the form
+also adds the already selected sentence card and may instead skip only the
+form or dismiss both outputs. An already represented infinitive SHALL be
+described as an existing card without repeating its duplicate list or showing a
+bare note ID. Its German word SHALL be visually emphasized when terminal color
+is available.
+The complete form-card preview SHALL replace the preliminary plan and offer
+direct accept, regenerate, or skip choices regardless of companion outputs.
 Lemma-only IPA, audio, and frequency SHALL not be presented as if they belonged
 to the requested form. A reported note ID SHALL be accompanied by a usable
 Anki Browse query. The accepted form SHALL remain the target through writing.
@@ -119,6 +120,23 @@ Anki Browse query. The accepted form SHALL remain the target through writing.
 - **AND** it does not automatically play the infinitive's audio as if it were
   pronunciation of `geh`; the learner may explicitly listen to `gehen`.
 
+#### Scenario: Requested form with an audio sentence
+
+- **GIVEN** the learner requests `hab` and selects `Hab bitte Geduld.`
+- **WHEN** the sentence and form explanation are ready for confirmation
+- **THEN** the first confirmation shows the complete `hab` dictionary card and
+  identifies the selected audio sentence as an additional output.
+- **AND** it does not require `Continue` through a provisional preview.
+- **WHEN** the learner accepts, both notes are saved; skipping the form saves
+  only the sentence, while dismissing saves neither.
+
+#### Scenario: Revise the chosen sentence from the complete preview
+
+- **GIVEN** the complete form preview uses the selected audio sentence
+- **WHEN** the learner chooses to edit that sentence
+- **THEN** the sentence is rebuilt and the dictionary explanation is generated
+  again from the final sentence before either note is written.
+
 #### Scenario: The only form preview is skipped
 
 - **GIVEN** the learner requests `geh` and the `gehen` picture note exists
@@ -139,6 +157,13 @@ Anki Browse query. The accepted form SHALL remain the target through writing.
 - **WHEN** it prints the result
 - **THEN** it includes the search syntax `nid:<ID>` that can be pasted into
   Anki Browse, rather than expecting a plain number to find the note.
+
+#### Scenario: Search for the created sentence note
+
+- **GIVEN** the learner accepted both the `hab` form and audio sentence
+- **WHEN** AnkiConnect returns the sentence note ID
+- **THEN** the result prints `nid:<ID>` for that sentence, never
+  `nid:undefined`.
 
 #### Scenario: Explicit skip or dry-run
 

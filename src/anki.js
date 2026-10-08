@@ -257,7 +257,7 @@ export async function createNote({
   }
   tags.push(...extraTags);
 
-  await ankiConnect('addNote', {
+  return ankiConnect('addNote', {
     note: {
       deckName,
       modelName: config.ankiNoteType,

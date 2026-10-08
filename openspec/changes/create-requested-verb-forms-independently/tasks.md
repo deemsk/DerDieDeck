@@ -67,3 +67,17 @@ strict OpenSpec validation passed, and `git diff --check` passed. Anki note
 `1791481689407` (`geh`) was updated after a saved preview and backup. Read-back
 confirmed card ID `1791481689409`, one form-audio tag, the translated example,
 and a compact `gehen` reference; the infinitive audio was removed from Back.
+
+- [x] Trace the `hab` sentence-route preconfirmation and the missing sentence
+  note ID to their respective workflow and Anki helper boundaries.
+- [x] Make the complete dictionary preview the first requested-form confirmation
+  when a sentence card is also prepared; retain sentence editing and explicit
+  accept, skip-form, and dismiss-both outcomes.
+- [x] Return AnkiConnect's `addNote` ID from `createNote` so the sentence result
+  prints a usable Anki Browse query.
+- [x] Add regressions for `hab`, sentence revision, dismissal, preview choices,
+  and the Anki note ID; run focused and full tests and strict OpenSpec validation.
+
+`hab` follow-up verification: focused Anki, verb workflow, and dictionary
+preview tests passed (47 tests); the full Jest suite passed (42 suites,
+387 tests). Strict OpenSpec validation and `git diff --check` passed.
