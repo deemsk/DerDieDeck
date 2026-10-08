@@ -43,18 +43,20 @@ describe('verb form explanations', () => {
     })).toThrow(/selected sentence/i)
   })
 
-  test('renders meaning, grammar, example, then labeled infinitive pronunciation', () => {
+  test('renders form pronunciation and a compact infinitive reference', () => {
     const note = buildVerbDictionaryNote({
       verbData: { infinitive: 'sein', displayForm: 'wäre', ipa: '[zaɪn]' },
       selectedMeaning: { russian: 'быть' }, formExplanation: hypothetical,
-      pronunciationField: '[sound:sein.mp3]<br>[zaɪn]',
+      formPronunciationField: '[sound:waere.mp3]<br>[ˈvɛːʁə]',
     })
     expect(note.front).toBe('<span class="yt2anki-word-display ddd-word-display">wäre</span>')
-    const positions = ['был бы', 'Konjunktiv II', 'Ich wäre', 'Инфинитив', '[sound:sein.mp3]']
+    const positions = ['был бы', '[sound:waere.mp3]', 'От глагола', 'Konjunktiv II', 'Ich wäre']
       .map((text) => note.back.indexOf(text))
     expect(positions.every((pos) => pos >= 0)).toBe(true)
     expect(positions).toEqual([...positions].sort((a, b) => a - b))
     expect(note.back).toContain('Я хотел бы быть дома.')
+    expect(note.back).not.toContain('[zaɪn]')
+    expect(note.back).not.toContain('[sound:sein.mp3]')
     expect(note.back).not.toContain('style=')
   })
 

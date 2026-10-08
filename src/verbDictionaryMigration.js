@@ -4,14 +4,39 @@ import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { findNotesByQuery, getNotesInfo, snapshotNote, applyNoteBackUpdates } from './anki.js';
 import { parseLegacyVerbDictionary } from './cardContent/verbDictionaryMigration.js';
-import { isCurrentVerbFormAnswer } from './cardContent/verbFormExplanation.js';
+import { isCurrentVerbFormAnswer, markVerbFormAnswer } from './cardContent/verbFormExplanation.js';
 import { escapeHtml, stripHtml } from './cardContent/html.js';
+import { toTagSlug } from './cardContent/german.js';
 import { explainVerbForm } from './verbFormEnricher.js';
 import { buildVerbDictionaryNote } from './templates/verb/dictionary.js';
 import { DERDIEDECK_SHARED_CSS } from './templates/shared/styles.js';
 
 const PLAN_KIND = 'derdiedeck-verb-form-v1';
 const uniqueName = (prefix) => `${prefix}-${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID().slice(0, 8)}`;
+
+function compactTwoAudioAnswer(note) {
+  const back = note.fields?.Back?.value || '';
+  if (!isCurrentVerbFormAnswer(back)) return null;
+  const body = back.replace(/<!-- ddd-verb-form:v1:[a-f0-9]{64} -->$/, '');
+  const oldLabel = '<div class="ddd-extra-row"><span class="ddd-extra-label">Инфинитив</span>';
+  const oldStart = body.lastIndexOf(oldLabel);
+  if (oldStart < 0) return null;
+  const prefix = body.slice(0, oldStart);
+  const oldBlock = body.slice(oldStart);
+  const lemmaMatch = oldBlock.match(/<span class="yt2anki-word-display ddd-word-display">([^<>]+)<\/span>/);
+  const infinitive = lemmaMatch && stripHtml(lemmaMatch[1]);
+  const formLabel = '<div class="ddd-extra-row"><span class="ddd-extra-label">Произношение формы</span>';
+  const formStart = prefix.indexOf(formLabel);
+  if (!infinitive || !note.tags?.includes(`lemma-${toTagSlug(infinitive)}`)
+      || !oldBlock.endsWith('</div>')
+      || (prefix.match(/\[sound:/g) || []).length !== 1
+      || (oldBlock.match(/\[sound:/g) || []).length !== 1
+      || formStart < 0) return null;
+  const formEnd = prefix.indexOf('</div>', formStart);
+  if (formEnd < 0) return null;
+  const compact = `<div class="ddd-extra-row"><span class="ddd-extra-label">От глагола</span> ${escapeHtml(infinitive)}</div>`;
+  return markVerbFormAnswer(`${prefix.slice(0, formEnd + 6)}${compact}${prefix.slice(formEnd + 6)}`);
+}
 
 export async function prepareVerbDictionaryMigration({ generate = explainVerbForm, noteIds = [], onEntry = () => {} } = {}) {
   let ids = await findNotesByQuery('tag:mode-verb-dictionary');
@@ -26,7 +51,13 @@ export async function prepareVerbDictionaryMigration({ generate = explainVerbFor
     if (!note.tags?.includes('mode-verb-dictionary')) {
       entry.reason = 'Dictionary tag missing';
     } else if (isCurrentVerbFormAnswer(note.fields?.Back?.value)) {
-      entry.status = 'already-current';
+      const compactBack = compactTwoAudioAnswer(note);
+      if (compactBack) {
+        entry.status = 'ready';
+        entry.newBack = compactBack;
+      } else {
+        entry.status = 'already-current';
+      }
     } else {
       let legacy;
       try {
@@ -62,15 +93,15 @@ export async function saveVerbDictionaryPreview(plan, directory) {
   const name = uniqueName('preview');
   const planPath = join(directory, `${name}.json`);
   const htmlPath = join(directory, `${name}.html`);
-  const showAudio = (html) => html.replace(/\[sound:[^\[\]<>\r\n]+\]/g,
-    '<span class="preview-audio">▶ Аудио инфинитива (в Anki)</span>');
+  const showAudio = (html, label) => html.replace(/\[sound:[^\[\]<>\r\n]+\]/g,
+    `<span class="preview-audio">▶ ${label} (в Anki)</span>`);
   const cards = plan.entries.map((entry) => {
     // Only render the known legacy template and our generated template as HTML.
     let oldAnswer = `<pre>${escapeHtml(entry.original.fields.Back || '')}</pre>`;
-    if (entry.status === 'ready') oldAnswer = showAudio(entry.original.fields.Back);
+    if (entry.status === 'ready') oldAnswer = showAudio(entry.original.fields.Back, 'Аудио');
     return `<section><h2>${escapeHtml(entry.form)} · ${entry.noteId}</h2><p>${escapeHtml(entry.status)} ${escapeHtml(entry.reason || '')}</p>
       <div class="comparison"><article><h3>Old answer</h3><div class="card">${oldAnswer}</div></article>
-      <article><h3>Proposed answer</h3><div class="card">${showAudio(entry.newBack || 'No change')}</div></article></div></section>`;
+      <article><h3>Proposed answer</h3><div class="card">${showAudio(entry.newBack || 'No change', 'Аудио формы')}</div></article></div></section>`;
   }).join('\n');
   const html = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Verb form migration preview</title><style>${DERDIEDECK_SHARED_CSS}

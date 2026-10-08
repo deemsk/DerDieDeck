@@ -37,7 +37,9 @@ const mockFindWordDuplicates = jest.fn(async () => ({ exactMatches: [], headword
 const mockStoreAudio = jest.fn(async (path = "") => {
   const value = String(path)
   if (value.includes("verb_sentence")) return "verb-sentence.mp3"
+  if (value.includes("verb_requested_form")) return "verb-form.mp3"
   if (value.includes("verb_form")) return "verb-form.mp3"
+  if (value.includes("geh-human")) return "geh-human.mp3"
   return "verb-target.mp3"
 })
 const mockStoreMedia = jest.fn(async () => "verb-image.jpg")
@@ -48,12 +50,13 @@ const mockCreateClozeNote = jest.fn(async () => 654)
 const mockGenerateSimpleSpeech = jest.fn(async () => {})
 const mockGenerateSpeech = jest.fn(async () => {})
 const mockGenerateVerbFormSentence = jest.fn()
-const mockPrepareDictionary = jest.fn(async ({ verbData, focusForm, selectedSentence }) => ({
+const prepareDictionaryResult = async ({ verbData, focusForm, selectedSentence }) => ({
   form: focusForm || verbData.displayForm, infinitive: verbData.infinitive,
   formMeaning: "принадлежит", grammar: "Präsens, Indikativ, 3-е лицо ед. числа",
   usage: "Состояние в настоящем.", ambiguity: null, contrast: null,
   example: selectedSentence || { german: "Er läuft im Park.", russian: "Он бежит в парке." },
-}))
+})
+const mockPrepareDictionary = jest.fn(prepareDictionaryResult)
 const mockReviewEnrichedText = jest.fn()
 const mockEnrich = jest.fn(async () => ({
   german: "Der Hund gehört meiner Schwester.",
@@ -99,6 +102,10 @@ jest.unstable_mockModule("../src/verbConfirm.js", () => ({
   confirmPictureVerbSelection: mockConfirmPictureVerbSelection,
   confirmSentenceVerbSelection: mockConfirmSentenceVerbSelection,
   confirmStrongVerbPackage: jest.fn(async () => ({ confirmed: true })),
+  filterVerbExampleSentences: jest.fn((examples = [], form = null) => (
+    form ? examples.filter((example) => new RegExp(`\\b${form}\\b`, "i").test(example.german)) : examples
+  ).slice(0, 3)),
+  formatExistingInfinitiveNotice: jest.fn((_chalk, infinitive) => `${infinitive} is already in Anki and will not be added again.`),
   formatVerbPreviewSummary: jest.fn((_chalk, verbData, translation, cefrLevel = null) =>
     `${verbData.infinitive}${cefrLevel ? ` (${cefrLevel})` : ""} — ${translation}`
   ),
@@ -169,6 +176,15 @@ const { runVerbWorkflow } = await import("../src/verbMode.js")
 describe("verb mode sentence flow", () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockConfirmPictureVerbSelection.mockReset().mockResolvedValue({
+      confirmed: true, personalConnection: null, addDictionaryForm: false,
+    })
+    mockConfirmSentenceVerbSelection.mockReset().mockResolvedValue({
+      confirmed: true, addDictionaryForm: true,
+    })
+    mockCreatePictureWordNote.mockReset().mockResolvedValue(789)
+    mockCreateBasicNote.mockReset().mockResolvedValue(456)
+    mockPrepareDictionary.mockReset().mockImplementation(prepareDictionaryResult)
     mockChooseMeaning.mockResolvedValue({
       russian: "принадлежать",
       english: "belong",
@@ -179,11 +195,18 @@ describe("verb mode sentence flow", () => {
     mockFindVerbSentenceDuplicates.mockReset()
     mockFindWordDuplicates.mockReset()
     mockGenerateVerbFormSentence.mockReset()
-    mockResolveWordPronunciation.mockResolvedValue({
-      ipa: "[ɡəˈhøːʁən]",
-      audioPath: "/tmp/gehoeren-human.mp3",
-      source: "Wiktionary/Wikimedia",
-    })
+    mockResolveWordPronunciation.mockReset().mockImplementation(async (word, options = {}) => (
+      word.canonical === "geh" ? {
+        ipa: "[ɡeː]",
+        audioPath: options.downloadAudio === false ? null : "/tmp/geh-human.mp3",
+        audioUrl: "https://example.com/geh.ogg",
+        source: "Wiktionary/Wikimedia",
+      } : {
+        ipa: "[ɡəˈhøːʁən]",
+        audioPath: "/tmp/gehoeren-human.mp3",
+        source: "Wiktionary/Wikimedia",
+      }
+    ))
     mockEnrich.mockReset()
     mockEnrich.mockImplementation(async (german) => ({
       german,
@@ -244,11 +267,11 @@ describe("verb mode sentence flow", () => {
     )[0]
     expect(dictionaryNote.back).toContain("[sound:verb-target.mp3]")
     expect(dictionaryNote.back).toContain("Präsens, Indikativ")
-    expect(dictionaryNote.back).toContain("Инфинитив")
+    expect(dictionaryNote.back).toContain("От глагола")
     expect(mockPrepareDictionary.mock.invocationCallOrder[0]).toBeLessThan(mockCreateNote.mock.invocationCallOrder[0])
     expect(mockResolveWordPronunciation).toHaveBeenCalledWith(expect.objectContaining({
-      canonical: "gehören",
-    }))
+      canonical: "gehört",
+    }), { downloadAudio: false })
     expect(mockCreateBasicNote).toHaveBeenCalledWith(expect.objectContaining({
       front: expect.stringContaining("yt2anki-word-display"),
       tags: expect.arrayContaining(["mode-verb-dictionary"]),
@@ -629,6 +652,238 @@ describe("verb mode sentence flow", () => {
     expect(mockFindVerbLemmaDuplicates).not.toHaveBeenCalled()
     expect(mockChooseVerbSentence).not.toHaveBeenCalled()
     expect(mockCreateNote).not.toHaveBeenCalled()
+  })
+
+  test.each(["exactMatches", "headwordMatches"])(
+    "adds requested geh without recreating existing gehen picture note (%s)",
+    async (matchType) => {
+      mockChooseMeaning.mockResolvedValue({ russian: "идти, направляться (обычно пешком)" })
+      mockFindWordDuplicates.mockResolvedValue({
+        exactMatches: matchType === "exactMatches" ? [{ noteId: 88, canonical: "gehen", meaning: "идти, направляться (обычно пешком)" }] : [],
+        headwordMatches: matchType === "headwordMatches" ? [{ noteId: 88, canonical: "gehen", meaning: "идти" }] : [],
+      })
+      mockConfirmPictureVerbSelection.mockResolvedValueOnce({ confirmed: true, addDictionaryForm: true })
+
+      const added = await runVerbWorkflow("geh", {
+        analysisResult: {
+          shouldCreateVerbCard: true,
+          infinitive: "gehen",
+          displayForm: "geh",
+          ipa: "[ˈɡeːən]",
+          recommendedMode: "picture-word",
+          meanings: [{ russian: "идти, направляться (обычно пешком)" }],
+          exampleSentences: [
+            { german: "Ich gehe zu Fuß zur Arbeit.", russian: "Я хожу на работу пешком." },
+            { german: "Geh bitte nach Hause.", russian: "Иди, пожалуйста, домой." },
+          ],
+        },
+        meaning: "идти, направляться (обычно пешком)",
+        deck: "German::Test",
+        skipHeader: true,
+      })
+
+      expect(added).toBe(true)
+      expect(mockCreateBasicNote).toHaveBeenCalledWith(expect.objectContaining({
+        front: expect.stringContaining("geh"),
+        tags: expect.arrayContaining(["mode-verb-dictionary", "form-geh"]),
+      }))
+      expect(mockCreatePictureWordNote).not.toHaveBeenCalled()
+      expect(mockConfirmPictureVerbSelection).not.toHaveBeenCalled()
+      expect(mockPrepareDictionary).toHaveBeenCalledWith(expect.objectContaining({
+        selectedSentence: { german: "Geh bitte nach Hause.", russian: "Иди, пожалуйста, домой." },
+        formPronunciation: expect.objectContaining({ ipa: "[ɡeː]" }),
+      }))
+      expect(mockResolveWordPronunciation).toHaveBeenCalledWith(
+        { bareNoun: "geh", canonical: "geh" }, { downloadAudio: false }
+      )
+      expect(mockCreateBasicNote.mock.calls[0][0].back).toContain("[sound:geh-human.mp3]")
+      expect(mockCreateBasicNote.mock.calls[0][0].back).toContain("[ɡeː]")
+      expect(mockStoreAudio).toHaveBeenCalledTimes(1)
+      expect(mockStoreAudio).toHaveBeenCalledWith("/tmp/geh-human.mp3")
+      expect(mockChooseGoogleImage).not.toHaveBeenCalled()
+      expect(mockResolveImageAsset).not.toHaveBeenCalled()
+      expect(mockStoreMedia).not.toHaveBeenCalled()
+    }
+  )
+
+  test("keeps the new form when a companion picture note becomes a duplicate", async () => {
+    mockChooseMeaning.mockResolvedValue({ russian: "идти" })
+    mockConfirmPictureVerbSelection.mockResolvedValueOnce({ confirmed: true, addDictionaryForm: true })
+    mockCreatePictureWordNote.mockRejectedValueOnce(new Error("AnkiConnect error: cannot create note because it is a duplicate"))
+    const log = jest.spyOn(console, "log").mockImplementation(() => {})
+
+    try {
+      const added = await runVerbWorkflow("geh", {
+        analysisResult: {
+          shouldCreateVerbCard: true, infinitive: "gehen", displayForm: "geh",
+          recommendedMode: "picture-word", meanings: [{ russian: "идти" }],
+          exampleSentences: [{ german: "Geh bitte nach Hause.", russian: "Иди, пожалуйста, домой." }],
+        },
+        meaning: "идти", deck: "German::Test", skipHeader: true,
+      })
+
+      expect(added).toBe(true)
+      expect(mockCreateBasicNote.mock.invocationCallOrder[0]).toBeLessThan(mockCreatePictureWordNote.mock.invocationCallOrder[0])
+      expect(log.mock.calls.flat().join("\n")).toContain("Added form card geh → gehen. Find in Anki Browse: nid:456")
+      expect(log.mock.calls.flat().join("\n")).toContain("Infinitive card gehen was already in Anki")
+
+      mockFindVerbFormDuplicates.mockResolvedValueOnce({
+        exactMatches: [{ noteId: 456, infinitive: "gehen", form: "geh" }],
+      })
+      const retry = await runVerbWorkflow("geh", {
+        analysisResult: {
+          shouldCreateVerbCard: true, infinitive: "gehen", displayForm: "geh",
+          recommendedMode: "picture-word", meanings: [{ russian: "идти" }],
+        },
+        meaning: "идти", deck: "German::Test", skipHeader: true,
+      })
+      expect(retry).toBe(false)
+      expect(mockCreateBasicNote).toHaveBeenCalledTimes(1)
+      expect(mockCreatePictureWordNote).toHaveBeenCalledTimes(1)
+      expect(log.mock.calls.flat().join("\n")).toContain("Form card already exists: geh → gehen. Find in Anki Browse: nid:456")
+    } finally {
+      log.mockRestore()
+    }
+  })
+
+  test("reports a saved form before a nonduplicate companion failure and stops the spinner", async () => {
+    mockChooseMeaning.mockResolvedValue({ russian: "идти" })
+    mockConfirmPictureVerbSelection.mockResolvedValueOnce({ confirmed: true, addDictionaryForm: true })
+    mockCreatePictureWordNote.mockRejectedValueOnce(new Error("disk unavailable"))
+    const log = jest.spyOn(console, "log").mockImplementation(() => {})
+
+    try {
+      await expect(runVerbWorkflow("geh", {
+        analysisResult: {
+          shouldCreateVerbCard: true, infinitive: "gehen", displayForm: "geh",
+          recommendedMode: "picture-word", meanings: [{ russian: "идти" }],
+          exampleSentences: [{ german: "Geh bitte nach Hause.", russian: "Иди, пожалуйста, домой." }],
+        },
+        meaning: "идти", deck: "German::Test", skipHeader: true,
+      })).rejects.toThrow("disk unavailable")
+      expect(log.mock.calls.flat().join("\n")).toContain("Added form card geh → gehen. Find in Anki Browse: nid:456")
+      const spinner = mockSpinnerFactory.mock.results[0].value
+      expect(spinner.stop.mock.invocationCallOrder.at(-1)).toBeLessThan(spinner.fail.mock.invocationCallOrder[0])
+    } finally {
+      log.mockRestore()
+    }
+  })
+
+  test("honors a skipped form when the lemma picture already exists", async () => {
+    mockChooseMeaning.mockResolvedValue({ russian: "идти" })
+    mockFindWordDuplicates.mockResolvedValue({
+      exactMatches: [{ noteId: 88, canonical: "gehen", meaning: "идти" }], headwordMatches: [],
+    })
+    mockPrepareDictionary.mockResolvedValueOnce(null)
+
+    const added = await runVerbWorkflow("geh", {
+      analysisResult: {
+        shouldCreateVerbCard: true, infinitive: "gehen", displayForm: "geh",
+        recommendedMode: "picture-word", meanings: [{ russian: "идти" }],
+      },
+      meaning: "идти", deck: "German::Test", skipHeader: true,
+    })
+
+    expect(added).toBe(false)
+    expect(mockConfirmPictureVerbSelection).not.toHaveBeenCalled()
+    expect(mockCreateBasicNote).not.toHaveBeenCalled()
+    expect(mockCreatePictureWordNote).not.toHaveBeenCalled()
+    expect(mockStoreAudio).not.toHaveBeenCalled()
+  })
+
+  test("missing form IPA uses spoken-form audio without labeling lemma IPA as form IPA", async () => {
+    mockChooseMeaning.mockResolvedValue({ russian: "идти" })
+    mockFindWordDuplicates.mockResolvedValue({
+      exactMatches: [{ noteId: 88, canonical: "gehen", meaning: "идти" }], headwordMatches: [],
+    })
+    mockResolveWordPronunciation.mockImplementation(async (word) => word.canonical === "geh"
+      ? null
+      : { ipa: "[ˈɡeːən]", audioPath: "/tmp/gehen-human.mp3", source: "Wiktionary/Wikimedia" })
+
+    const added = await runVerbWorkflow("geh", {
+      analysisResult: {
+        shouldCreateVerbCard: true, infinitive: "gehen", displayForm: "geh",
+        recommendedMode: "picture-word", meanings: [{ russian: "идти" }],
+        exampleSentences: [{ german: "Geh bitte nach Hause.", russian: "Иди, пожалуйста, домой." }],
+      },
+      meaning: "идти", deck: "German::Test", skipHeader: true,
+    })
+
+    expect(added).toBe(true)
+    expect(mockGenerateSimpleSpeech).toHaveBeenCalledWith("geh", expect.any(String), expect.any(Object))
+    const back = mockCreateBasicNote.mock.calls[0][0].back
+    expect(back).toContain("[sound:verb-form.mp3]")
+    expect(back).toContain("От глагола")
+    expect(back).not.toContain("[ˈɡeːən]")
+  })
+
+  test("dismisses a requested form before writing either note", async () => {
+    mockChooseMeaning.mockResolvedValue({ russian: "идти" })
+    mockConfirmPictureVerbSelection.mockResolvedValueOnce({ confirmed: false, addDictionaryForm: false })
+
+    const added = await runVerbWorkflow("geh", {
+      analysisResult: {
+        shouldCreateVerbCard: true, infinitive: "gehen", displayForm: "geh",
+        recommendedMode: "picture-word", meanings: [{ russian: "идти" }],
+      },
+      meaning: "идти", deck: "German::Test", skipHeader: true,
+    })
+
+    expect(added).toBe(false)
+    expect(mockCreateBasicNote).not.toHaveBeenCalled()
+    expect(mockCreatePictureWordNote).not.toHaveBeenCalled()
+    expect(mockChooseGoogleImage).not.toHaveBeenCalled()
+  })
+
+  test("reports a failed requested form without attempting a companion", async () => {
+    mockChooseMeaning.mockResolvedValue({ russian: "идти" })
+    mockConfirmPictureVerbSelection.mockResolvedValueOnce({ confirmed: true, addDictionaryForm: true })
+    mockCreateBasicNote.mockRejectedValueOnce(new Error("Anki unavailable"))
+    const log = jest.spyOn(console, "log").mockImplementation(() => {})
+
+    try {
+      await expect(runVerbWorkflow("geh", {
+        analysisResult: {
+          shouldCreateVerbCard: true, infinitive: "gehen", displayForm: "geh",
+          recommendedMode: "picture-word", meanings: [{ russian: "идти" }],
+          exampleSentences: [{ german: "Geh bitte nach Hause.", russian: "Иди, пожалуйста, домой." }],
+        },
+        meaning: "идти", deck: "German::Test", skipHeader: true,
+      })).rejects.toThrow("Anki unavailable")
+      expect(log.mock.calls.flat().join("\n")).toContain("Form card not added: geh")
+      expect(mockCreatePictureWordNote).not.toHaveBeenCalled()
+      expect(mockSpinnerFactory.mock.results[0].value.stop).toHaveBeenCalled()
+    } finally {
+      log.mockRestore()
+    }
+  })
+
+  test("previews a known lemma and requested form without Anki media or note writes", async () => {
+    mockChooseMeaning.mockResolvedValue({ russian: "идти" })
+    mockFindWordDuplicates.mockResolvedValue({
+      exactMatches: [{ noteId: 88, canonical: "gehen", meaning: "идти" }], headwordMatches: [],
+    })
+    mockConfirmPictureVerbSelection.mockResolvedValueOnce({ confirmed: true, addDictionaryForm: true })
+    const log = jest.spyOn(console, "log").mockImplementation(() => {})
+
+    try {
+      const previewed = await runVerbWorkflow("geh", {
+        analysisResult: {
+          shouldCreateVerbCard: true, infinitive: "gehen", displayForm: "geh",
+          recommendedMode: "picture-word", meanings: [{ russian: "идти" }],
+          exampleSentences: [{ german: "Geh bitte nach Hause.", russian: "Иди, пожалуйста, домой." }],
+        },
+        meaning: "идти", deck: "German::Test", skipHeader: true, dryRun: true,
+      })
+      expect(previewed).toBe(true)
+      expect(log.mock.calls.flat().join("\n")).toContain("Form card:")
+      expect(mockStoreAudio).not.toHaveBeenCalled()
+      expect(mockStoreMedia).not.toHaveBeenCalled()
+      expect(mockCreateBasicNote).not.toHaveBeenCalled()
+      expect(mockCreatePictureWordNote).not.toHaveBeenCalled()
+    } finally {
+      log.mockRestore()
+    }
   })
 
   test("runVerbWorkflow creates a sentence card for a new requested form even when the lemma exists", async () => {

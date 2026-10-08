@@ -15,12 +15,37 @@ test('shows the complete answer before accepting the optional card', async () =>
   const log = jest.fn()
   const ask = jest.fn(async () => {
     const preview = log.mock.calls.flat().join('\n')
-    for (const text of ['был бы', 'Konjunktiv II', 'Ich wäre gern zu Hause.', 'Я хотел бы быть дома.', 'Инфинитив', '[zaɪn]', 'быть']) {
+    for (const text of ['был бы', 'Konjunktiv II', 'Ich wäre gern zu Hause.', 'Я хотел бы быть дома.', 'От глагола', 'sein']) {
       expect(preview).toContain(text)
     }
+    expect(preview).not.toContain('[zaɪn]')
+    expect(preview).not.toMatch(/│\s+быть\s*\n/)
     return 'y'
   })
   expect(await prepareVerbDictionaryExplanation(input, { generate: async () => explanation, ask, log })).toEqual(explanation)
+})
+
+test('shows the requested form IPA separately from the infinitive IPA', async () => {
+  const log = jest.fn()
+  await prepareVerbDictionaryExplanation({
+    verbData: { infinitive: 'gehen', displayForm: 'geh', ipa: '[ˈɡeːən]' },
+    selectedMeaning: { russian: 'идти' },
+    formPronunciation: { ipa: '[ɡeː]' },
+  }, {
+    generate: async () => ({
+      form: 'geh', infinitive: 'gehen', formMeaning: 'иди',
+      grammar: 'Imperativ, 2-е лицо, единственное число.',
+      usage: 'Просьба пойти домой.', ambiguity: null, contrast: null,
+      example: { german: 'Geh bitte nach Hause.', russian: 'Иди, пожалуйста, домой.' },
+    }),
+    ask: async () => 'y', log, chalkRef: new Chalk({ level: 0 }),
+  })
+  const preview = log.mock.calls.flat().join('\n')
+  expect(preview).toMatch(/Произношение\s+\[ɡeː\]/)
+  expect(preview).toMatch(/От глагола\s+gehen/)
+  expect(preview).not.toContain('[ˈɡeːən]')
+  expect(preview).toContain('Back')
+  expect(preview).toContain('иди')
 })
 
 test('lets the learner dismiss the fully previewed card', async () => {
@@ -72,14 +97,12 @@ test('uses the existing framed summary style with aligned groups and no empty op
     '│  Front         denkst',
     '│',
     '│  Back          думаешь',
+    '│  От глагола    denken',
     '│  Грамматика    Präsens Indikativ · 2-е лицо, ед. число',
     '│  Употребление  Сейчас; в примере — думать о чём-то.',
     '│',
     '│  Пример        Woran denkst du gerade?',
     '│                О чём ты сейчас думаешь?',
-    '│',
-    '│  Инфинитив     denken [ˈdɛŋkn̩]',
-    '│                думать, считать (выражая мнение)',
     '└─',
   ].join('\n'))
   expect(text).not.toContain('Другие чтения')

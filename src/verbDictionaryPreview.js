@@ -17,7 +17,7 @@ function wrapText(text, width) {
   return lines;
 }
 
-export function formatVerbDictionaryPreview({ verbData, selectedMeaning, formExplanation }, {
+export function formatVerbDictionaryPreview({ verbData, selectedMeaning, formExplanation, formPronunciation = null }, {
   chalkRef = chalk, columns = process.stdout.columns || 80,
 } = {}) {
   const e = formExplanation;
@@ -26,16 +26,14 @@ export function formatVerbDictionaryPreview({ verbData, selectedMeaning, formExp
     [['Front', e.form, emphasize]],
     [
       ['Back', e.formMeaning, chalkRef.bold],
+      ['Произношение', formPronunciation?.ipa],
+      ['От глагола', verbData.infinitive],
       ['Грамматика', e.grammar],
       ['Употребление', e.usage],
       ['Другие чтения', e.ambiguity],
       ['Различие', e.contrast],
     ],
     [['Пример', e.example.german, chalkRef.bold], ['', e.example.russian, chalkRef.dim]],
-    [
-      ['Инфинитив', [verbData.infinitive, verbData.ipa].filter(Boolean).join(' ')],
-      ['', selectedMeaning?.russian],
-    ],
   ].map((group) => group.filter(([, value]) => String(value || '').trim()));
   const labelWidth = Math.max(...groups.flat().map(([name]) => name.length));
   const width = Number.isFinite(columns) && columns > 0 ? columns : 80;
@@ -70,6 +68,7 @@ async function question(prompt) {
 
 export async function prepareVerbDictionaryExplanation({
   verbData, selectedMeaning, focusForm = null, selectedSentence = null,
+  formPronunciation = null,
 }, { generate = explainVerbForm, ask = question, log = console.log, chalkRef = chalk, columns = process.stdout.columns || 80 } = {}) {
   const context = {
     form: focusForm || verbData.displayForm || verbData.infinitive,
@@ -82,7 +81,7 @@ export async function prepareVerbDictionaryExplanation({
     try {
       log('Preparing dictionary form explanation...');
       explanation = validateVerbFormExplanation(await generate(context), context);
-      log(`\n${formatVerbDictionaryPreview({ verbData, selectedMeaning, formExplanation: explanation }, { chalkRef, columns })}\n`);
+      log(`\n${formatVerbDictionaryPreview({ verbData, selectedMeaning, formExplanation: explanation, formPronunciation }, { chalkRef, columns })}\n`);
     } catch (error) {
       explanation = null;
       log(`Dictionary card not prepared: ${error.message}`);

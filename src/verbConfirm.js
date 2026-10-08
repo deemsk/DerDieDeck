@@ -1,6 +1,7 @@
 import { createInterface } from 'readline';
 import chalk from 'chalk';
 import { askReviewFeedback, playAudio } from './confirm.js';
+import { normalizeGermanForCompare } from './cardContent/german.js';
 
 function ask(question) {
   const rl = createInterface({
@@ -39,70 +40,108 @@ export function formatVerbPreviewSummary(chalkRef, verbData, translation, cefrLe
   return translation ? `${head} ${chalkRef.dim('—')} ${translation}` : head;
 }
 
+export function formatExistingInfinitiveNotice(chalkRef, infinitive) {
+  return `${chalkRef.bold.cyan(infinitive)} is already in Anki and will not be added again.`;
+}
+
 export function resolveVerbFocusForm(verbData, chosenSentence = null) {
   return chosenSentence?.focusForm ||
     (verbData.displayForm && verbData.displayForm !== verbData.infinitive ? verbData.displayForm : null);
 }
 
-export async function chooseVerbSentence(verbData, preferredSentence = null) {
+function containsRequestedForm(sentence, form) {
+  const normalizedForm = normalizeGermanForCompare(form);
+  const normalizedSentence = normalizeGermanForCompare(sentence);
+  return Boolean(normalizedForm && (` ${normalizedSentence} `).includes(` ${normalizedForm} `));
+}
+
+export function filterVerbExampleSentences(examples, requestedForm = null) {
+  const candidates = Array.isArray(examples) ? examples : [];
+  return (requestedForm
+    ? candidates.filter((sentence) => containsRequestedForm(sentence?.german, requestedForm))
+    : candidates).slice(0, 3);
+}
+
+export async function chooseVerbSentence(verbData, preferredSentence = null, { askInput = ask, write = console.log } = {}) {
+  const requestedForm = verbData.displayForm &&
+    normalizeGermanForCompare(verbData.displayForm) !== normalizeGermanForCompare(verbData.infinitive)
+    ? verbData.displayForm
+    : null;
+  const withFocus = (sentence) => requestedForm ? { ...sentence, focusForm: requestedForm } : sentence;
+  const manualSentence = async (prompt) => {
+    while (true) {
+      const manual = (await askInput(prompt)).trim();
+      if (!manual) return null;
+      if (requestedForm && !containsRequestedForm(manual, requestedForm)) {
+        write(`The example must contain ${requestedForm} as a separate form.`);
+        continue;
+      }
+      return {
+        german: manual,
+        russian: verbData.meanings?.[0]?.russian || '',
+        focusForm: requestedForm || verbData.displayForm || verbData.infinitive,
+      };
+    }
+  };
+
   if (preferredSentence) {
+    if (requestedForm && !containsRequestedForm(preferredSentence, requestedForm)) {
+      write(`The supplied sentence does not contain the requested form ${requestedForm}.`);
+      return null;
+    }
     const existing = verbData.exampleSentences?.find((sentence) => sentence.german === preferredSentence);
     if (existing) {
-      return existing;
+      return withFocus(existing);
     }
 
     return {
       german: preferredSentence,
       russian: verbData.meanings?.[0]?.russian || '',
-      focusForm: verbData.displayForm || verbData.infinitive,
+      focusForm: requestedForm || verbData.displayForm || verbData.infinitive,
     };
   }
 
-  const sentences = Array.isArray(verbData.exampleSentences) ? verbData.exampleSentences.slice(0, 3) : [];
+  const sentences = filterVerbExampleSentences(verbData.exampleSentences, requestedForm);
   if (sentences.length === 0) {
-    const manual = await ask('Enter an example sentence for this verb, or press Enter to skip: ');
-    if (!manual) return null;
-    return {
-      german: manual,
-      russian: verbData.meanings?.[0]?.russian || '',
-      focusForm: verbData.displayForm || verbData.infinitive,
-    };
+    if (requestedForm) write(`No suggested example contains ${requestedForm}.`);
+    return manualSentence(requestedForm
+      ? `Enter a sentence with ${requestedForm}, or press Enter to skip: `
+      : 'Enter an example sentence for this verb, or press Enter to skip: ');
   }
 
   if (sentences.length === 1) {
-    return sentences[0];
+    if (requestedForm) write(`Using example with ${requestedForm}: ${sentences[0].german}`);
+    return withFocus(sentences[0]);
   }
 
-  console.log();
-  console.log(`Example sentences for ${verbData.infinitive}:`);
+  write();
+  write(requestedForm ? `Example sentences with ${requestedForm}:` : `Example sentences for ${verbData.infinitive}:`);
   sentences.forEach((sentence, index) => {
-    console.log(`  ${index + 1}. ${sentence.german}`);
+    write(`  ${index + 1}. ${sentence.german}`);
     if (sentence.russian) {
-      console.log(`     ${sentence.russian}`);
+      write(`     ${sentence.russian}`);
     }
   });
 
   while (true) {
-    const answer = await ask(`Choose sentence [1-${sentences.length}, Enter=1, E=edit]: `);
+    const answer = await askInput(`Choose sentence [1-${sentences.length}, Enter=1, E=edit]: `);
     const normalized = answer.toLowerCase();
 
     if (normalized === '') {
-      return sentences[0];
+      return withFocus(sentences[0]);
     }
 
     if (normalized === 'e' || normalized === 'edit') {
-      const manual = await ask('Enter an example sentence: ');
+      const manual = await manualSentence(requestedForm
+        ? `Enter a sentence with ${requestedForm}, or press Enter to return: `
+        : 'Enter an example sentence: ');
       if (!manual) continue;
-      return {
-        german: manual,
-        russian: verbData.meanings?.[0]?.russian || '',
-        focusForm: verbData.displayForm || verbData.infinitive,
-      };
+      return manual;
     }
 
     const index = parseInt(normalized, 10);
     if (!Number.isNaN(index) && index >= 1 && index <= sentences.length) {
-      return sentences[index - 1];
+      return withFocus(sentences[index - 1]);
     }
   }
 }
@@ -118,13 +157,17 @@ export async function confirmPictureVerbSelection({
   audioSource,
   audioPath,
   addDictionaryForm = false,
+  requestedForm = null,
+  existingLemmaNote = null,
   theme = null,
   autoPlay = true,
+  askInput = ask,
+  write = console.log,
 }) {
   let personalConnection = null;
   let dictionaryFormEnabled = addDictionaryForm;
 
-  if (autoPlay && audioPath) {
+  if (autoPlay && audioPath && !requestedForm) {
     try {
       await playAudio(audioPath);
     } catch {
@@ -133,35 +176,50 @@ export async function confirmPictureVerbSelection({
   }
 
   while (true) {
-    console.log();
-    console.log(formatVerbPreviewSummary(chalk, verbData, selectedMeaning.russian, cefrLevel));
-    if (verbData.ipa) {
-      console.log(`${label('IPA:')} ${verbData.ipa}`);
+    write();
+    if (requestedForm) {
+      write(`${chalk.bold.cyan(requestedForm)} ${chalk.dim(`— form of ${verbData.infinitive}`)}`);
+      write(`${label('Front:')} ${chalk.bold(requestedForm)}`);
+      write(`The complete ${requestedForm} card will be reviewed before saving.`);
+      write(existingLemmaNote
+        ? formatExistingInfinitiveNotice(chalk, verbData.infinitive)
+        : `A separate ${verbData.infinitive} infinitive card will also be prepared.`);
+      if (!dictionaryFormEnabled) {
+        write(chalk.yellow(`The ${requestedForm} form card is currently skipped.`));
+      }
+    } else {
+      write(formatVerbPreviewSummary(chalk, verbData, selectedMeaning.russian, cefrLevel));
+      if (verbData.ipa) {
+        write(`${label('IPA:')} ${verbData.ipa}`);
+      }
+      write(`${label('Frequency:')} ${frequencyInfo.bandLabel}${frequencyInfo.rank ? ` (#${frequencyInfo.rank})` : ''}`);
+      write(`${label('Audio:')} ${audioSource}`);
+      if (showImage) {
+        write(`${label('Image:')} ${formatImageSelectionLabel(imageChoice)}`);
+      }
+      write(`${label('Dictionary form card:')} ${dictionaryFormEnabled ? 'yes' : 'no'}`);
     }
-    console.log(`${label('Frequency:')} ${frequencyInfo.bandLabel}${frequencyInfo.rank ? ` (#${frequencyInfo.rank})` : ''}`);
-    console.log(`${label('Audio:')} ${audioSource}`);
-    if (showImage) {
-      console.log(`${label('Image:')} ${formatImageSelectionLabel(imageChoice)}`);
-    }
-    console.log(`${label('Dictionary form card:')} ${dictionaryFormEnabled ? 'yes' : 'no'}`);
     if (theme) {
-      console.log(`${label('Theme:')} ${theme}`);
+      write(`${label('Theme:')} ${theme}`);
     }
     if (personalConnection) {
-      console.log(`${label('Personal connection:')} ${personalConnection}`);
+      write(`${label('Personal connection:')} ${personalConnection}`);
     }
-    if (duplicateInfo.headwordMatches.length > 0) {
-      console.log();
-      console.log(label('Existing notes with the same lemma:'));
+    if (!requestedForm && duplicateInfo.headwordMatches.length > 0) {
+      write();
+      write(label('Existing notes with the same lemma:'));
       duplicateInfo.headwordMatches.slice(0, 3).forEach((match) => {
-        console.log(`  - ${match.canonical}${match.meaning ? ` (${match.meaning})` : ''}`);
+        write(`  - ${match.canonical}${match.meaning ? ` (${match.meaning})` : ''}`);
       });
     }
 
-    const answer = await ask('[A]dd, [L]isten, [T]oggle form card, [P]ersonal connection, [D]ismiss: ');
+    const prompt = requestedForm
+      ? `[C]ontinue to review ${requestedForm}, [L]isten to ${verbData.infinitive}, ${existingLemmaNote ? '' : '[P]ersonal connection, '}[D]ismiss: `
+      : '[A]dd, [L]isten, [T]oggle form card, [P]ersonal connection, [D]ismiss: ';
+    const answer = await askInput(prompt);
     const normalized = answer.toLowerCase();
 
-    if (normalized === '' || normalized === 'a' || normalized === 'add') {
+    if (normalized === '' || normalized === 'a' || normalized === 'add' || (requestedForm && (normalized === 'c' || normalized === 'continue'))) {
       return { confirmed: true, personalConnection, addDictionaryForm: dictionaryFormEnabled };
     }
 
@@ -170,7 +228,7 @@ export async function confirmPictureVerbSelection({
       try {
         await playAudio(audioPath);
       } catch (err) {
-        console.log(`Could not play audio: ${err.message}`);
+        write(`Could not play audio: ${err.message}`);
       }
       continue;
     }
@@ -181,7 +239,8 @@ export async function confirmPictureVerbSelection({
     }
 
     if (normalized === 'p' || normalized === 'personal') {
-      const connection = await ask('Personal connection (optional, Enter clears): ');
+      if (existingLemmaNote) continue;
+      const connection = await askInput('Personal connection (optional, Enter clears): ');
       personalConnection = connection || null;
       continue;
     }
@@ -198,7 +257,10 @@ export async function confirmSentenceVerbSelection({
   audioPath,
   similarCards = [],
   addDictionaryForm = false,
+  requestedForm = null,
   autoPlay = true,
+  askInput = ask,
+  write = console.log,
 }) {
   let dictionaryFormEnabled = addDictionaryForm;
 
@@ -211,33 +273,46 @@ export async function confirmSentenceVerbSelection({
   }
 
   while (true) {
-    console.log();
-    console.log(formatVerbPreviewSummary(chalk, verbData, selectedMeaning.russian, sentenceData.cefr?.level || null));
-    console.log(`${label('Sentence:')} ${sentenceData.german}`);
+    write();
+    if (requestedForm) {
+      write(`${chalk.bold.cyan(requestedForm)} ${chalk.dim(`— form of ${verbData.infinitive}`)}`);
+      write(`${label('Front:')} ${chalk.bold(requestedForm)}`);
+      write(`The complete ${requestedForm} card will be reviewed before saving.`);
+      write(`${label('Also prepares:')} an audio sentence card`);
+    } else {
+      write(formatVerbPreviewSummary(chalk, verbData, selectedMeaning.russian, sentenceData.cefr?.level || null));
+    }
+    write(`${label('Sentence:')} ${sentenceData.german}`);
     if (sentenceData.ipa) {
-      console.log(`${label('IPA:')} ${sentenceData.ipa}`);
+      write(`${label('IPA:')} ${sentenceData.ipa}`);
     }
     if (sentenceData.russian) {
-      console.log(`${label('Russian:')} ${sentenceData.russian}`);
+      write(`${label('Russian:')} ${sentenceData.russian}`);
     }
     const focusForm = resolveVerbFocusForm(verbData, chosenSentence);
-    if (focusForm) {
-      console.log(`${label('Focus form:')} ${focusForm}`);
+    if (focusForm && !requestedForm) {
+      write(`${label('Focus form:')} ${focusForm}`);
     }
-    console.log(`${label('Dictionary form card:')} ${dictionaryFormEnabled ? 'yes' : 'no'}`);
+    if (requestedForm) {
+      if (!dictionaryFormEnabled) write(chalk.yellow(`The ${requestedForm} form card is currently skipped.`));
+    } else {
+      write(`${label('Dictionary form card:')} ${dictionaryFormEnabled ? 'yes' : 'no'}`);
+    }
 
     if (similarCards.length > 0) {
-      console.log();
-      console.log(label('Similar cards found:'));
+      write();
+      write(label('Similar cards found:'));
       similarCards.slice(0, 3).forEach((card) => {
-        console.log(`  - ${card.similarity}% "${card.german}"`);
+        write(`  - ${card.similarity}% "${card.german}"`);
       });
     }
 
-    const answer = await ask('[A]dd, [L]isten, [T]oggle form card, [R]eview, [D]ismiss: ');
+    const answer = await askInput(requestedForm
+      ? `[C]ontinue to review ${requestedForm}, [L]isten, [R]eview sentence, [D]ismiss: `
+      : '[A]dd, [L]isten, [T]oggle form card, [R]eview, [D]ismiss: ');
     const normalized = answer.toLowerCase();
 
-    if (normalized === '' || normalized === 'a' || normalized === 'add') {
+    if (normalized === '' || normalized === 'a' || normalized === 'add' || (requestedForm && (normalized === 'c' || normalized === 'continue'))) {
       return { confirmed: true, addDictionaryForm: dictionaryFormEnabled };
     }
 
@@ -246,7 +321,7 @@ export async function confirmSentenceVerbSelection({
       try {
         await playAudio(audioPath);
       } catch (err) {
-        console.log(`Could not play audio: ${err.message}`);
+        write(`Could not play audio: ${err.message}`);
       }
       continue;
     }

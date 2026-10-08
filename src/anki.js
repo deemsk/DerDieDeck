@@ -829,15 +829,17 @@ export async function findVerbFormDuplicates({
   }
 
   const noteIds = await ankiConnect('findNotes', {
-    query: `tag:lemma-${toTagSlug(infinitive)} tag:verb-form-${toTagSlug(normalizedForm)}`,
+    query: `note:"${config.ankiNoteType}" tag:mode-verb-dictionary tag:lemma-${toTagSlug(infinitive)}`,
   });
 
+  if (noteIds.length === 0) return { exactMatches: [] };
+
+  const notes = await ankiConnect('notesInfo', { notes: noteIds });
+
   return {
-    exactMatches: noteIds.map((noteId) => ({
-      noteId,
-      infinitive,
-      form: normalizedForm,
-    })),
+    exactMatches: notes
+      .filter((note) => normalizeGerman(note.fields?.Front?.value || '') === normalizeGerman(normalizedForm))
+      .map((note) => ({ noteId: note.noteId, infinitive, form: normalizedForm })),
   };
 }
 

@@ -304,17 +304,26 @@ describe("anki helpers", () => {
     })
   })
 
-  test("findVerbFormDuplicates checks exact trained verb forms by lemma and form tags", async () => {
+  test("findVerbFormDuplicates finds a dedicated explanation by its actual Front", async () => {
     global.fetch = async (_url, options) => {
       const body = JSON.parse(options.body)
 
       if (body.action === "findNotes") {
-        expect(body.params.query).toBe("tag:lemma-sein tag:verb-form-waere")
+        expect(body.params.query).toContain("tag:mode-verb-dictionary tag:lemma-sein")
         return {
           async json() {
-            return { result: [101], error: null }
+            return { result: [101, 102], error: null }
           },
         }
+      }
+
+      if (body.action === "notesInfo") return {
+        async json() {
+          return { result: [
+            { noteId: 101, fields: { Front: { value: '<strong>wäre</strong>' } }, tags: ["form-waere"] },
+            { noteId: 102, fields: { Front: { value: "war" } }, tags: ["form-war"] },
+          ], error: null }
+        },
       }
 
       throw new Error(`Unexpected action: ${body.action}`)

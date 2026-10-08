@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { parseLegacyVerbDictionary } from '../src/cardContent/verbDictionaryMigration.js'
 import { prepareVerbDictionaryMigration, saveVerbDictionaryPreview } from '../src/verbDictionaryMigration.js'
 import { applyNoteBackUpdates, snapshotNote } from '../src/anki.js'
-import { isCurrentVerbFormAnswer } from '../src/cardContent/verbFormExplanation.js'
+import { isCurrentVerbFormAnswer, markVerbFormAnswer } from '../src/cardContent/verbFormExplanation.js'
 
 const legacyBack = '<span class="yt2anki-word-display ddd-word-display">sein</span><br>[sound:sein.mp3]<br><span class="yt2anki-ipa ddd-ipa">[zaɪn]</span><br><div class="ddd-answer-translation">быть</div>'
 const makeNote = (id = 1, back = legacyBack) => ({
@@ -57,15 +57,40 @@ test.each([
   expect(() => parseLegacyVerbDictionary(note)).toThrow()
 })
 
-test('preview selects tagged notes, preserves media, and makes no writes', async () => {
+test('preview selects tagged notes, applies compact answer contract, and makes no writes', async () => {
   const notes = [makeNote()]
   const requests = fakeAnki(notes)
   const plan = await prepareVerbDictionaryMigration({ generate: async () => explanation })
   expect(requests[0]).toMatchObject({ action: 'findNotes', params: { query: 'tag:mode-verb-dictionary' } })
   expect(requests.every((r) => ['findNotes', 'notesInfo'].includes(r.action))).toBe(true)
   expect(plan.entries[0]).toMatchObject({ noteId: 1, form: 'wäre', status: 'ready', original: snapshotNote(notes[0]) })
-  expect(plan.entries[0].newBack).toContain(legacyBack)
+  expect(plan.entries[0].newBack).toContain('От глагола')
+  expect(plan.entries[0].newBack).toContain('sein')
+  expect(plan.entries[0].newBack).not.toContain('[sound:sein.mp3]')
   expect(isCurrentVerbFormAnswer(plan.entries[0].newBack)).toBe(true)
+})
+
+test('prepares an existing two-audio form answer for a Back-only compact update', async () => {
+  const oldBack = markVerbFormAnswer(
+    '<div class="ddd-answer-translation">иди</div>'
+    + '<div class="ddd-extra-row"><span class="ddd-extra-label">Произношение формы</span>[sound:geh.mp3]<br><span class="yt2anki-ipa ddd-ipa">[ɡeː]</span></div>'
+    + '<div class="ddd-extra-row">Imperativ, 2-е лицо.</div>'
+    + '<div class="ddd-extra-example"><span class="ddd-extra-example-value">Geh bitte nach Hause.</span><span class="ddd-extra-example-translation">Иди домой.</span></div>'
+    + '<div class="ddd-extra-row"><span class="ddd-extra-label">Инфинитив</span><span class="yt2anki-word-display ddd-word-display">gehen</span><br>[sound:gehen.mp3]<br><span class="yt2anki-ipa ddd-ipa">[ˈɡeːən]</span><br><div class="ddd-answer-translation">идти</div></div>'
+  )
+  const note = makeNote(7, oldBack)
+  note.tags = ['yt2anki', 'mode-verb-dictionary', 'lemma-gehen', 'form-geh']
+  note.fields.Front.value = '<span class="yt2anki-word-display ddd-word-display">geh</span>'
+  const requests = fakeAnki([note])
+  const plan = await prepareVerbDictionaryMigration({ noteIds: [7] })
+  expect(plan.entries[0].status).toBe('ready')
+  expect(plan.entries[0].newBack).toContain('[sound:geh.mp3]')
+  expect(plan.entries[0].newBack).toContain('От глагола</span> gehen')
+  expect(plan.entries[0].newBack).toContain('Geh bitte nach Hause.')
+  expect(plan.entries[0].newBack).not.toContain('[sound:gehen.mp3]')
+  expect(plan.entries[0].newBack).not.toContain('[ˈɡeːən]')
+  expect(isCurrentVerbFormAnswer(plan.entries[0].newBack)).toBe(true)
+  expect(requests.every((request) => request.action !== 'updateNoteFields')).toBe(true)
 })
 
 test('reports invalid and failed notes separately and does not regenerate current ones', async () => {
@@ -89,7 +114,7 @@ test('saves readable HTML and a reusable JSON plan without overwriting existing 
     expect(html).toContain('Old answer')
     expect(html).toContain('Proposed answer')
     expect(html).toContain('Konjunktiv II')
-    expect(html).toContain('Аудио инфинитива (в Anki)')
+    expect(html).toContain('Аудио (в Anki)')
     expect(html).not.toContain('[sound:sein.mp3]')
     await saveVerbDictionaryPreview(plan, directory)
     expect((await readdir(directory)).length).toBe(4)

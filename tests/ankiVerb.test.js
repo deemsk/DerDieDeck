@@ -94,13 +94,19 @@ describe("verb note helpers", () => {
         example: { german: "Er kommt heute an.", russian: "Он приезжает сегодня." },
       },
       pronunciationField: "[sound:ankommen.mp3]<br><span class=\"yt2anki-ipa ddd-ipa\">[ˈankɔmən]</span>",
+      formPronunciationField: "[sound:kommt-an.mp3]<br><span class=\"yt2anki-ipa ddd-ipa\">[ˈkɔmt an]</span>",
     })
 
     expect(note.front).toContain("yt2anki-word-display")
     expect(note.front).toContain("ddd-word-display")
     expect(note.front).toContain("kommt an")
-    expect(note.back).toContain("yt2anki-word-display")
     expect(note.back).toContain("ankommen")
-    expect(note.back).toContain("[sound:ankommen.mp3]")
+    expect(note.back).toContain("[sound:kommt-an.mp3]")
+    expect(note.back).toContain("Произношение формы")
+    expect(note.back).toContain("От глагола")
+    expect(note.back).not.toContain("[sound:ankommen.mp3]")
+    expect(note.back).not.toContain("[ˈankɔmən]")
+    expect(note.back).not.toContain("прибывать")
+    expect(note.front).not.toContain("[ˈkɔmt an]")
   })
 })

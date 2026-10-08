@@ -20,7 +20,7 @@ import { buildVerbKeyFormProductionBack, buildVerbKeyFormProductionFront, buildV
 import { enrichVerb, generateVerbFormSentence, hasStructuredVerbAnalysis, shouldOfferDictionaryFormCard } from './verbEnricher.js';
 import { shouldSuggestVerbInfinitive, suggestVerbInfinitives } from './verbCorrection.js';
 import { chooseGoogleImage, chooseMeaning } from './wordConfirm.js';
-import { chooseVerbSentence, confirmPictureVerbSelection, confirmSentenceVerbSelection, confirmStrongVerbPackage, formatVerbPreviewSummary, resolveVerbFocusForm } from './verbConfirm.js';
+import { chooseVerbSentence, confirmPictureVerbSelection, confirmSentenceVerbSelection, confirmStrongVerbPackage, filterVerbExampleSentences, formatExistingInfinitiveNotice, formatVerbPreviewSummary, resolveVerbFocusForm } from './verbConfirm.js';
 import { buildVerbGoogleImagesSearch, resolveImageAsset, resolveWordPronunciation } from './lib/wordSources.js';
 import {
   checkConnection,
@@ -43,6 +43,10 @@ import { enrich, reviewEnrichedText } from './enricher.js';
 import { RecoverableWorkflowError } from './workflowRecovery.js';
 
 const DEFAULT_WORD_NOTE_TYPE = config.wordNoteType || '2. Picture Words';
+
+function ankiBrowseSearch(noteId) {
+  return `Find in Anki Browse: nid:${noteId}`;
+}
 
 function showVerbHeader(rawInput) {
   const label = String(rawInput || '').trim();
@@ -218,6 +222,47 @@ async function buildVerbAudio(verbData, spinner) {
   };
 }
 
+async function previewVerbFormPronunciation(form, infinitive) {
+  if (!form || normalizeGermanForCompare(form) === normalizeGermanForCompare(infinitive)) {
+    return null;
+  }
+  try {
+    return await resolveWordPronunciation(
+      { bareNoun: form, canonical: form },
+      { downloadAudio: false }
+    );
+  } catch (err) {
+    console.log(chalk.dim(`Form pronunciation unavailable: ${err.message}`));
+    return null;
+  }
+}
+
+async function storeVerbFormPronunciation(form, infinitive, previewPronunciation) {
+  if (!form || normalizeGermanForCompare(form) === normalizeGermanForCompare(infinitive)) {
+    return null;
+  }
+  try {
+    const pronunciation = await resolveWordPronunciation({ bareNoun: form, canonical: form });
+    if (pronunciation?.audioPath) {
+      return await storeAudio(pronunciation.audioPath);
+    }
+  } catch {
+    // Use a spoken form when human audio cannot be retrieved.
+  }
+
+  try {
+    const path = join(config.dataDir, `verb_requested_form_${Date.now()}_${toTagSlug(form)}.mp3`);
+    await generateSimpleSpeech(form, path, {
+      speed: config.ttsSpeed || 0.75,
+      ipa: previewPronunciation?.ipa || null,
+    });
+    return await storeAudio(path);
+  } catch (err) {
+    console.log(chalk.dim(`Form audio unavailable: ${err.message}`));
+    return null;
+  }
+}
+
 async function buildVerbSentenceAudio(sentence, spinner) {
   spinner.start('Generating sentence audio...');
   const audioPath = join(config.dataDir, `verb_sentence_${Date.now()}.mp3`);
@@ -372,13 +417,16 @@ function buildDictionaryFormContext(verbData, focusForm = null) {
   return `${form} → ${verbData.infinitive}`;
 }
 
-async function createDictionaryFormNote(verbData, selectedMeaning, focusForm, deck, audioFilename, formExplanation) {
+async function createDictionaryFormNote(
+  verbData, selectedMeaning, focusForm, deck, formExplanation,
+  formPronunciation = null, formAudioFilename = null
+) {
   const note = buildVerbDictionaryNote({
     verbData,
     selectedMeaning,
     focusForm,
     formExplanation,
-    pronunciationField: formatPronunciationField(audioFilename, verbData.ipa),
+    formPronunciationField: formatPronunciationField(formAudioFilename, formPronunciation?.ipa),
   });
 
   return createBasicNote({
@@ -726,7 +774,7 @@ async function prepareVerb(rawInput, options, spinner) {
         spinner.stop();
 
         if (formDuplicateInfo.exactMatches.length > 0) {
-          console.log(chalk.yellow(`Verb form already exists for ${verbData.infinitive}: ${requestedForm}`));
+          console.log(chalk.yellow(`Form card already exists: ${requestedForm} → ${verbData.infinitive}. ${ankiBrowseSearch(formDuplicateInfo.exactMatches[0].noteId)}`));
           return { rejected: true };
         }
       } else {
@@ -766,7 +814,7 @@ async function prepareVerb(rawInput, options, spinner) {
   const frequencyInfo = getWordFrequencyInfo(verbData.infinitive);
   const forcedMode = normalizeVerbMode(options.mode);
   const route = forcedMode || verbData.recommendedMode || 'sentence-form';
-  const addDictionaryForm = shouldOfferDictionaryFormCard(verbData);
+  const addDictionaryForm = Boolean(resolveRequestedVerbForm(verbData)) || shouldOfferDictionaryFormCard(verbData);
   const packagePrepared = await prepareStrongVerbPackage({
     verbData,
     selectedMeaning,
@@ -794,16 +842,20 @@ async function prepareVerb(rawInput, options, spinner) {
         modelName: DEFAULT_WORD_NOTE_TYPE,
       });
     } catch (err) {
-      if (!options.dryRun) throw err;
-      console.log(chalk.dim(`Duplicate check skipped in dry run: ${err.message}`));
+      if (!options.dryRun && !resolveRequestedVerbForm(verbData)) throw err;
+      console.log(chalk.dim(`Duplicate check skipped: ${err.message}`));
     } finally {
       spinner.stop();
     }
 
-    if (duplicateInfo.exactMatches.length > 0) {
+    if (!resolveRequestedVerbForm(verbData) && duplicateInfo.exactMatches.length > 0) {
       console.log(chalk.yellow(`Exact duplicate exists for ${verbData.infinitive} (${selectedMeaning.russian})`));
       return { rejected: true };
     }
+
+    const existingLemmaNote = resolveRequestedVerbForm(verbData)
+      ? [...duplicateInfo.exactMatches, ...duplicateInfo.headwordMatches][0] || null
+      : null;
 
     let lexicalCefr = null;
     try {
@@ -827,6 +879,7 @@ async function prepareVerb(rawInput, options, spinner) {
       lexicalCefr,
       frequencyInfo,
       duplicateInfo,
+      existingLemmaNote,
       imageChoice: null,
       audio,
       addDictionaryForm,
@@ -881,11 +934,21 @@ async function finalizePictureVerb(prepared, options, spinner) {
     selectedMeaning,
     frequencyInfo,
     duplicateInfo,
+    existingLemmaNote,
     audio,
     addDictionaryForm,
   } = prepared;
 
-  const confirmation = await confirmPictureVerbSelection({
+  const directFormReview = Boolean(resolveRequestedVerbForm(verbData) && existingLemmaNote);
+  if (directFormReview) {
+    console.log(formatExistingInfinitiveNotice(chalk, verbData.infinitive));
+  }
+
+  const confirmation = directFormReview ? {
+    confirmed: true,
+    addDictionaryForm: true,
+    personalConnection: null,
+  } : await confirmPictureVerbSelection({
     verbData,
     selectedMeaning,
     frequencyInfo,
@@ -895,6 +958,8 @@ async function finalizePictureVerb(prepared, options, spinner) {
     audioSource: audio.source,
     audioPath: audio.audioPath,
     addDictionaryForm,
+    requestedForm: resolveRequestedVerbForm(verbData),
+    existingLemmaNote,
     theme: options.theme || null,
   });
 
@@ -903,13 +968,24 @@ async function finalizePictureVerb(prepared, options, spinner) {
     return false;
   }
 
-  const imageChoice = await choosePictureVerbImage(prepared, spinner);
+  const imageChoice = existingLemmaNote ? null : await choosePictureVerbImage(prepared, spinner);
+  const formPronunciation = confirmation.addDictionaryForm
+    ? await previewVerbFormPronunciation(verbData.displayForm, verbData.infinitive)
+    : null;
   const formExplanation = confirmation.addDictionaryForm
     ? await prepareVerbDictionaryExplanation({
       verbData, selectedMeaning, focusForm: verbData.displayForm,
-      selectedSentence: verbData.exampleSentences?.[0] || null,
+      formPronunciation,
+      selectedSentence: filterVerbExampleSentences(
+        verbData.exampleSentences, resolveRequestedVerbForm(verbData)
+      )[0] || null,
     })
     : null;
+
+  if (directFormReview && !formExplanation) {
+    console.log(chalk.dim(`Form card skipped: ${verbData.displayForm}`));
+    return false;
+  }
 
   const metadata = {
     canonical: verbData.infinitive,
@@ -936,10 +1012,40 @@ async function finalizePictureVerb(prepared, options, spinner) {
     }
     console.log(`  ${chalk.cyan('Frequency:')} ${frequencyInfo.bandLabel}${frequencyInfo.rank ? ` (#${frequencyInfo.rank})` : ''}`);
     console.log(`  ${chalk.cyan('Audio:')} ${audio.source}`);
-    console.log(`  ${chalk.cyan('Image:')} ${imageChoice ? (imageChoice.source || imageChoice.type || 'image') : 'none'}`);
-    console.log(`  ${chalk.cyan('Dictionary form card:')} ${formExplanation ? 'yes' : 'no'}`);
+    if (existingLemmaNote) {
+      console.log(`  ${chalk.cyan('Infinitive card:')} ${verbData.infinitive} is already in Anki`);
+    } else {
+      console.log(`  ${chalk.cyan('Image:')} ${imageChoice ? (imageChoice.source || imageChoice.type || 'image') : 'none'}`);
+    }
+    console.log(`  ${chalk.cyan('Form card:')} ${formExplanation ? 'would create' : 'skipped'}`);
     console.log(chalk.yellow('\n⚡ DRY RUN: Verb note previewed'));
     return true;
+  }
+
+  if (formExplanation) {
+    spinner.start(`Creating form card for ${verbData.displayForm}...`);
+    try {
+      const formAudioFilename = await storeVerbFormPronunciation(
+        verbData.displayForm, verbData.infinitive, formPronunciation
+      );
+      const formNoteId = await createDictionaryFormNote(
+        verbData, selectedMeaning, verbData.displayForm, options.deck,
+        formExplanation, formPronunciation, formAudioFilename
+      );
+      spinner.succeed(`Created form card for ${verbData.displayForm}`);
+      console.log(chalk.green(`✓ Added form card ${verbData.displayForm} → ${verbData.infinitive}. ${ankiBrowseSearch(formNoteId)}`));
+    } catch (err) {
+      spinner.stop();
+      console.log(chalk.red(`Form card not added: ${verbData.displayForm} (${err.message})`));
+      throw err;
+    }
+  } else if (resolveRequestedVerbForm(verbData)) {
+    console.log(chalk.dim(`Form card skipped: ${verbData.displayForm}`));
+  }
+
+  if (existingLemmaNote) {
+    console.log(chalk.dim(`Infinitive card ${verbData.infinitive} was already in Anki.`));
+    return Boolean(formExplanation);
   }
 
   let imageFilename = null;
@@ -954,35 +1060,41 @@ async function finalizePictureVerb(prepared, options, spinner) {
   const audioFilename = await storeAudio(audio.audioPath);
   const pronunciationField = formatPronunciationField(audioFilename, verbData.ipa);
 
-  await createPictureWordNote({
-    canonical: verbData.infinitive,
-    coloredWord: formatPlainWord(verbData.infinitive),
-    imageFilename,
-    personalConnection: confirmation.personalConnection,
-    pronunciationField,
-    extraInfoField,
-    frequencyBand: frequencyInfo.bandKey,
-    lemma: verbData.infinitive,
-    imageSource: imageChoice?.source || imageChoice?.type || 'none',
-    audioSource: audio.source,
-    lexicalType: 'verb',
-    deck: options.deck,
-    modelName: DEFAULT_WORD_NOTE_TYPE,
-    extraTags: [
-      ...buildLearningIntentTags({
-        id: 'verb-meaning',
-        trains: ['meaning-recall', 'sound-map'],
-      }),
-      ...buildContrastTags(verbData.infinitive),
-    ],
-  });
-
-  if (formExplanation) {
-    await createDictionaryFormNote(verbData, selectedMeaning, verbData.displayForm, options.deck, audioFilename, formExplanation);
+  try {
+    const lemmaNoteId = await createPictureWordNote({
+      canonical: verbData.infinitive,
+      coloredWord: formatPlainWord(verbData.infinitive),
+      imageFilename,
+      personalConnection: confirmation.personalConnection,
+      pronunciationField,
+      extraInfoField,
+      frequencyBand: frequencyInfo.bandKey,
+      lemma: verbData.infinitive,
+      imageSource: imageChoice?.source || imageChoice?.type || 'none',
+      audioSource: audio.source,
+      lexicalType: 'verb',
+      deck: options.deck,
+      modelName: DEFAULT_WORD_NOTE_TYPE,
+      extraTags: [
+        ...buildLearningIntentTags({
+          id: 'verb-meaning',
+          trains: ['meaning-recall', 'sound-map'],
+        }),
+        ...buildContrastTags(verbData.infinitive),
+      ],
+    });
+    spinner.succeed(`Created ${verbData.infinitive}`);
+    console.log(chalk.green(`✓ Added ${verbData.infinitive} (${selectedMeaning.russian}). ${ankiBrowseSearch(lemmaNoteId)}`));
+  } catch (err) {
+    spinner.stop();
+    if (formExplanation && /duplicate/i.test(err.message)) {
+      console.log(chalk.dim(`Infinitive card ${verbData.infinitive} was already in Anki.`));
+      return true;
+    }
+    console.log(chalk.red(`Lemma card failed: ${verbData.infinitive} (${err.message})`));
+    throw err;
   }
 
-  spinner.succeed(`Created ${verbData.infinitive}`);
-  console.log(chalk.green(`✓ Added ${verbData.infinitive} (${selectedMeaning.russian})`));
   return true;
 }
 
@@ -999,6 +1111,7 @@ async function finalizeSentenceVerb(prepared, options, spinner) {
       audioPath: current.audio.audioPath,
       similarCards: current.similarCards,
       addDictionaryForm: current.addDictionaryForm,
+      requestedForm: resolveRequestedVerbForm(current.verbData),
       autoPlay,
     });
 
@@ -1031,11 +1144,17 @@ async function finalizeSentenceVerb(prepared, options, spinner) {
     audio,
     addDictionaryForm,
   } = current;
+  const requestedForm = resolveRequestedVerbForm(verbData);
+  const form = requestedForm || chosenSentence.focusForm || verbData.displayForm;
+  const formPronunciation = addDictionaryForm
+    ? await previewVerbFormPronunciation(form, verbData.infinitive)
+    : null;
 
   const formExplanation = addDictionaryForm
     ? await prepareVerbDictionaryExplanation({
       verbData, selectedMeaning,
-      focusForm: chosenSentence.focusForm || verbData.displayForm,
+      focusForm: form,
+      formPronunciation,
       selectedSentence: { german: sentenceData.german, russian: sentenceData.russian },
     })
     : null;
@@ -1056,53 +1175,76 @@ async function finalizeSentenceVerb(prepared, options, spinner) {
       console.log(`  ${chalk.cyan('Focus form:')} ${focusForm}`);
     }
     console.log(`  ${chalk.cyan('Dictionary form card:')} ${formExplanation ? 'yes' : 'no'}`);
+    if (requestedForm) {
+      console.log(`  ${chalk.cyan('Requested form:')} ${requestedForm} → ${verbData.infinitive}`);
+      console.log(`  ${chalk.cyan('Form card:')} ${formExplanation ? 'would create' : 'skipped'}`);
+      console.log(`  ${chalk.cyan('Sentence card:')} would create`);
+    }
     console.log(chalk.yellow('\n⚡ DRY RUN: Verb sentence previewed'));
     return true;
   }
 
-  spinner.start('Creating sentence note...');
-  const audioFilename = await storeAudio(audio.audioPath);
-  await createNote({
-    german: sentenceData.german,
-    ipa: sentenceData.ipa,
-    russian: sentenceData.russian,
-    audioFilename,
-    context: buildDictionaryFormContext(verbData, chosenSentence.focusForm),
-    contextStyle: 'plain',
-    addReversed: false,
-    task: {
-      label: 'Услышьте форму',
-      instruction: 'Распознайте нужную форму глагола на слух',
-    },
-    cefr: sentenceData.cefr,
-    deck: options.deck,
-    tags: [
-      'mode-verb-sentence',
-      `lemma-${toTagSlug(verbData.infinitive)}`,
-      `verb-form-${toTagSlug(chosenSentence.focusForm || verbData.displayForm || verbData.infinitive)}`,
-      ...buildLearningIntentTags({
-        id: 'verb-sentence-context',
-        trains: ['sound-map', 'morphology-in-context'],
-      }),
-      ...buildContrastTags(verbData.infinitive),
-    ],
-  });
-
   if (formExplanation) {
-    const dictionaryAudio = await buildVerbAudio(verbData, spinner);
-    const dictionaryAudioFilename = await storeAudio(dictionaryAudio.audioPath);
-    await createDictionaryFormNote(
-      verbData,
-      selectedMeaning,
-      chosenSentence.focusForm || verbData.displayForm,
-      options.deck,
-      dictionaryAudioFilename,
-      formExplanation
-    );
+    try {
+      spinner.start(`Creating form card for ${form}...`);
+      const formAudioFilename = await storeVerbFormPronunciation(
+        form, verbData.infinitive, formPronunciation
+      );
+      const formNoteId = await createDictionaryFormNote(
+        verbData, selectedMeaning, form, options.deck,
+        formExplanation, formPronunciation, formAudioFilename
+      );
+      spinner.succeed(`Created form card for ${form}`);
+      console.log(chalk.green(`✓ Added form card ${form} → ${verbData.infinitive}. ${ankiBrowseSearch(formNoteId)}`));
+    } catch (err) {
+      spinner.stop();
+      console.log(chalk.red(`Form card not added: ${form} (${err.message})`));
+      throw err;
+    }
+  } else if (requestedForm) {
+    console.log(chalk.dim(`Form card skipped: ${requestedForm}`));
   }
 
-  spinner.succeed(`Created sentence card for ${verbData.infinitive}`);
-  console.log(chalk.green(`✓ Added verb sentence for ${verbData.infinitive}`));
+  spinner.start('Creating sentence note...');
+  const audioFilename = await storeAudio(audio.audioPath);
+  try {
+    const sentenceNoteId = await createNote({
+      german: sentenceData.german,
+      ipa: sentenceData.ipa,
+      russian: sentenceData.russian,
+      audioFilename,
+      context: buildDictionaryFormContext(verbData, requestedForm || chosenSentence.focusForm),
+      contextStyle: 'plain',
+      addReversed: false,
+      task: {
+        label: 'Услышьте форму',
+        instruction: 'Распознайте нужную форму глагола на слух',
+      },
+      cefr: sentenceData.cefr,
+      deck: options.deck,
+      tags: [
+        'mode-verb-sentence',
+        `lemma-${toTagSlug(verbData.infinitive)}`,
+        `verb-form-${toTagSlug(requestedForm || chosenSentence.focusForm || verbData.displayForm || verbData.infinitive)}`,
+        ...buildLearningIntentTags({
+          id: 'verb-sentence-context',
+          trains: ['sound-map', 'morphology-in-context'],
+        }),
+        ...buildContrastTags(verbData.infinitive),
+      ],
+    });
+    spinner.succeed(`Created sentence card for ${verbData.infinitive}`);
+    console.log(chalk.green(`✓ Added verb sentence for ${verbData.infinitive}. ${ankiBrowseSearch(sentenceNoteId)}`));
+  } catch (err) {
+    spinner.stop();
+    if (formExplanation && /duplicate/i.test(err.message)) {
+      console.log(chalk.dim(`Sentence card already exists for ${verbData.infinitive}`));
+      return true;
+    }
+    console.log(chalk.red(`Sentence card failed for ${verbData.infinitive}: ${err.message}`));
+    throw err;
+  }
+
   return true;
 }
 
@@ -1220,17 +1362,18 @@ export async function runVerbWorkflow(rawInput, options = {}) {
     }
 
     if (prepared.route === 'picture-word') {
-      return finalizePictureVerb(prepared, options, spinner);
+      return await finalizePictureVerb(prepared, options, spinner);
     }
     if (prepared.route === 'strong-verb-package') {
-      return finalizeStrongVerbPackage(prepared, options, spinner);
+      return await finalizeStrongVerbPackage(prepared, options, spinner);
     }
-    return finalizeSentenceVerb(prepared, options, spinner);
+    return await finalizeSentenceVerb(prepared, options, spinner);
   } catch (err) {
     if (err instanceof RecoverableWorkflowError) {
       spinner.stop();
       throw err;
     }
+    spinner.stop();
     spinner.fail(err.message);
     throw err;
   }
