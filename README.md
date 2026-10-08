@@ -295,7 +295,7 @@ Edit `~/.derdiedeck.json`:
   "googleTtsVoices": ["de-DE-Neural2-B", "de-DE-Neural2-C"],
   "braveApiKey": "",
   "whisperModel": "base",
-  "ttsSpeed": 0.75,
+  "ttsSpeed": 0.9,
   "ttsNormalRate": 0.9,
   "ttsPause": 1.0,
   "audioLeadIn": 0.4,

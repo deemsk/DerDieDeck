@@ -81,7 +81,7 @@ const defaults = {
 
   // Audio
   audioFormat: 'mp3',
-  ttsSpeed: 0.75,     // Main speech rate for generated word and sentence audio
+  ttsSpeed: 0.9,      // Main speech rate for generated word and sentence audio
   ttsNormalRate: 0.9, // Default rate for explicit single-clip non-slow TTS calls
   ttsPause: 1.0,      // Legacy setting from the old slow+normal repeated sentence audio
   audioLeadIn: 0.4,   // Silence at start of audio (seconds) for brain to tune in

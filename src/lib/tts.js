@@ -67,7 +67,7 @@ function buildSsml(text, { ipa = null, slow = false, prosodyRate = null } = {}) 
     : escapedText;
 
   const rate = toProsodyRatePercent(
-    prosodyRate != null ? prosodyRate : (slow ? (config.ttsSpeed || 0.75) : null)
+    prosodyRate != null ? prosodyRate : (slow ? (config.ttsSpeed || 0.9) : null)
   );
   if (rate != null && rate !== 100) {
     inner = `<prosody rate="${rate}%">${inner}</prosody>`;

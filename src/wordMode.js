@@ -85,7 +85,7 @@ export function resolveWordAudioPlan(wordData = {}) {
   return {
     spokenText: String(wordData.canonical || getWordLemma(wordData) || '').trim(),
     preferHumanAudio: !isNounWord(wordData),
-    speed: config.ttsSpeed || 0.75,
+    speed: config.ttsSpeed || 0.9,
   };
 }
 

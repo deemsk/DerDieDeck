@@ -209,7 +209,7 @@ async function buildVerbAudio(verbData, spinner) {
 
   const audioPath = join(config.dataDir, `verb_tts_${Date.now()}.mp3`);
   await generateSimpleSpeech(verbData.infinitive, audioPath, {
-    speed: config.ttsSpeed || 0.75,
+    speed: config.ttsSpeed || 0.9,
     ipa: wiktionaryIpa,
   });
   spinner.succeed(wiktionaryIpa
@@ -253,7 +253,7 @@ async function storeVerbFormPronunciation(form, infinitive, previewPronunciation
   try {
     const path = join(config.dataDir, `verb_requested_form_${Date.now()}_${toTagSlug(form)}.mp3`);
     await generateSimpleSpeech(form, path, {
-      speed: config.ttsSpeed || 0.75,
+      speed: config.ttsSpeed || 0.9,
       ipa: previewPronunciation?.ipa || null,
     });
     return await storeAudio(path);
