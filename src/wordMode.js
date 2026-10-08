@@ -6,7 +6,7 @@ import { config } from './lib/config.js';
 import { estimateLexicalCEFR } from './cardContent/cefr.js';
 import { getWordFrequencyInfo } from './lib/wordFrequency.js';
 import { getArticleNormalizationWarning, normalizeGermanForCompare, toTagSlug } from './cardContent/german.js';
-import { applyChosenSentenceGloss, formatPluralLabel, getPrimaryExampleSentence, getWordLemma } from './cardContent/wordLexical.js';
+import { applyChosenSentenceGloss, formatPluralLabel, getPrimaryExampleSentence, getWordLemma, resolveSentenceFocusForm } from './cardContent/wordLexical.js';
 import { formatLexicalTypeLabel, isFunctionLexicalType } from './cardContent/lexicalTypes.js';
 import { validateLexicalClozeSentence } from './cardContent/lexicalClozeValidation.js';
 import { buildContrastHint, buildContrastTags } from './cardContent/interference.js';
@@ -48,6 +48,7 @@ import {
 import { generateSimpleSpeech, generateSpeech } from './lib/tts.js';
 import { enrich, reviewEnrichedText } from './enricher.js';
 import { generateUnambiguousLexicalClozeSentence, verifyLexicalClozeUniqueness } from './lexicalClozeEnricher.js';
+import { explainLexicalCloze } from './lexicalRuleEnricher.js';
 import { RecoverableWorkflowError } from './workflowRecovery.js';
 
 const DEFAULT_WORD_NOTE_TYPE = config.wordNoteType || '2. Picture Words';
@@ -634,6 +635,22 @@ async function prepareWord(rawInput, options, spinner) {
     );
     spinner.succeed(`Cloze sentence ready: ${sentenceData.german}`);
 
+    spinner.start('Preparing contextual explanation...');
+    try {
+      wordData.patternHint = await explainLexicalCloze({
+        canonical: wordData.canonical,
+        target: resolveSentenceFocusForm({ ...sentenceData, focusForm: chosenSentence.focusForm }, wordData),
+        lexicalType: wordData.lexicalType,
+        meaning: selectedMeaning.russian,
+        sentence: sentenceData.german,
+        existingHint: wordData.patternHint || null,
+      });
+    } catch (error) {
+      throw new RecoverableWorkflowError(`Could not prepare cloze explanation: ${error.message}`,
+        { code: 'cloze-explanation-failed', workflow: 'word', allowManualSentence: true });
+    }
+    spinner.succeed('Contextual explanation checked');
+
     const audio = await buildWordSentenceAudio(sentenceData.german, spinner);
 
     return {
@@ -849,18 +866,18 @@ async function finalizeLexicalCloze(prepared, options, spinner) {
     selectedMeaning,
   });
 
+  console.log();
+  console.log(chalk.cyan('┌─ ') + chalk.bold('Lexical cloze preview'));
+  console.log(`${chalk.cyan('│')}  ${formatWordPreviewSummary(chalk, wordData, selectedMeaning?.russian || null, sentenceData.cefr?.level || null)}`);
+  console.log(`${chalk.cyan('│')}  ${chalk.dim('Cloze:')} ${text}`);
+  if (sentenceData.ipa) console.log(`${chalk.cyan('│')}  ${chalk.dim('IPA:')} ${sentenceData.ipa}`);
+  if (sentenceData.russian) console.log(`${chalk.cyan('│')}  ${chalk.dim('Russian:')} ${sentenceData.russian}`);
+  if (wordData.patternHint) {
+    console.log(chalk.cyan('│'));
+    console.log(`${chalk.cyan('│')}  ${chalk.cyan('Правило:')} ${wordData.patternHint}`);
+  }
+  console.log(chalk.cyan('└─'));
   if (options.dryRun) {
-    console.log();
-    console.log(chalk.bold('Lexical cloze preview'));
-    console.log(`  ${formatWordPreviewSummary(chalk, wordData, selectedMeaning?.russian || null, sentenceData.cefr?.level || null)}`);
-    console.log(`  ${chalk.cyan('Cloze:')} ${text}`);
-    if (sentenceData.ipa) {
-      console.log(`  ${chalk.cyan('IPA:')} ${sentenceData.ipa}`);
-    }
-    if (sentenceData.russian) {
-      console.log(`  ${chalk.cyan('Russian:')} ${sentenceData.russian}`);
-    }
-    console.log(`  ${chalk.cyan('Audio:')} sentence`);
     console.log(chalk.yellow('\n⚡ DRY RUN: Lexical cloze previewed'));
     return true;
   }

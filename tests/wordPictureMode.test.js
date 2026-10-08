@@ -98,7 +98,7 @@ jest.unstable_mockModule("../src/lexicalClozeEnricher.js", () => ({
   verifyLexicalClozeUniqueness: jest.fn(async () => ({ valid: true, unique: true, answer: "" })),
 }))
 
-jest.unstable_mockModule("../src/cefr.js", () => ({
+jest.unstable_mockModule("../src/cardContent/cefr.js", () => ({
   estimateLexicalCEFR: jest.fn(async () => null),
 }))
 

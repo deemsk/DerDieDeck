@@ -139,7 +139,7 @@ jest.unstable_mockModule("../src/verbDictionaryPreview.js", () => ({
   prepareVerbDictionaryExplanation: mockPrepareDictionary,
 }))
 
-jest.unstable_mockModule("../src/cefr.js", () => ({
+jest.unstable_mockModule("../src/cardContent/cefr.js", () => ({
   estimateLexicalCEFR: jest.fn(async () => null),
 }))
 

@@ -16,6 +16,7 @@ import { buildLearningIntentTags, buildSiblingStageTags } from './cardContent/le
 import { hasCurrentDerDieDeckStyles, mergeDerDieDeckStyles } from './templates/shared/styles.js';
 import { parseGrammarMetadataComment } from './grammar/utils.js';
 import { isCurrentVerbFormAnswer } from './cardContent/verbFormExplanation.js';
+import { parseLexicalClozeRule, replaceLexicalClozeRule } from './cardContent/lexicalRuleMigration.js';
 
 export function snapshotNote(note) {
   return {
@@ -29,19 +30,46 @@ export function snapshotNote(note) {
 }
 
 /** Apply reviewed Back-only updates. The caller must durably save the backup first. */
-export async function applyNoteBackUpdates(entries, { saveBackup, onResult = () => {} }) {
-  const ready = entries.filter((entry) => entry.status === 'ready');
-  const ids = new Set();
-  for (const entry of ready) {
-    if (!Number.isSafeInteger(entry.noteId) || entry.noteId <= 0 || ids.has(entry.noteId)
-        || entry.original?.noteId !== entry.noteId
-        || !entry.original.tags?.includes('mode-verb-dictionary')
+export async function applyNoteBackUpdates(entries, options) {
+  return applyReviewedNoteUpdates(entries, options, (entry) => {
+    if (!entry.original.tags?.includes('mode-verb-dictionary')
         || typeof entry.original.fields?.Front !== 'string'
         || typeof entry.original.fields?.Back !== 'string'
         || !isCurrentVerbFormAnswer(entry.newBack)) {
       throw new Error('Invalid prepared dictionary migration entry');
     }
+    return { Back: entry.newBack };
+  });
+}
+
+/** Apply only the exact rule-block edit derived from the original snapshot. */
+export async function applyLexicalRuleUpdates(entries, options) {
+  return applyReviewedNoteUpdates(entries, options, (entry) => {
+    try {
+      const note = { ...entry.original, fields: Object.fromEntries(
+        Object.entries(entry.original.fields).map(([name, value]) => [name, { value }])) };
+      const { extraField } = parseLexicalClozeRule(note);
+      if (entry.extraField !== extraField || entry.newExtra !== replaceLexicalClozeRule(note, entry.explanation)) {
+        throw new Error('Rule block mismatch');
+      }
+      return { [extraField]: entry.newExtra };
+    } catch (error) {
+      throw new Error(`Invalid prepared lexical migration entry: ${error.message}`);
+    }
+  });
+}
+
+async function applyReviewedNoteUpdates(entries, { saveBackup, onResult = () => {} }, fieldsForEntry) {
+  const ready = entries.filter((entry) => entry.status === 'ready');
+  const ids = new Set();
+  const updates = new Map();
+  for (const entry of ready) {
+    if (!Number.isSafeInteger(entry.noteId) || entry.noteId <= 0 || ids.has(entry.noteId)
+        || entry.original?.noteId !== entry.noteId) {
+      throw new Error('Invalid prepared migration entry');
+    }
     ids.add(entry.noteId);
+    updates.set(entry.noteId, fieldsForEntry(entry));
   }
   if (ready.length) {
     if (typeof saveBackup !== 'function') throw new Error('A backup writer is required');
@@ -54,13 +82,14 @@ export async function applyNoteBackUpdates(entries, { saveBackup, onResult = () 
       try {
         const [fresh] = await getNotesInfo([entry.noteId]);
         const current = fresh?.noteId === entry.noteId ? snapshotNote(fresh) : null;
-        const expected = { ...entry.original, fields: { ...entry.original.fields, Back: entry.newBack } };
+        const changedFields = updates.get(entry.noteId);
+        const expected = { ...entry.original, fields: { ...entry.original.fields, ...changedFields } };
         if (current && JSON.stringify(current) === JSON.stringify(expected)) {
           result = { noteId: entry.noteId, status: 'already-current' };
         } else if (!current || JSON.stringify(current) !== JSON.stringify(entry.original)) {
           result = { noteId: entry.noteId, status: 'skipped', reason: 'Note changed or disappeared after preview' };
         } else {
-          await updateNoteFields(entry.noteId, { Back: entry.newBack });
+          await updateNoteFields(entry.noteId, changedFields);
           const [saved] = await getNotesInfo([entry.noteId]);
           if (!saved?.noteId || JSON.stringify(snapshotNote(saved)) !== JSON.stringify(expected)) {
             throw new Error('Update verification failed; inspect the note and backup before retrying');

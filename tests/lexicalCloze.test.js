@@ -5,6 +5,14 @@ import { inferFocusFormFromSentence } from "../src/cardContent/wordLexical.js"
 import { buildLexicalClozeExtra, buildLexicalClozeText } from "../src/templates/word/lexicalCloze.js"
 
 describe("lexical cloze templates", () => {
+  test("does not invent a generic rule when the contextual explanation is absent", () => {
+    const extra = buildLexicalClozeExtra({
+      wordData: { canonical: "je", lexicalType: "adverb", patternHint: null },
+      sentenceData: { russian: "Чем больше ты тренируешься, тем лучше становишься." },
+    })
+    expect(extra).not.toContain("Правило:")
+    expect(extra).not.toContain("позици")
+  })
   test("curated function words include three cloze-ready examples", () => {
     const words = [
       "aber",
@@ -175,7 +183,8 @@ describe("lexical cloze templates", () => {
 
   test("buildLexicalClozeExtra keeps the sentence out of the extra field", () => {
     const extra = buildLexicalClozeExtra({
-      wordData: { canonical: "dass", lemma: "dass", lexicalType: "subjunction" },
+      wordData: { canonical: "dass", lemma: "dass", lexicalType: "subjunction",
+        patternHint: "В dass er kommt глагол kommt стоит в конце придаточного." },
       sentenceData: {
         german: "Ich glaube, dass er kommt.",
         ipa: "[ɪç ˈɡlaʊbə das eːɐ̯ kɔmt]",

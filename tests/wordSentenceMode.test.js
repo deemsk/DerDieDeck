@@ -51,6 +51,7 @@ const mockBuildWordGoogleImagesSearch = jest.fn(() => ({
 const mockReviewEnrichedText = jest.fn()
 const mockVerifyLexicalClozeUniqueness = jest.fn()
 const mockGenerateUnambiguousLexicalClozeSentence = jest.fn()
+const mockExplainLexicalCloze = jest.fn()
 const mockEnrich = jest.fn(async () => ({
   german: "Das Haus ist groß.",
   ipa: "[das haʊs ɪst ɡʁoːs]",
@@ -126,7 +127,11 @@ jest.unstable_mockModule("../src/lexicalClozeEnricher.js", () => ({
   verifyLexicalClozeUniqueness: mockVerifyLexicalClozeUniqueness,
 }))
 
-jest.unstable_mockModule("../src/cefr.js", () => ({
+jest.unstable_mockModule("../src/lexicalRuleEnricher.js", () => ({
+  explainLexicalCloze: mockExplainLexicalCloze,
+}))
+
+jest.unstable_mockModule("../src/cardContent/cefr.js", () => ({
   estimateLexicalCEFR: jest.fn(async () => null),
 }))
 
@@ -135,6 +140,7 @@ const { runWordWorkflow } = await import("../src/wordMode.js")
 describe("word mode sentence flow", () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockExplainLexicalCloze.mockReset().mockResolvedValue("В этом примере союз связывает две части; после него сохраняется прямой порядок слов.")
     mockChooseMeaning.mockResolvedValue({
       russian: "большой",
       english: "big",
@@ -174,6 +180,51 @@ describe("word mode sentence flow", () => {
       russian: "Дом большой.",
       cefr: { level: "A1" },
     })
+  })
+
+  function prepareJe() {
+    const sentence = { german: "Je mehr du übst, desto besser wirst du.", russian: "Чем больше ты тренируешься, тем лучше становишься.", focusForm: "Je" }
+    mockChooseMeaning.mockResolvedValue({ russian: "чем" })
+    mockChooseWordSentence.mockResolvedValue(sentence)
+    mockEnrich.mockResolvedValue({ ...sentence, ipa: "[jeː]" })
+    return { analysisResult: { canonical: "je", lemma: "je", lexicalType: "adverb", recommendedMode: "cloze-form",
+      shouldCreateWordCard: true, isImageable: false, meanings: [{ russian: "чем" }], exampleSentences: [sentence] }, skipHeader: true }
+  }
+
+  test("previews the exact contextual rule during dry-run without Anki writes", async () => {
+    const options = prepareJe()
+    const hint = "je … desto … — чем …, тем …; в je mehr du übst глагол стоит в конце."
+    mockExplainLexicalCloze.mockResolvedValue(hint)
+    const log = jest.spyOn(console, "log").mockImplementation(() => {})
+    try {
+      expect(await runWordWorkflow("je", { ...options, dryRun: true })).toBe(true)
+      expect(log.mock.calls.flat().join("\n")).toContain(hint)
+      expect(mockStoreAudio).not.toHaveBeenCalled()
+      expect(mockCreateClozeNote).not.toHaveBeenCalled()
+    } finally { log.mockRestore() }
+  })
+
+  test("intentional null omits the saved rule without a fallback", async () => {
+    const options = prepareJe()
+    mockExplainLexicalCloze.mockResolvedValue(null)
+    await runWordWorkflow("je", options)
+    expect(mockCreateClozeNote.mock.calls[0][0].extra).not.toContain("Правило:")
+  })
+
+  test("explanation failure is recoverable and writes neither notes nor media", async () => {
+    const options = prepareJe()
+    mockExplainLexicalCloze.mockRejectedValue(new Error("offline"))
+    await expect(runWordWorkflow("je", options)).rejects.toMatchObject({ code: "cloze-explanation-failed" })
+    expect(mockCreateClozeNote).not.toHaveBeenCalled()
+    expect(mockStoreAudio).not.toHaveBeenCalled()
+  })
+
+  test("dismissed sentence does not prepare explanations or write a note", async () => {
+    const options = prepareJe()
+    mockChooseWordSentence.mockResolvedValue(null)
+    expect(await runWordWorkflow("je", options)).toBe(false)
+    expect(mockExplainLexicalCloze).not.toHaveBeenCalled()
+    expect(mockCreateClozeNote).not.toHaveBeenCalled()
   })
 
   test("runWordWorkflow renders adjective contrast separately instead of auto context text", async () => {
@@ -350,6 +401,7 @@ describe("word mode sentence flow", () => {
     }))
     expect(mockCreateClozeNote.mock.calls[0][0].extra).toContain("yt2anki-word")
     expect(mockCreateClozeNote.mock.calls[0][0].extra).toContain("Правило:")
+    expect(mockCreateClozeNote.mock.calls[0][0].extra).toContain("В этом примере союз связывает две части")
     expect(mockCreateClozeNote.mock.calls[0][0].extra).toContain("Я устал, но я приду.")
   })
 
@@ -396,6 +448,10 @@ describe("word mode sentence flow", () => {
     expect(added).toBe(true)
     expect(mockVerifyLexicalClozeUniqueness).toHaveBeenCalledTimes(3)
     expect(mockGenerateUnambiguousLexicalClozeSentence).toHaveBeenCalledTimes(1)
+    expect(mockExplainLexicalCloze).toHaveBeenCalledWith(expect.objectContaining({
+      sentence: "Der Mann sagt die Wahrheit, aber sie glaubt ihm nicht.",
+      target: "ihm",
+    }))
     expect(mockCreateClozeNote).toHaveBeenCalledWith(expect.objectContaining({
       text: expect.stringContaining("Der Mann sagt die Wahrheit, aber sie glaubt {{c1::ihm::ему; dative pronoun}} nicht."),
     }))

@@ -1,10 +1,8 @@
-import { FUNCTION_WORD_TYPE_PATTERNS } from '../data/functionWordPatterns.js';
-
 /**
  * Returns a compact pattern explanation for function-word Cloze cards.
  */
 export function buildFunctionWordPatternHint(wordData = {}) {
-  return wordData.patternHint || FUNCTION_WORD_TYPE_PATTERNS[wordData.lexicalType] || null;
+  return wordData.patternHint || null;
 }
 
 /**

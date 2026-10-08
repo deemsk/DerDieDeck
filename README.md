@@ -246,6 +246,31 @@ regenerated. Unknown legacy formats and individual failures are reported by note
 ID. Rerun preview to retry unfinished notes. Sync Anki normally to see the updated
 answers on other devices.
 
+## Explain lexical cloze constructions
+
+New lexical cloze notes explain the target in the final sentence, in concise
+Russian. Paired constructions such as `je … desto …` are explained together.
+The terminal preview shows the same rule that is saved; generic part-of-speech
+fallbacks are omitted. A generation failure remains a recoverable error.
+
+To update existing `mode-lexical-cloze` notes, keep Anki open:
+
+```bash
+node src/index.js migrate-lexical-rules
+# Optional small batch:
+node src/index.js migrate-lexical-rules --note-id 1234567890123
+# After reviewing the generated HTML comparison:
+node src/index.js migrate-lexical-rules --apply /path/to/lexical-preview.json
+```
+
+Preview uses the configured generation and validation models without writing to
+Anki. Existing suitable explanations are retained. Apply backs up the original
+notes, changes only the rule block in `Back Extra` or `Extra`, and checks the
+result by reading it back. Text, cloze markup, translation, IPA, audio, tags, and
+review state are preserved. Changed notes are skipped, repeated application is
+safe, and unknown/custom formats are reported for manual review. Files default to
+`~/.derdiedeck/migrations`; `--output` and `--backup` work as in the verb migration.
+
 ## Configuration
 
 DerDieDeck prefers `~/.derdiedeck.json` and still reads `~/.yt2anki.json` as a legacy fallback.

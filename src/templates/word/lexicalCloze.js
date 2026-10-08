@@ -5,6 +5,7 @@ import { buildWordMetadataComment } from '../../cardContent/wordMetadata.js';
 import { resolveSentenceFocusForm } from '../../cardContent/wordLexical.js';
 import { formatRussianLexicalTypeLabel } from '../../cardContent/lexicalTypes.js';
 import { answerStack } from '../shared/components.js';
+import { renderLexicalRule } from '../../cardContent/lexicalRule.js';
 
 /**
  * Escapes a literal string so it can be safely inserted into a regular expression.
@@ -60,7 +61,7 @@ export function buildLexicalClozeExtra({
   const contrastHint = buildContrastHint(wordData.canonical || wordData.lemma);
   const extraRows = [
     `<div class="ddd-cloze-context">${escapeHtml(wordData.canonical)} · ${escapeHtml(typeLabel)}</div>`,
-    patternHint ? `<div class="ddd-cloze-pattern"><b>Правило:</b> ${escapeHtml(patternHint)}</div>` : null,
+    renderLexicalRule(patternHint),
     contrastHint ? `<div class="ddd-cloze-contrast"><b>Различие:</b> ${escapeHtml(contrastHint)}</div>` : null,
   ].filter(Boolean).join('');
 
