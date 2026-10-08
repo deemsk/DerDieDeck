@@ -1,3 +1,4 @@
+import { containsVerbForm } from './cardContent/verbFormExplanation.js';
 import OpenAI from 'openai';
 import { config, CONFIG_PATH_DISPLAY } from './lib/config.js';
 import { getWordFrequencyInfo } from './lib/wordFrequency.js';
@@ -926,7 +927,7 @@ async function tuneExampleSentencesForLearnerIfNeeded(client, result, options = 
 
 The learner progress context is a preference, not a hard filter.
 Keep the German natural, keep the target word or a direct inflected/surface form, and keep the intended meaning clear.
-Prefer examples that avoid generic beginner filler when a more relevant learner-level sentence would still be short and natural.
+Prefer short natural examples. Basic vocabulary is welcome.
 Do not make the sentence advanced merely for its own sake.`,
         },
         {
@@ -951,7 +952,11 @@ Return up to 3 examples as {"exampleSentences":[{"german":"","russian":"","focus
 
     return {
       ...result,
-      exampleSentences: mergeExampleSentences(reviewed.exampleSentences, result.exampleSentences),
+      exampleSentences: mergeExampleSentences(
+        (reviewed.exampleSentences || []).filter((sentence) =>
+          [result.canonical, result.lemma, ...result.exampleSentences.map(example => example.focusForm)]
+            .filter(Boolean).some(form => containsVerbForm(sentence.german, form))
+        ), result.exampleSentences),
     };
   } catch {
     return result;
@@ -959,6 +964,10 @@ Return up to 3 examples as {"exampleSentences":[{"german":"","russian":"","focus
 }
 
 export async function enrichWord(input, options = {}) {
+  if (options.analysisResult) {
+    if (!shouldTuneExamplesForLearner(options.analysisResult, options)) return options.analysisResult;
+    return tuneExampleSentencesForLearnerIfNeeded(await getClient(), options.analysisResult, options);
+  }
   const curatedFunctionWord = getCuratedFunctionWordAnalysis(input);
   if (curatedFunctionWord) {
     if (!options.learnerProfileContext) {

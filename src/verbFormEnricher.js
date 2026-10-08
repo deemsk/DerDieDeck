@@ -83,9 +83,10 @@ async function requestJson(api, role, name, schema, system, input) {
   return JSON.parse(response.choices?.[0]?.message?.content || 'null');
 }
 
-export async function explainVerbForm({ form, infinitive, meaning, selectedSentence = null }) {
+export async function explainVerbForm({ form, infinitive, meaning, selectedSentence = null, learnerProfileContext = null }) {
   const api = await getClient();
   const context = {
+    ...(learnerProfileContext ? { learnerProfileContext } : {}),
     form, infinitive, meaning,
     selectedSentence: containsVerbForm(selectedSentence?.german, form) ? selectedSentence : null,
   };

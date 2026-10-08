@@ -113,7 +113,7 @@ jest.unstable_mockModule("../src/lib/wordSources.js", () => ({
 
 jest.unstable_mockModule("../src/wordEnricher.js", () => ({
   canProceedWithWeakWordCard: jest.fn(() => false),
-  enrichWord: jest.fn(),
+  enrichWord: jest.fn(async (_input, options) => options.analysisResult),
   hasStructuredWordAnalysis: jest.fn(() => true),
 }))
 
@@ -135,6 +135,7 @@ jest.unstable_mockModule("../src/cardContent/cefr.js", () => ({
   estimateLexicalCEFR: jest.fn(async () => null),
 }))
 
+const { enrichWord: mockProfiledWord } = await import("../src/wordEnricher.js")
 const { runWordWorkflow } = await import("../src/wordMode.js")
 
 describe("word mode sentence flow", () => {
@@ -217,6 +218,15 @@ describe("word mode sentence flow", () => {
     await expect(runWordWorkflow("je", options)).rejects.toMatchObject({ code: "cloze-explanation-failed" })
     expect(mockCreateClozeNote).not.toHaveBeenCalled()
     expect(mockStoreAudio).not.toHaveBeenCalled()
+  })
+
+  test("prepared mixed-route analysis receives progress context", async () => {
+    const options = prepareJe()
+    mockChooseWordSentence.mockResolvedValue(null)
+    await runWordWorkflow("je", { ...options, learnerProfileContext: "Familiar vocabulary: Buch." })
+    expect(mockProfiledWord).toHaveBeenCalledWith("je", expect.objectContaining({
+      learnerProfileContext: "Familiar vocabulary: Buch.", analysisResult: options.analysisResult,
+    }))
   })
 
   test("dismissed sentence does not prepare explanations or write a note", async () => {

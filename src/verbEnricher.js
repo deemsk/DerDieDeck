@@ -1,3 +1,4 @@
+import { containsVerbForm } from './cardContent/verbFormExplanation.js';
 import OpenAI from 'openai';
 import { config, CONFIG_PATH_DISPLAY } from './lib/config.js';
 import { normalizeGermanForCompare } from './cardContent/german.js';
@@ -184,41 +185,52 @@ export function hasStructuredVerbAnalysis(result = {}) {
   );
 }
 
-export async function enrichVerb(input) {
+export async function enrichVerb(input, options = {}) {
+  if (options.analysisResult && !options.learnerProfileContext) return options.analysisResult;
   const client = await getClient();
-  const response = await client.chat.completions.create(withOpenAIModel(OPENAI_MODEL_ROLES.generation, {
+  const response = options.analysisResult ? null : await client.chat.completions.create(withOpenAIModel(OPENAI_MODEL_ROLES.generation, {
     messages: [
-      { role: 'system', content: buildVerbSystemPrompt() },
+      { role: 'system', content: [buildVerbSystemPrompt(), options.learnerProfileContext].filter(Boolean).join('\n\n') },
       { role: 'user', content: input },
     ],
     response_format: VERB_ANALYSIS_RESPONSE_FORMAT,
     temperature: 0.2,
   }));
 
-  const result = sanitizeVerbAnalysis(JSON.parse(response.choices[0].message.content));
+  const result = options.analysisResult ? { ...options.analysisResult, exampleSentences: options.analysisResult.exampleSentences || [] } : sanitizeVerbAnalysis(JSON.parse(response.choices[0].message.content));
 
   if (
     result.shouldCreateVerbCard !== false &&
-    result.recommendedMode === 'sentence-form' &&
-    result.exampleSentences.length < 3
+    (result.recommendedMode === 'sentence-form' || (options.analysisResult && options.learnerProfileContext)) &&
+    (result.exampleSentences.length < 3 || (options.analysisResult && options.learnerProfileContext))
   ) {
-    const completion = await client.chat.completions.create(withOpenAIModel(OPENAI_MODEL_ROLES.generation, {
-      messages: [
-        {
-          role: 'system',
-          content: 'Return JSON only. Generate short natural German example sentences with Russian translations for a German verb flashcard.',
-        },
-        {
-          role: 'user',
-          content: `Verb: ${result.infinitive}\nEncountered/display form: ${result.displayForm}\nExisting examples to avoid:\n${result.exampleSentences.map((sentence) => `- ${sentence.german}`).join('\n') || '- none'}\nReturn exactly ${3 - result.exampleSentences.length} additional examples as {"exampleSentences":[{"german":"","russian":"","focusForm":""}]}.`,
-        },
-      ],
-      response_format: VERB_EXAMPLES_RESPONSE_FORMAT,
-      temperature: 0.2,
-    }));
-    const extra = JSON.parse(completion.choices[0].message.content);
-    result.exampleSentences = mergeExampleSentences(result.exampleSentences, extra.exampleSentences);
+    try {
+      const completion = await client.chat.completions.create(withOpenAIModel(OPENAI_MODEL_ROLES.generation, {
+        messages: [
+          {
+            role: 'system',
+            content: 'Return JSON only. Generate short natural German example sentences with Russian translations for a German verb flashcard.',
+          },
+          {
+            role: 'user',
+            content: `${options.learnerProfileContext || ''}\nVerb: ${result.infinitive}\nEncountered/display form: ${result.displayForm}\nUse this exact encountered form when it differs from the infinitive.\nExisting examples to avoid:\n${result.exampleSentences.map((sentence) => `- ${sentence.german}`).join('\n') || '- none'}\nReturn exactly ${options.analysisResult ? 3 : 3 - result.exampleSentences.length} additional examples as {"exampleSentences":[{"german":"","russian":"","focusForm":""}]}.`,
+          },
+        ],
+        response_format: VERB_EXAMPLES_RESPONSE_FORMAT,
+        temperature: 0.2,
+      }));
+      const extra = JSON.parse(completion.choices[0].message.content);
+      if (normalizeGermanForCompare(result.displayForm) !== normalizeGermanForCompare(result.infinitive)) {
+        extra.exampleSentences = (extra.exampleSentences || []).filter(sentence => containsVerbForm(sentence.german, result.displayForm));
+      }
+      result.exampleSentences = options.analysisResult ? mergeExampleSentences(extra.exampleSentences, result.exampleSentences) : mergeExampleSentences(result.exampleSentences, extra.exampleSentences);
+    } catch (error) {
+      if (!options.analysisResult) throw error;
+      // Optional personalization cannot invalidate an already usable analysis.
+    }
   }
+
+  if (options.analysisResult) return result;
 
   result.meanings = await refineAiGeneratedMeanings({
     client,
@@ -255,6 +267,7 @@ export async function generateVerbFormSentence({
   particle = null,
   meaning = '',
   extraGuidance = '',
+  learnerProfileContext = null,
 }) {
   const client = await getClient();
   const particleRule = particle
@@ -284,7 +297,7 @@ Rules:
       },
       {
         role: 'user',
-        content: `Infinitive: ${infinitive}
+        content: `${learnerProfileContext || ''}\nInfinitive: ${infinitive}
 Meaning: ${meaning}
 Pronoun label: ${pronounLabel}
 Target pronoun to use: ${pronoun}

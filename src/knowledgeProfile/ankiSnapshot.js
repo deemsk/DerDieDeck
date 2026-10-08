@@ -11,7 +11,7 @@ import { parseGrammarMetadataComment } from '../grammar/utils.js';
 import { normalizeGermanForCompare } from '../cardContent/german.js';
 import { CEFR_LEVEL_ORDER } from '../data/learnerProfile.js';
 
-const PROFILE_VERSION = 1;
+export const PROFILE_VERSION = 2;
 const NOTE_INFO_CHUNK_SIZE = 250;
 const CARD_INFO_CHUNK_SIZE = 500;
 
@@ -76,7 +76,7 @@ function extractLexicalType(tags = [], metadata = {}, extraField = '') {
     return fromExtra;
   }
 
-  const tag = tags.find((entry) => /^word-/i.test(entry));
+  const tag = tags.find((entry) => /^word-(noun|verb|adjective|adverb|pronoun|preposition|conjunction|determiner|particle|interjection)$/i.test(entry));
   if (tag) {
     return tag.replace(/^word-/i, '');
   }
@@ -104,12 +104,13 @@ function extractCanonical(note = {}, metadata = {}, tags = [], extraField = '') 
     return fromPictureWord;
   }
 
-  const front = stripHtml(getFieldValue(note, 'Front'));
-  if (front && front.length <= 80) {
-    return front;
+  if (tags.some((tag) => /^mode-verb-/i.test(tag))) {
+    const tagged = tagValue(tags, 'form-') || tagValue(tags, 'verb-form-') || tagValue(tags, 'lemma-');
+    const front = stripHtml(getFieldValue(note, 'Front'));
+    return tagged && front && normalizeGermanForCompare(front) === normalizeGermanForCompare(tagged)
+      ? front : tagged;
   }
-
-  return tagValue(tags, 'lemma-') || tagValue(tags, 'grammar-lemma-');
+  return null;
 }
 
 function extractMeaning(note = {}, metadata = {}, extraField = '') {
@@ -128,36 +129,14 @@ function extractMeaning(note = {}, metadata = {}, extraField = '') {
 
 function buildCardStats(cardInfos = []) {
   const stats = new Map();
-
   for (const card of cardInfos) {
+    if (!Number.isFinite(card.queue) || card.queue < 0 || !(Number(card.reps) > 0)) continue;
     const noteId = card.note || card.noteId;
-    if (!noteId) continue;
-
-    const current = stats.get(noteId) || {
-      cardCount: 0,
-      maxIntervalDays: 0,
-      reps: 0,
-      lapses: 0,
-      hasDueCards: false,
-    };
-
-    const interval = Number(card.interval ?? card.ivl ?? 0);
-    current.cardCount += 1;
-    current.maxIntervalDays = Math.max(current.maxIntervalDays, Number.isFinite(interval) ? interval : 0);
-    current.reps += Number(card.reps || 0);
-    current.lapses += Number(card.lapses || 0);
-    current.hasDueCards = current.hasDueCards || card.queue === 2 || card.isDue === true;
+    const current = stats.get(noteId) || [];
+    current.push(card);
     stats.set(noteId, current);
   }
-
   return stats;
-}
-
-function maturityScore(stats = {}) {
-  const intervalScore = Math.min(Number(stats.maxIntervalDays || 0), 90) / 90;
-  const repsScore = Math.min(Number(stats.reps || 0), 8) / 8;
-  const lapsePenalty = Math.min(Number(stats.lapses || 0), 4) * 0.12;
-  return Math.max(0, Number((intervalScore + repsScore - lapsePenalty).toFixed(3)));
 }
 
 function stableFingerprint(notes = [], cardInfos = []) {
@@ -184,24 +163,6 @@ function stableFingerprint(notes = [], cardInfos = []) {
   return createHash('sha256')
     .update(JSON.stringify({ notes: stableNotes, cards: stableCards }))
     .digest('hex');
-}
-
-function estimateLevel(cefrCounts = {}) {
-  let total = 0;
-  let weighted = 0;
-
-  for (const [index, level] of CEFR_LEVEL_ORDER.entries()) {
-    const count = Number(cefrCounts[level] || 0);
-    total += count;
-    weighted += count * index;
-  }
-
-  if (total === 0) {
-    return null;
-  }
-
-  const average = weighted / total;
-  return CEFR_LEVEL_ORDER[Math.max(0, Math.min(CEFR_LEVEL_ORDER.length - 1, Math.round(average)))];
 }
 
 function summarizeNotes(notes = [], cardInfos = []) {
@@ -239,11 +200,11 @@ function summarizeNotes(notes = [], cardInfos = []) {
     const lexicalType = extractLexicalType(tags, metadata, extraField);
     const meaning = extractMeaning(note, metadata, extraField);
 
-    if (!canonical && !lemma) {
+    if (!canonical || canonical.length > 80 || /[\[\]!?\n]/.test(canonical)) {
       continue;
     }
 
-    const stats = cardStatsByNote.get(note.noteId) || {};
+    const stats = cardStatsByNote.get(note.noteId) || [];
     const key = normalizeGermanForCompare(`${lexicalType || 'word'}:${canonical || lemma}`);
     const current = wordsByKey.get(key) || {
       canonical: canonical || lemma,
@@ -255,16 +216,13 @@ function summarizeNotes(notes = [], cardInfos = []) {
       reps: 0,
       lapses: 0,
       intervalDays: 0,
-      maturityScore: 0,
+      reviewedCards: [],
     };
 
     current.noteCount += 1;
     current.meaning ||= meaning;
     current.cefrLevel ||= cefrLevel;
-    current.reps += Number(stats.reps || 0);
-    current.lapses += Number(stats.lapses || 0);
-    current.intervalDays = Math.max(current.intervalDays, Number(stats.maxIntervalDays || 0));
-    current.maturityScore = Math.max(current.maturityScore, maturityScore(stats));
+    current.reviewedCards.push(...stats);
     wordsByKey.set(key, current);
   }
 
@@ -273,16 +231,22 @@ function summarizeNotes(notes = [], cardInfos = []) {
     totalCards: cardInfos.length,
     modeCounts,
     cefrCounts,
-    estimatedLevel: estimateLevel(cefrCounts),
     grammarFamilies: [...grammarFamilies].sort((a, b) => a.localeCompare(b)),
-    words: [...wordsByKey.values()]
-      .sort((a, b) => (b.maturityScore || 0) - (a.maturityScore || 0) || String(a.canonical).localeCompare(String(b.canonical))),
+    words: [...wordsByKey.values()].map(({ reviewedCards, ...word }) => ({
+      ...word,
+      reps: reviewedCards.reduce((sum, card) => sum + Number(card.reps), 0),
+      intervalDays: reviewedCards.length ? Math.min(...reviewedCards.map((card) => Math.max(0, Number(card.interval ?? card.ivl ?? 0)))) : 0,
+      state: !reviewedCards.length ? 'new' : reviewedCards.every((card) =>
+        card.queue === 2 && Number(card.reps) >= 3 && Number(card.interval ?? card.ivl) >= 21
+      ) ? 'familiar' : 'learning',
+    })).sort((a, b) => a.canonical.localeCompare(b.canonical)),
   };
 }
 
 export async function refreshProfileFromAnki({
   query,
   syncBeforeRefresh = true,
+  sourceEndpoint,
 } = {}) {
   let syncStatus = syncBeforeRefresh ? 'ok' : 'skipped';
   let syncError = null;
@@ -299,25 +263,20 @@ export async function refreshProfileFromAnki({
   const noteIds = await findNotesByQuery(query);
   const notes = await chunked(noteIds, NOTE_INFO_CHUNK_SIZE, getNotesInfo);
 
-  let cardInfos = [];
-  let cardStatus = 'ok';
-  let cardError = null;
-  try {
-    const cardIds = await findCardsByQuery(query);
-    cardInfos = await chunked(cardIds, CARD_INFO_CHUNK_SIZE, getCardsInfo);
-  } catch (err) {
-    cardStatus = 'failed';
-    cardError = err.message;
+  const cardIds = await findCardsByQuery(query);
+  const cardInfos = await chunked(cardIds, CARD_INFO_CHUNK_SIZE, getCardsInfo);
+  if (notes.length !== noteIds.length || cardInfos.length !== cardIds.length) {
+    throw new Error('Incomplete Anki progress snapshot');
   }
 
   const profile = {
     version: PROFILE_VERSION,
     sourceQuery: query,
+    sourceEndpoint,
     refreshedAt: new Date().toISOString(),
     syncStatus,
     syncError,
-    cardStatus,
-    cardError,
+    cardStatus: 'ok',
     fingerprint: stableFingerprint(notes, cardInfos),
     summary: summarizeNotes(notes, cardInfos),
   };

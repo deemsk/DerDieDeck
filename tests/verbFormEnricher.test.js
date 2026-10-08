@@ -48,3 +48,11 @@ test('propagates unavailable generation for retry/skip', async () => {
   create.mockRejectedValue(new Error('offline'))
   await expect(explainVerbForm(request)).rejects.toThrow('offline')
 })
+
+test('uses progress preferences without replacing a selected sentence', async () => {
+  create.mockResolvedValueOnce(answer(explanation)).mockResolvedValueOnce(answer({ valid: true, reason: '' }))
+  await explainVerbForm({ ...request, learnerProfileContext: 'Familiar vocabulary: Buch.' })
+  const context = JSON.parse(create.mock.calls[0][0].messages[1].content)
+  expect(context.learnerProfileContext).toContain('Buch')
+  expect(context.selectedSentence).toEqual(explanation.example)
+})

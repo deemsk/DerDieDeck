@@ -69,10 +69,11 @@ async function question(prompt) {
 
 export async function prepareVerbDictionaryExplanation({
   verbData, selectedMeaning, focusForm = null, selectedSentence = null,
-  formPronunciation = null, companionSentence = null,
+  formPronunciation = null, companionSentence = null, learnerProfileContext = null,
 }, { generate = explainVerbForm, ask = question, askSentenceReview = askReviewFeedback,
   log = console.log, chalkRef = chalk, columns = process.stdout.columns || 80 } = {}) {
   const context = {
+    ...(learnerProfileContext ? { learnerProfileContext } : {}),
     form: focusForm || verbData.displayForm || verbData.infinitive,
     infinitive: verbData.infinitive,
     meaning: selectedMeaning?.russian,

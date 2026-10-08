@@ -216,7 +216,7 @@ function showWordHeader(rawInput) {
 }
 
 async function resolveLearnerProfileForWord(rawInput, options = {}) {
-  if (options.analysisResult || options.learnerProfileContext === false) {
+  if (options.learnerProfileContext === false) {
     return null;
   }
 
@@ -226,7 +226,7 @@ async function resolveLearnerProfileForWord(rawInput, options = {}) {
 
   try {
     const result = await getLearnerProfilePromptContext({
-      target: { rawInput },
+      target: { rawInput, canonical: options.analysisResult?.canonical, lemma: options.analysisResult?.lemma },
       allowRefresh: options.knowledgeProfileRefresh !== false,
       allowSync: !options.dryRun,
     });
@@ -399,7 +399,7 @@ async function rebuildSentenceWordPreview(prepared, feedback, options, spinner) 
 async function prepareWord(rawInput, options, spinner) {
   const learnerProfileContext = await resolveLearnerProfileForWord(rawInput, options);
   spinner.start('Analyzing word...');
-  const wordData = options.analysisResult || await enrichWord(rawInput, { learnerProfileContext });
+  const wordData = options.analysisResult && (!learnerProfileContext || options.sentence) ? options.analysisResult : await enrichWord(rawInput, { learnerProfileContext, analysisResult: options.analysisResult });
   const route = resolveWordRoute(wordData);
   const structuredAnalysis = hasStructuredWordAnalysis(wordData);
   const recoverableWeakCandidate = route === 'picture-word' && canProceedWithWeakWordCard(wordData);

@@ -1,3 +1,4 @@
+import { resolveLearnerProfileForInput } from './knowledgeProfile/index.js';
 import { createInterface } from 'readline';
 import { join } from 'path';
 import ora from 'ora';
@@ -616,6 +617,7 @@ async function prepareStrongVerbPackage({ verbData, selectedMeaning, route, freq
     if (!generated) {
       for (let attempt = 0; attempt < 2; attempt += 1) {
         generated = await generateVerbFormSentence({
+          learnerProfileContext: options.learnerProfileContext,
           infinitive: verbData.infinitive,
           pronounLabel: formSpec.label,
           pronoun: formSpec.pronoun,
@@ -720,7 +722,7 @@ async function prepareStrongVerbPackage({ verbData, selectedMeaning, route, freq
 
 async function prepareVerb(rawInput, options, spinner) {
   spinner.start('Analyzing verb...');
-  const verbData = options.analysisResult || await enrichVerb(rawInput);
+  const verbData = options.analysisResult && (!options.learnerProfileContext || options.sentence) ? options.analysisResult : await enrichVerb(rawInput, options);
   const recoverable = hasStructuredVerbAnalysis(verbData);
 
   if (!verbData.shouldCreateVerbCard && !recoverable) {
@@ -974,6 +976,7 @@ async function finalizePictureVerb(prepared, options, spinner) {
     : null;
   const formExplanation = confirmation.addDictionaryForm
     ? await prepareVerbDictionaryExplanation({
+      learnerProfileContext: options.learnerProfileContext,
       verbData, selectedMeaning, focusForm: verbData.displayForm,
       formPronunciation,
       selectedSentence: filterVerbExampleSentences(
@@ -1146,6 +1149,7 @@ async function finalizeSentenceVerb(prepared, options, spinner) {
       : null;
     formExplanation = current.addDictionaryForm
       ? await prepareVerbDictionaryExplanation({
+        learnerProfileContext: options.learnerProfileContext,
         verbData: current.verbData,
         selectedMeaning: current.selectedMeaning,
         focusForm: form,
@@ -1371,6 +1375,7 @@ async function finalizeStrongVerbPackage(prepared, options, spinner) {
 
 export async function runVerbWorkflow(rawInput, options = {}) {
   const spinner = ora();
+  options = { ...options, learnerProfileContext: await resolveLearnerProfileForInput(rawInput, options, (warning) => console.log(chalk.yellow(warning))) };
 
   try {
     if (!options.skipHeader) {

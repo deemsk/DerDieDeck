@@ -317,7 +317,8 @@ Notes:
 - `ttsPause` is a legacy setting from the old repeated sentence-audio flow and is no longer used in the default word/verb paths.
 - `wordNoteType` is used for picture-word cards.
 - `grammarNoteType` should point to an Anki cloze model with `Text` and `Back Extra` or `Extra`.
-- `knowledgeProfile*` settings let the app refresh a local, best-effort learning profile from Anki and use a compact summary to tune generated examples.
+- `knowledgeProfile*` settings personalize new word and verb examples using explicit lexical targets and Anki review evidence. Familiar targets require at least three repetitions and a 21-day interval on every active reviewed sibling; still-learning targets are listed separately. This is a vocabulary preference, not a CEFR or mastery assessment. New and suspended cards are not treated as known vocabulary.
+- Profiles are bound to the Anki endpoint and query. Legacy, incomplete, and expired caches are rejected; offline generation still works. Usable session results are rechecked after five minutes, unavailable results after thirty seconds. Text/clip source sentences and user-selected examples are preserved.
 
 ## Stack
 

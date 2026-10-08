@@ -151,7 +151,7 @@ jest.unstable_mockModule("../src/cardContent/cefr.js", () => ({
 }))
 
 jest.unstable_mockModule("../src/verbEnricher.js", () => ({
-  enrichVerb: jest.fn(),
+  enrichVerb: jest.fn(async (_input, options) => options.analysisResult),
   generateVerbFormSentence: mockGenerateVerbFormSentence,
   hasStructuredVerbAnalysis: jest.fn(() => true),
   shouldOfferDictionaryFormCard: jest.fn(() => true),
@@ -171,6 +171,11 @@ jest.unstable_mockModule("../src/lib/wordSources.js", () => ({
   resolveWordPronunciation: mockResolveWordPronunciation,
 }))
 
+jest.unstable_mockModule("../src/knowledgeProfile/index.js", () => ({
+  resolveLearnerProfileForInput: jest.fn(async (_input, options) => options.learnerProfileContext || null),
+}))
+
+const { enrichVerb: mockProfiledVerb } = await import("../src/verbEnricher.js")
 const { runVerbWorkflow } = await import("../src/verbMode.js")
 
 describe("verb mode sentence flow", () => {
@@ -314,14 +319,17 @@ describe("verb mode sentence flow", () => {
     expect(mockEnsureDeck).not.toHaveBeenCalled()
   })
 
-  test("picture verbs use the same dictionary explanation before writing", async () => {
+  test("picture verbs personalize prepared analyses and share dictionary explanation before writing", async () => {
     mockConfirmPictureVerbSelection.mockResolvedValueOnce({ confirmed: true, addDictionaryForm: true })
     await runVerbWorkflow("läuft", {
+      learnerProfileContext: "Familiar vocabulary: Park.",
       analysisResult: { shouldCreateVerbCard: true, infinitive: "laufen", displayForm: "läuft",
         recommendedMode: "picture-word", meanings: [{ russian: "бежать", english: "run" }],
         exampleSentences: [{ german: "Er läuft im Park.", russian: "Он бежит в парке." }],
       }, skipHeader: true,
     })
+    expect(mockProfiledVerb).toHaveBeenCalledWith("läuft", expect.objectContaining({ learnerProfileContext: "Familiar vocabulary: Park.", analysisResult: expect.objectContaining({ infinitive: "laufen" }) }))
+    expect(mockPrepareDictionary).toHaveBeenCalledWith(expect.objectContaining({ learnerProfileContext: "Familiar vocabulary: Park." }))
     expect(mockPrepareDictionary.mock.invocationCallOrder[0]).toBeLessThan(mockCreatePictureWordNote.mock.invocationCallOrder[0])
     expect(mockCreateBasicNote.mock.calls[0][0].back).toContain("Er läuft im Park.")
   })
