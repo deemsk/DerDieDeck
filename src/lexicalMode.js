@@ -4,6 +4,7 @@ import chalk from 'chalk';
 import { enrichWord, hasStructuredWordAnalysis } from './wordEnricher.js';
 import { enrichVerb, hasStructuredVerbAnalysis } from './verbEnricher.js';
 import { getCuratedFunctionWordAnalysis } from './cardContent/functionWords.js';
+import { LEXICAL_TYPES } from './cardContent/lexicalTypes.js';
 import { shouldCheckLexicalCorrection, suggestLexicalCorrections } from './lexicalCorrection.js';
 import { classifyLexicalRoute } from './lexicalRouter.js';
 import { runWordWorkflow } from './wordMode.js';
@@ -125,47 +126,51 @@ export async function analyzeLexicalCandidates(
   return chooseLexicalRouteFromAnalyses(wordAnalysis, verbAnalysis);
 }
 
-function describeWordAnalysis(result = {}) {
-  if (!result?.canonical) {
-    return 'word analysis unavailable';
-  }
-
-  const type = result.lexicalType || 'noun';
-  return `${result.canonical} (${type})`;
+function describeMeaning(result) {
+  const meaning = result?.meanings?.find((entry) => typeof entry?.russian === 'string' && entry.russian.trim())?.russian;
+  return meaning ? ` — ${meaning.trim()}` : '';
 }
 
-function describeVerbAnalysis(result = {}) {
-  if (!result?.infinitive) {
-    return 'verb analysis unavailable';
-  }
-
-  if (result.displayForm && result.displayForm !== result.infinitive) {
-    return `${result.infinitive} (${result.displayForm})`;
-  }
-
-  return result.infinitive;
+function describeWordAnalysis(result) {
+  const type = String(result?.lexicalType || '').trim().toLowerCase();
+  const label = !LEXICAL_TYPES.has(type) ? 'Part of speech unavailable'
+    : type === 'subjunction' ? 'Subordinating conjunction'
+      : type[0].toUpperCase() + type.slice(1);
+  const canonical = String(result?.canonical || '').trim();
+  return `${label}: ${canonical ? canonical + describeMeaning(result) : 'analysis unavailable'}`;
 }
 
-async function askLexicalRoute(rawInput, classification) {
-  console.log();
-  console.log(chalk.yellow(`Could not confidently classify "${rawInput}".`));
-  console.log(chalk.dim(
+function describeVerbAnalysis(result) {
+  const infinitive = String(result?.infinitive || '').trim();
+  if (!infinitive) return 'Verb: analysis unavailable';
+  const form = String(result?.displayForm || '').trim();
+  const item = form && form !== infinitive
+    ? `Verb form: ${form} → ${infinitive}` : `Verb: ${infinitive}`;
+  return item + describeMeaning(result);
+}
+
+export async function askLexicalRoute(rawInput, classification, { ask: askChoice = ask, write = console.log } = {}) {
+  write();
+  write(chalk.yellow(`Which interpretation did you intend for "${rawInput}"?`));
+  write(chalk.dim(
     classification.reason === 'both-plausible'
-      ? 'Both word and verb analyses look plausible.'
-      : 'Both word and verb analyses look weak.'
+      ? 'The analyses disagree. These are possible interpretations:'
+      : 'Neither analysis is reliable. Choose an interpretation only if you recognize it, or skip.'
   ));
-  console.log(chalk.dim(`  word: ${describeWordAnalysis(classification.wordAnalysis)}`));
-  console.log(chalk.dim(`  verb:           ${describeVerbAnalysis(classification.verbAnalysis)}`));
+  write();
+  write(`  1. ${describeWordAnalysis(classification.wordAnalysis)}`);
+  write(`  2. ${describeVerbAnalysis(classification.verbAnalysis)}`);
+  write();
 
   while (true) {
-    const answer = await ask('Choose [W]ord, [V]erb, or [S]kip: ');
-    const normalized = answer.toLowerCase();
+    const answer = await askChoice('Choose [1/2], or [S]kip (Enter = skip): ');
+    const normalized = answer.trim().toLowerCase();
 
-    if (normalized === 'w' || normalized === 'word') {
+    if (normalized === '1' || normalized === 'w' || normalized === 'word') {
       return 'word';
     }
 
-    if (normalized === 'v' || normalized === 'verb') {
+    if (normalized === '2' || normalized === 'v' || normalized === 'verb') {
       return 'verb';
     }
 
@@ -372,7 +377,7 @@ async function detectLexicalRoute(rawInput, options = {}) {
     };
   }
 
-  console.log(chalk.dim(`Using ${chosenRoute === 'word' ? 'word' : 'verb'} workflow.`));
+  console.log(chalk.dim(`Selected interpretation ${chosenRoute === 'word' ? '1' : '2'}.`));
   const analysisResult = chosenRoute === 'word'
     ? (classification.wordPlausible ? classification.wordAnalysis : null)
     : (classification.verbPlausible ? classification.verbAnalysis : null);
