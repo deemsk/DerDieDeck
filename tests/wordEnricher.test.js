@@ -1,9 +1,51 @@
-import { buildBareLexicalAdjectiveFallback, buildBareLexicalAdverbFallback, buildEverydayFamilyNounFallback, buildFunctionWordFallback, canProceedWithWeakWordCard, hasStructuredWordAnalysis, normalizeRussianLearnerText, shouldCompleteMissingMeanings, shouldFallbackBareAdverbRejection, shouldRetryBareLexicalRejection, shouldRetryFunctionWordRejection, shouldRetryGermanInputPreservation, shouldRetryImageableNounRejection, shouldSuppressAdjectiveContrast } from "../src/wordEnricher.js"
+import { jest } from "@jest/globals"
+import { buildBareLexicalAdjectiveFallback, buildBareLexicalAdverbFallback, buildEverydayFamilyNounFallback, buildFunctionWordFallback, canProceedWithWeakWordCard, hasStructuredWordAnalysis, normalizeRussianLearnerText, repairRussianLearnerHints, shouldCompleteMissingMeanings, shouldFallbackBareAdverbRejection, shouldRetryBareLexicalRejection, shouldRetryFunctionWordRejection, shouldRetryGermanInputPreservation, shouldRetryImageableNounRejection, shouldSuppressAdjectiveContrast } from "../src/wordEnricher.js"
 
 describe("word enricher retries", () => {
   test("rejects English learner-facing grammar text", () => {
     expect(normalizeRussianLearnerText("Dative pronoun after a verb")).toBeNull()
     expect(normalizeRussianLearnerText("Местоимение в Dativ после глагола")).toBe("Местоимение в Dativ после глагола")
+  })
+
+  test("rejects German grammar prose even when Russian glosses are quoted", () => {
+    expect(normalizeRussianLearnerText("„ihrer“ kann je nach Kontext Dativ Singular feminin, Genitiv Singular feminin oder Genitiv Plural sein; die Bedeutung ist meist „её“ oder „их“."))
+      .toBeNull()
+    expect(normalizeRussianLearnerText("Форма ihrer: Dativ Singular feminin или Genitiv Plural; перевод зависит от контекста."))
+      .toBe("Форма ihrer: Dativ Singular feminin или Genitiv Plural; перевод зависит от контекста.")
+  })
+
+  test("repairs a German grammar hint before lexical preview while preserving a valid Russian hint", async () => {
+    const client = { chat: { completions: { create: jest.fn(async () => ({
+      choices: [{ message: { content: JSON.stringify({
+        clozeHint: null,
+        patternHint: "Форма ihrer может быть дательным падежом единственного числа женского рода или родительным падежом единственного и множественного числа.",
+      }) } }],
+    })) } } }
+    const analysis = {
+      canonical: "ihrer",
+      lexicalType: "determiner",
+      clozeHint: "притяжательный определитель",
+      patternHint: "„ihrer“ kann je nach Kontext Dativ Singular feminin, Genitiv Singular feminin oder Genitiv Plural sein; die Bedeutung ist meist „её“ oder „их“.",
+    }
+
+    const repaired = await repairRussianLearnerHints(client, analysis)
+
+    expect(repaired.clozeHint).toBe(analysis.clozeHint)
+    expect(repaired.patternHint).toMatch(/^Форма ihrer может быть/)
+    expect(client.chat.completions.create).toHaveBeenCalledTimes(1)
+  })
+
+  test("omits an invalid hint when targeted repair remains German or fails", async () => {
+    const analysis = { canonical: "ihrer", patternHint: "„ihrer“ kann je nach Kontext Dativ Singular feminin sein; перевод „её“." }
+    const invalidClient = { chat: { completions: { create: jest.fn(async () => ({
+      choices: [{ message: { content: JSON.stringify({ clozeHint: null, patternHint: analysis.patternHint }) } }],
+    })) } } }
+    const failingClient = { chat: { completions: { create: jest.fn(async () => { throw new Error("unavailable") }) } } }
+
+    await expect(repairRussianLearnerHints(invalidClient, analysis))
+      .resolves.toEqual({ ...analysis, patternHint: null })
+    await expect(repairRussianLearnerHints(failingClient, analysis))
+      .resolves.toEqual({ ...analysis, patternHint: null })
   })
 
   test("retries false abstract rejection for visible scene nouns like Himmel", () => {

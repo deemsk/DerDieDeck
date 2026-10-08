@@ -357,7 +357,61 @@ function resolveRecommendedMode(lexicalType, result = {}) {
 
 export function normalizeRussianLearnerText(text = '') {
   const value = String(text || '').trim();
-  return value && /[А-Яа-яЁё]/.test(value) ? value : null;
+  const unquoted = value.replace(/„[^“]*“|«[^»]*»|"[^"]*"/g, ' ');
+  const russianWords = unquoted.match(/[А-Яа-яЁё]+/g) || [];
+  const grammarTerms = new Set([
+    'akkusativ', 'dativ', 'genitiv', 'nominativ', 'singular', 'plural',
+    'maskulin', 'feminin', 'neutrum', 'präsens', 'präteritum', 'perfekt',
+    'konjunktiv', 'imperativ', 'indikativ',
+  ]);
+  const foreignWords = (unquoted.match(/[A-Za-zÄÖÜäöüß]+/g) || [])
+    .filter((word) => !grammarTerms.has(word.toLocaleLowerCase('de')));
+  return russianWords.length > 0 && russianWords.length >= foreignWords.length
+    ? value
+    : null;
+}
+
+export async function repairRussianLearnerHints(client, analysis = {}) {
+  const hintKeys = ['clozeHint', 'patternHint'];
+  const invalidKeys = hintKeys.filter((key) =>
+    String(analysis[key] || '').trim() && !normalizeRussianLearnerText(analysis[key]));
+  if (invalidKeys.length === 0) {
+    return analysis;
+  }
+
+  const fallback = { ...analysis };
+  invalidKeys.forEach((key) => { fallback[key] = null; });
+
+  try {
+    const response = await client.chat.completions.create(withOpenAIModel(OPENAI_MODEL_ROLES.validation, {
+      messages: [
+        {
+          role: 'system',
+          content: `Rewrite only the supplied invalid lexical hints as short Russian explanations for a Russian-speaking German learner. Preserve accurate grammar and meaning distinctions. German lexical forms and grammatical labels such as Dativ and Genitiv may remain, but the explanatory prose must be Russian. Do not invent grammatical readings. Return JSON only; use null for a hint that cannot be repaired.`,
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            canonical: analysis.canonical,
+            lexicalType: analysis.lexicalType,
+            meanings: analysis.meanings?.map((meaning) => meaning.russian).filter(Boolean) || [],
+            invalidHints: Object.fromEntries(invalidKeys.map((key) => [key, analysis[key]])),
+          }),
+        },
+      ],
+      response_format: jsonSchemaResponse('russian_lexical_hints', strictObject({
+        clozeHint: nullableStringSchema,
+        patternHint: nullableStringSchema,
+      })),
+    }));
+    const repaired = JSON.parse(response.choices?.[0]?.message?.content || '{}');
+    return {
+      ...analysis,
+      ...Object.fromEntries(invalidKeys.map((key) => [key, normalizeRussianLearnerText(repaired[key])])),
+    };
+  } catch {
+    return fallback;
+  }
 }
 
 function sanitizeWordAnalysis(result = {}) {
@@ -746,10 +800,11 @@ async function requestWordAnalysis(client, input, options = {}) {
     temperature: 0.2,
   }));
 
-  return hydrateFallbackModifierAnalysis(
-    input,
-    sanitizeWordAnalysis(JSON.parse(response.choices[0].message.content))
+  const analysis = await repairRussianLearnerHints(
+    client,
+    JSON.parse(response.choices[0].message.content)
   );
+  return hydrateFallbackModifierAnalysis(input, sanitizeWordAnalysis(analysis));
 }
 
 async function requestCompletedWordAnalysis(client, input, options = {}) {
