@@ -180,3 +180,17 @@ test('regeneration replaces the framed preview before the separated action promp
   const result = await prepareVerbDictionaryExplanation(denkenInput, { generate, ask, log, columns: 100, chalkRef: new Chalk({ level: 0 }) })
   expect(result).toBe(revised)
 })
+
+test('failed companion explanation can request a new example using the failure reason', async () => {
+  const ask = jest.fn(async prompt => {
+    expect(prompt).toContain('[N]ew example')
+    expect(prompt).toContain('[E]dit sentence')
+    return 'n'
+  })
+  const result = await prepareVerbDictionaryExplanation({ ...input, companionSentence: explanation.example }, {
+    generate: async () => { throw new Error('wrong lemma: nachsehen') }, ask, log: () => {},
+  })
+  expect(result.reviewFeedback).toContain('nachsehen')
+  expect(result.reviewFeedback).toContain('sein')
+  expect(result.reviewFeedback).toContain('wäre')
+})

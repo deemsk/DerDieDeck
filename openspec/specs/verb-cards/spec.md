@@ -12,6 +12,10 @@ dedicated form duplicate lookup by [anki.test.js](../../../tests/anki.test.js),
 morphology by [verbMorphology.test.js](../../../tests/verbMorphology.test.js),
 package validation by [verbPackage.test.js](../../../tests/verbPackage.test.js),
 and templates by [ankiVerb.test.js](../../../tests/ankiVerb.test.js).
+Early semantic example review is implemented by
+[verbSentenceValidation.js](../../../src/verbSentenceValidation.js) and covered by
+[verbSentenceValidation.test.js](../../../tests/verbSentenceValidation.test.js),
+chooser tests, and workflow boundary tests.
 Human pronunciation audio availability for a particular lemma depends on the external source.
 
 Dictionary-form explanations are generated and semantically reviewed by
@@ -647,7 +651,8 @@ punctuation. It SHALL inspect all generated suggestions before taking the
 first three relevant ones. A lemma or another inflection SHALL NOT count as
 the requested form. The chosen sentence's focus SHALL remain the requested
 form even if analysis supplied a different focus label. Infinitive-only
-requests SHALL retain their existing example selection behavior.
+requests SHALL allow ordinary inflections of the same lemma; all candidates
+SHALL pass lexical-identity review before the three-example display limit.
 
 #### Scenario: Imperative among infinitive examples
 
@@ -692,7 +697,8 @@ requests SHALL retain their existing example selection behavior.
 
 - **GIVEN** the learner requests `gehen` rather than `geh`
 - **WHEN** the sentence chooser opens
-- **THEN** its existing first-three-suggestion behavior is unchanged.
+- **THEN** up to three examples that pass lexical-identity review are offered;
+  conjugated forms of `gehen` remain eligible.
 
 ### Requirement: VERB-19 — Pronunciation of the requested form
 
@@ -729,3 +735,47 @@ an otherwise valid card from being created. Dry-run SHALL not write media to Ank
 - **THEN** no infinitive pronunciation is mislabeled as the form's IPA; missing
   optional pronunciation does not stop the card, and dry-run makes no Anki
   media write.
+
+
+### Requirement: VERB-20 — Validate example lexical identity early
+
+In ordinary sentence and picture verb workflows, before presenting examples,
+the application SHALL review whether the
+requested form belongs to the intended infinitive and meaning in each sentence.
+Token presence alone SHALL NOT establish lexical identity. Rejected candidates
+SHALL NOT appear as choices. Manual and preferred sentences SHALL pass the same
+check; changed AI revisions SHALL be checked before new audio is generated.
+Picture-verb candidate examples SHALL use the same review. Validation failures
+SHALL stop preparation with recoverable feedback, not silently admit candidates.
+
+#### Scenario: Separable verb changes the lemma
+- **GIVEN** the target is `sieh` from `sehen`
+- **WHEN** suggestions include `Sieh bitte nach, ob die Tür zu ist.`
+- **THEN** this `nachsehen` example is excluded before selection and audio.
+
+#### Scenario: Ordinary directional preposition
+- **GIVEN** the target is `sieh` from `sehen`
+- **WHEN** `Sieh nach links.` is reviewed
+- **THEN** `nach` is assessed in context and is not rejected merely for occurring.
+
+#### Scenario: All candidates are invalid
+- **GIVEN** semantic review rejects every suggestion
+- **WHEN** the chooser continues
+- **THEN** it offers manual entry or skipping; manual entry is also validated.
+
+#### Scenario: Incomplete or unavailable review
+- **WHEN** semantic review fails or omits a candidate verdict
+- **THEN** unverified examples are not offered and no sentence audio is prepared.
+
+### Requirement: VERB-21 — Replace examples after explanation failure
+
+When a companion dictionary-form explanation fails, the review dialog SHALL
+allow requesting a new example or editing the sentence. New-example revision
+SHALL receive the failure reason and preserve the requested infinitive and form.
+The replacement SHALL pass lexical-identity review before audio and saving.
+
+#### Scenario: Late lemma mismatch
+- **GIVEN** explanation review rejects an example as belonging to another lemma
+- **WHEN** the user requests a new example
+- **THEN** sentence revision is requested with that reason instead of retrying
+  the explanation against the same unchanged sentence.

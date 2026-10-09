@@ -81,6 +81,7 @@ export async function prepareVerbDictionaryExplanation({
   };
   while (true) {
     let explanation;
+    let failureReason;
     try {
       log('Preparing dictionary form explanation...');
       explanation = validateVerbFormExplanation(await generate(context), context);
@@ -90,6 +91,7 @@ export async function prepareVerbDictionaryExplanation({
       }
     } catch (error) {
       explanation = null;
+      failureReason = error.message;
       log(`Dictionary card not prepared: ${error.message}`);
     }
     while (true) {
@@ -98,10 +100,13 @@ export async function prepareVerbDictionaryExplanation({
           ? 'Dictionary card + sentence: [Y]es (add both), [R]egenerate, [E]dit sentence, [S]kip form (add sentence), [D]ismiss both: '
           : 'Dictionary card: [Y]es, [R]egenerate, [S]kip: '
         : companionSentence
-          ? 'Dictionary explanation failed: [R]etry, [S]kip form (add sentence), [D]ismiss both: '
+          ? 'Dictionary explanation failed: [N]ew example, [E]dit sentence, [R]etry explanation, [S]kip form (add sentence), [D]ismiss both: '
           : 'Dictionary explanation failed: [R]etry, [S]kip this card: ')).trim().toLowerCase();
       if (companionSentence && ['d', 'dismiss'].includes(answer)) return false;
-      if (companionSentence && explanation && ['e', 'edit'].includes(answer)) {
+      if (companionSentence && !explanation && ['n', 'new'].includes(answer)) {
+        return { reviewFeedback: `Replace this example with a different short sentence using the exact form ${context.form} of ${context.infinitive}, preserving its intended meaning. Fix the reason for rejection: ${failureReason}` };
+      }
+      if (companionSentence && ['e', 'edit'].includes(answer)) {
         const reviewFeedback = await askSentenceReview();
         if (reviewFeedback) return { reviewFeedback };
         continue;

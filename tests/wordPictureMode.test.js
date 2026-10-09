@@ -111,6 +111,7 @@ describe("word mode picture flow", () => {
 
   test("runWordWorkflow can create a picture-word note without an image", async () => {
     const added = await runWordWorkflow("ziemlich", {
+      learnerProfileContext: false,
       analysisResult: {
         shouldCreateWordCard: true,
         isImageable: true,

@@ -1,3 +1,4 @@
+import { reviewVerbExamples } from './verbSentenceValidation.js';
 import { createInterface } from 'readline';
 import chalk from 'chalk';
 import { askReviewFeedback, playAudio } from './confirm.js';
@@ -55,11 +56,11 @@ function containsRequestedForm(sentence, form) {
   return Boolean(normalizedForm && (` ${normalizedSentence} `).includes(` ${normalizedForm} `));
 }
 
-export function filterVerbExampleSentences(examples, requestedForm = null) {
+export function filterVerbExampleSentences(examples, requestedForm = null, limit = 3) {
   const candidates = Array.isArray(examples) ? examples : [];
   return (requestedForm
     ? candidates.filter((sentence) => containsRequestedForm(sentence?.german, requestedForm))
-    : candidates).slice(0, 3);
+    : candidates).slice(0, limit);
 }
 
 export async function chooseVerbSentence(verbData, preferredSentence = null, { askInput = ask, write = console.log } = {}) {
@@ -76,6 +77,10 @@ export async function chooseVerbSentence(verbData, preferredSentence = null, { a
         write(`The example must contain ${requestedForm} as a separate form.`);
         continue;
       }
+      if (!(await reviewVerbExamples(verbData, [{ german: manual }])).length) {
+        write(`The example does not match ${requestedForm || verbData.displayForm || verbData.infinitive} from ${verbData.infinitive}. Try another sentence.`);
+        continue;
+      }
       return {
         german: manual,
         russian: verbData.meanings?.[0]?.russian || '',
@@ -87,6 +92,10 @@ export async function chooseVerbSentence(verbData, preferredSentence = null, { a
   if (preferredSentence) {
     if (requestedForm && !containsRequestedForm(preferredSentence, requestedForm)) {
       write(`The supplied sentence does not contain the requested form ${requestedForm}.`);
+      return null;
+    }
+    if (!(await reviewVerbExamples(verbData, [{ german: preferredSentence }])).length) {
+      write(`The supplied sentence does not match ${verbData.infinitive} in this context.`);
       return null;
     }
     const existing = verbData.exampleSentences?.find((sentence) => sentence.german === preferredSentence);
@@ -101,7 +110,13 @@ export async function chooseVerbSentence(verbData, preferredSentence = null, { a
     };
   }
 
-  const sentences = filterVerbExampleSentences(verbData.exampleSentences, requestedForm);
+  const candidates = filterVerbExampleSentences(verbData.exampleSentences, requestedForm, Infinity);
+  if (candidates.length) write(chalk.dim(`Checking example sentences for ${verbData.infinitive}...`));
+  const sentences = (await reviewVerbExamples(verbData, candidates)).slice(0, 3);
+  if (candidates.length && !sentences.length) {
+    write(`No suggested example matches ${requestedForm || verbData.infinitive} from ${verbData.infinitive}.`);
+    return manualSentence(`Enter another example for ${verbData.infinitive}, or press Enter to skip: `);
+  }
   if (sentences.length === 0) {
     if (requestedForm) write(`No suggested example contains ${requestedForm}.`);
     return manualSentence(requestedForm

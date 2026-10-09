@@ -1,3 +1,4 @@
+import { reviewVerbExamples } from './verbSentenceValidation.js';
 import { resolveLearnerProfileForInput } from './knowledgeProfile/index.js';
 import { createInterface } from 'readline';
 import { join } from 'path';
@@ -366,9 +367,15 @@ async function rebuildSentenceVerbPreview(prepared, feedback, options, spinner) 
   }, feedback, {
     cardPurpose: `Sentence-form verb card for "${verbData.infinitive}"`,
     requiredTerms: focusForm ? [focusForm] : [],
-    extraGuidance: 'Keep the sentence short, natural, and focused on the target verb.',
+    extraGuidance: `Keep the sentence short and natural. Preserve the infinitive ${verbData.infinitive} and its intended meaning; do not introduce a separable particle that changes the lemma.`,
   });
 
+  const reviewTarget = { ...verbData, meanings: [prepared.selectedMeaning] };
+  if (!(await reviewVerbExamples(reviewTarget, [reviewed])).length) {
+    throw new RecoverableWorkflowError(`Revised example does not match ${focusForm} from ${verbData.infinitive}.`, {
+      code: 'verb-example-mismatch', workflow: 'verb', allowManualSentence: true,
+    });
+  }
   const germanChanged = reviewed.german.trim() !== sentenceData.german.trim();
   const reviewedChosenSentence = {
     ...chosenSentence,
@@ -722,7 +729,7 @@ async function prepareStrongVerbPackage({ verbData, selectedMeaning, route, freq
 
 async function prepareVerb(rawInput, options, spinner) {
   spinner.start('Analyzing verb...');
-  const verbData = options.analysisResult && (!options.learnerProfileContext || options.sentence) ? options.analysisResult : await enrichVerb(rawInput, options);
+  let verbData = options.analysisResult && (!options.learnerProfileContext || options.sentence) ? options.analysisResult : await enrichVerb(rawInput, options);
   const recoverable = hasStructuredVerbAnalysis(verbData);
 
   if (!verbData.shouldCreateVerbCard && !recoverable) {
@@ -835,6 +842,8 @@ async function prepareVerb(rawInput, options, spinner) {
   }
 
   if (route === 'picture-word') {
+    const candidates = filterVerbExampleSentences(verbData.exampleSentences, resolveRequestedVerbForm(verbData), Infinity);
+    verbData = { ...verbData, exampleSentences: (await reviewVerbExamples({ ...verbData, meanings: [selectedMeaning] }, candidates)).slice(0, 3) };
     let duplicateInfo = { exactMatches: [], headwordMatches: [] };
     spinner.start('Checking duplicates...');
     try {
@@ -888,7 +897,7 @@ async function prepareVerb(rawInput, options, spinner) {
     };
   }
 
-  const chosenSentence = await chooseVerbSentence(verbData, options.sentence);
+  const chosenSentence = await chooseVerbSentence({ ...verbData, meanings: [selectedMeaning] }, options.sentence);
   if (!chosenSentence) {
     console.log(chalk.yellow('Skipped: no example sentence selected'));
     return { rejected: true };
@@ -899,6 +908,12 @@ async function prepareVerb(rawInput, options, spinner) {
     await enrich(chosenSentence.german),
     chosenSentence
   );
+  if (sentenceData.german.trim() !== chosenSentence.german.trim() &&
+    !(await reviewVerbExamples({ ...verbData, meanings: [selectedMeaning] }, [sentenceData])).length) {
+    throw new RecoverableWorkflowError(`Prepared example does not match ${verbData.displayForm} from ${verbData.infinitive}.`, {
+      code: 'verb-example-mismatch', workflow: 'verb', allowManualSentence: true,
+    });
+  }
   spinner.succeed(`Sentence ready: ${sentenceData.german}`);
 
   let similarCards = [];

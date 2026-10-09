@@ -59,6 +59,7 @@ Analyze a single German input for verb flashcards.
 Rules:
 - Accept verbs and verb forms. Reject nouns, adjectives, adverbs, and full unrelated phrases that cannot be normalized to a verb.
 - Always normalize the main lemma to the infinitive.
+- Every example must use that SAME infinitive and intended meaning. Do not add a separable particle that changes the lemma: sieh from sehen must not become sieh ... nach (nachsehen). Ordinary prepositions such as nach in Geh nach Hause are allowed.
 - Preserve the user's encountered form in displayForm when the input is a conjugated or inflected form.
 - Accept past participles and participial forms when they clearly map to a German verb. Normalize them to the infinitive and preserve the participle in displayForm.
 - Example: for "verbunden", return infinitive="verbinden", displayForm="verbunden", and dictionaryFormNeeded=true.
@@ -213,7 +214,7 @@ export async function enrichVerb(input, options = {}) {
           },
           {
             role: 'user',
-            content: `${options.learnerProfileContext || ''}\nVerb: ${result.infinitive}\nEncountered/display form: ${result.displayForm}\nUse this exact encountered form when it differs from the infinitive.\nExisting examples to avoid:\n${result.exampleSentences.map((sentence) => `- ${sentence.german}`).join('\n') || '- none'}\nReturn exactly ${options.analysisResult ? 3 : 3 - result.exampleSentences.length} additional examples as {"exampleSentences":[{"german":"","russian":"","focusForm":""}]}.`,
+            content: `${options.learnerProfileContext || ''}\nVerb: ${result.infinitive}\nEncountered/display form: ${result.displayForm}\nUse this exact encountered form when it differs from the infinitive. Preserve the same infinitive and meaning; never introduce a separable particle belonging to a different verb.\nExisting examples to avoid:\n${result.exampleSentences.map((sentence) => `- ${sentence.german}`).join('\n') || '- none'}\nReturn exactly ${options.analysisResult ? 3 : 3 - result.exampleSentences.length} additional examples as {"exampleSentences":[{"german":"","russian":"","focusForm":""}]}.`,
           },
         ],
         response_format: VERB_EXAMPLES_RESPONSE_FORMAT,

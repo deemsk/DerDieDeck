@@ -6,10 +6,13 @@ jest.unstable_mockModule("../src/confirm.js", () => ({
   playAudio: mockPlayAudio,
 }))
 
+const mockReviewExamples = jest.fn(async (_target, examples) => examples)
+jest.unstable_mockModule("../src/verbSentenceValidation.js", () => ({ reviewVerbExamples: mockReviewExamples }))
+
 const { chooseVerbSentence, confirmPictureVerbSelection, confirmSentenceVerbSelection, filterVerbExampleSentences, formatExistingInfinitiveNotice, formatVerbPreviewSummary, resolveVerbFocusForm } = await import("../src/verbConfirm.js")
 
 describe("verb preview helpers", () => {
-  beforeEach(() => mockPlayAudio.mockClear())
+  beforeEach(() => { mockPlayAudio.mockClear(); mockReviewExamples.mockReset().mockImplementation(async (_target, examples) => examples) })
   const fakeChalk = {
     bold: {
       cyan: (value) => `<head>${value}</head>`,
@@ -151,4 +154,33 @@ describe("verb preview helpers", () => {
     expect(lines.join("\n")).toContain("reviewed before saving")
     expect(prompts[0]).toContain("[C]ontinue to review geh")
   })
+})
+
+test('rejects another lemma before showing choices and validates manual replacement', async () => {
+  const wrong = { german: 'Sieh bitte nach, ob die Tür zu ist.' }
+  const right = { german: 'Sieh nach links.' }
+  const write = jest.fn()
+  mockReviewExamples.mockReset().mockImplementation(async (_target, examples) => examples.filter(e => e.german === right.german))
+  const result = await chooseVerbSentence({ infinitive: 'sehen', displayForm: 'sieh', exampleSentences: [wrong, right] }, null, { write, askInput: async () => { throw new Error('Only one valid example') } })
+  expect(result.german).toBe(right.german)
+  expect(write.mock.calls.flat().join(' ')).not.toContain(wrong.german)
+  const answers = [wrong.german, right.german]
+  const manual = await chooseVerbSentence({ infinitive: 'sehen', displayForm: 'sieh', exampleSentences: [wrong] }, null, { write, askInput: async () => answers.shift() })
+  expect(manual.german).toBe(right.german)
+  expect(answers).toHaveLength(0)
+})
+
+test('preferred sentence is not exempt from lexical identity review', async () => {
+  mockReviewExamples.mockResolvedValueOnce([])
+  expect(await chooseVerbSentence({ infinitive: 'sehen', displayForm: 'sieh' }, 'Sieh bitte nach.', { write: () => {} })).toBeNull()
+})
+
+test('semantic filtering happens before the three-example display limit', async () => {
+  const wrong = { german: 'Sieh bitte nach, ob die Tür zu ist.' }
+  const right = { german: 'Sieh nach links.' }
+  mockReviewExamples.mockReset().mockImplementation(async (_target, examples) => examples.filter(e => e.german === right.german))
+  const result = await chooseVerbSentence({ infinitive: 'sehen', displayForm: 'sieh', exampleSentences: [wrong, wrong, wrong, right] }, null, {
+    write: () => {}, askInput: async () => { throw new Error('The fourth candidate is valid') },
+  })
+  expect(result.german).toBe(right.german)
 })

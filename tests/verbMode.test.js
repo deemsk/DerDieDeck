@@ -175,11 +175,15 @@ jest.unstable_mockModule("../src/knowledgeProfile/index.js", () => ({
   resolveLearnerProfileForInput: jest.fn(async (_input, options) => options.learnerProfileContext || null),
 }))
 
+const mockReviewVerbExamples = jest.fn(async (_target, examples) => examples)
+jest.unstable_mockModule("../src/verbSentenceValidation.js", () => ({ reviewVerbExamples: mockReviewVerbExamples }))
+
 const { enrichVerb: mockProfiledVerb } = await import("../src/verbEnricher.js")
 const { runVerbWorkflow } = await import("../src/verbMode.js")
 
 describe("verb mode sentence flow", () => {
   beforeEach(() => {
+    mockReviewVerbExamples.mockReset().mockImplementation(async (_target, examples) => examples)
     jest.clearAllMocks()
     mockConfirmPictureVerbSelection.mockReset().mockResolvedValue({
       confirmed: true, personalConnection: null, addDictionaryForm: false,
@@ -300,6 +304,38 @@ describe("verb mode sentence flow", () => {
       selectedSentence: expect.objectContaining({ german: "Das Buch gehört mir.", russian: "Книга принадлежит мне." }),
     }))
     expect(mockCreateBasicNote.mock.calls[0][0].back).toContain("Das Buch gehört mir.")
+  })
+
+  test("late replacement is checked before replacement audio or note creation", async () => {
+    mockPrepareDictionary.mockResolvedValueOnce({ reviewFeedback: "Replace a wrong-lemma example" })
+    mockReviewEnrichedText.mockResolvedValueOnce({ german: "Das Buch gehört mir.", russian: "Книга принадлежит мне.", ipa: "[test]" })
+    mockReviewVerbExamples.mockResolvedValueOnce([])
+    await expect(runVerbWorkflow("gehört", dictionaryOptions)).rejects.toMatchObject({ code: "verb-example-mismatch" })
+    expect(mockGenerateSpeech).not.toHaveBeenCalledWith("Das Buch gehört mir.", expect.anything())
+    expect(mockCreateNote).not.toHaveBeenCalled()
+    expect(mockCreateBasicNote).not.toHaveBeenCalled()
+  })
+
+  test("enrichment changing the sentence must pass review before audio", async () => {
+    mockChooseVerbSentence.mockResolvedValueOnce({ german: "Sieh nach links.", russian: "Посмотри налево.", focusForm: "sieh" })
+    mockEnrich.mockResolvedValueOnce({ german: "Sieh bitte nach, ob die Tür zu ist.", russian: "Проверь дверь.", ipa: "[test]" })
+    mockReviewVerbExamples.mockResolvedValueOnce([])
+    await expect(runVerbWorkflow("sieh", {
+      analysisResult: { shouldCreateVerbCard: true, infinitive: "sehen", displayForm: "sieh", recommendedMode: "sentence-form", meanings: [{ russian: "смотреть" }] },
+      skipHeader: true,
+    })).rejects.toMatchObject({ code: "verb-example-mismatch" })
+    expect(mockGenerateSpeech).not.toHaveBeenCalled()
+    expect(mockCreateNote).not.toHaveBeenCalled()
+  })
+
+  test("picture candidates are reviewed before pronunciation preparation", async () => {
+    mockReviewVerbExamples.mockRejectedValueOnce(new Error("review unavailable"))
+    await expect(runVerbWorkflow("sieh", {
+      analysisResult: { shouldCreateVerbCard: true, infinitive: "sehen", displayForm: "sieh", recommendedMode: "picture-word", meanings: [{ russian: "смотреть" }], exampleSentences: [{ german: "Sieh nach links." }] },
+      skipHeader: true,
+    })).rejects.toThrow("review unavailable")
+    expect(mockResolveWordPronunciation).not.toHaveBeenCalled()
+    expect(mockCreatePictureWordNote).not.toHaveBeenCalled()
   })
 
   test("skipping dictionary preview still creates the main note", async () => {
