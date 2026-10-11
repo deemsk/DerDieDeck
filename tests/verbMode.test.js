@@ -355,6 +355,57 @@ describe("verb mode sentence flow", () => {
     expect(mockEnsureDeck).not.toHaveBeenCalled()
   })
 
+  const sahOptions = {
+    analysisResult: { shouldCreateVerbCard: true, infinitive: "sehen", displayForm: "sah", recommendedMode: "picture-word", meanings: [{ russian: "видеть" }], exampleSentences: [{ german: "Er sah den Arzt.", russian: "Он видел врача." }] },
+    meaning: "видеть", skipHeader: true,
+  }
+
+  test("unknown lemma shows full form before optional infinitive; declining saves only sah", async () => {
+    mockConfirmPictureVerbSelection.mockResolvedValueOnce({ confirmed: false })
+    expect(await runVerbWorkflow("sah", sahOptions)).toBe(true)
+    expect(mockPrepareDictionary.mock.invocationCallOrder[0]).toBeLessThan(mockConfirmPictureVerbSelection.mock.invocationCallOrder[0])
+    expect(mockConfirmPictureVerbSelection).toHaveBeenCalledWith(expect.objectContaining({ optionalInfinitive: true, requestedForm: null }))
+    expect(mockCreateBasicNote).toHaveBeenCalledTimes(1)
+    expect(mockCreatePictureWordNote).not.toHaveBeenCalled()
+    expect(mockChooseGoogleImage).not.toHaveBeenCalled()
+    expect(mockResolveWordPronunciation.mock.calls.some(([word]) => word.canonical === "sehen")).toBe(false)
+  })
+
+  test.each(["lemma", "sentence"])("existing %s note avoids placeholder and extra infinitive", async kind => {
+    const lookup = kind === "lemma" ? mockFindVerbLemmaDuplicates : mockFindVerbSentenceDuplicates
+    lookup.mockResolvedValueOnce({ exactMatches: [{ noteId: 99, infinitive: "sehen" }] })
+    expect(await runVerbWorkflow("sah", sahOptions)).toBe(true)
+    expect(mockConfirmPictureVerbSelection).not.toHaveBeenCalled()
+    expect(mockCreatePictureWordNote).not.toHaveBeenCalled()
+    expect(mockResolveWordPronunciation.mock.calls.some(([word]) => word.canonical === "sehen")).toBe(false)
+  })
+
+  test("uncertain lemma lookup saves only the form and does not offer a companion", async () => {
+    mockFindVerbLemmaDuplicates.mockRejectedValueOnce(new Error("offline"))
+    expect(await runVerbWorkflow("sah", sahOptions)).toBe(true)
+    expect(mockConfirmPictureVerbSelection).not.toHaveBeenCalled()
+    expect(mockCreateBasicNote).toHaveBeenCalledTimes(1)
+    expect(mockCreatePictureWordNote).not.toHaveBeenCalled()
+  })
+
+  test("dry-run with no existing lemma does not write form or optional infinitive", async () => {
+    mockConfirmPictureVerbSelection.mockResolvedValueOnce({ confirmed: false })
+    expect(await runVerbWorkflow("sah", { ...sahOptions, dryRun: true })).toBe(true)
+    expect(mockPrepareDictionary).toHaveBeenCalledTimes(1)
+    expect(mockStoreAudio).not.toHaveBeenCalled()
+    expect(mockStoreMedia).not.toHaveBeenCalled()
+    expect(mockCreateBasicNote).not.toHaveBeenCalled()
+    expect(mockCreatePictureWordNote).not.toHaveBeenCalled()
+  })
+
+  test("skipping unknown-lemma form does not offer an infinitive", async () => {
+    mockPrepareDictionary.mockResolvedValueOnce(null)
+    expect(await runVerbWorkflow("sah", sahOptions)).toBe(false)
+    expect(mockConfirmPictureVerbSelection).not.toHaveBeenCalled()
+    expect(mockCreateBasicNote).not.toHaveBeenCalled()
+    expect(mockCreatePictureWordNote).not.toHaveBeenCalled()
+  })
+
   test("picture verbs personalize prepared analyses and share dictionary explanation before writing", async () => {
     mockConfirmPictureVerbSelection.mockResolvedValueOnce({ confirmed: true, addDictionaryForm: true })
     await runVerbWorkflow("läuft", {
@@ -863,7 +914,7 @@ describe("verb mode sentence flow", () => {
 
   test("dismisses a requested form before writing either note", async () => {
     mockChooseMeaning.mockResolvedValue({ russian: "идти" })
-    mockConfirmPictureVerbSelection.mockResolvedValueOnce({ confirmed: false, addDictionaryForm: false })
+    mockPrepareDictionary.mockResolvedValueOnce(null)
 
     const added = await runVerbWorkflow("geh", {
       analysisResult: {

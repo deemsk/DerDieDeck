@@ -845,6 +845,7 @@ async function prepareVerb(rawInput, options, spinner) {
     const candidates = filterVerbExampleSentences(verbData.exampleSentences, resolveRequestedVerbForm(verbData), Infinity);
     verbData = { ...verbData, exampleSentences: (await reviewVerbExamples({ ...verbData, meanings: [selectedMeaning] }, candidates)).slice(0, 3) };
     let duplicateInfo = { exactMatches: [], headwordMatches: [] };
+    let lemmaLookupFailed = false;
     spinner.start('Checking duplicates...');
     try {
       duplicateInfo = await findWordDuplicates({
@@ -854,6 +855,7 @@ async function prepareVerb(rawInput, options, spinner) {
       });
     } catch (err) {
       if (!options.dryRun && !resolveRequestedVerbForm(verbData)) throw err;
+      lemmaLookupFailed = true;
       console.log(chalk.dim(`Duplicate check skipped: ${err.message}`));
     } finally {
       spinner.stop();
@@ -864,9 +866,18 @@ async function prepareVerb(rawInput, options, spinner) {
       return { rejected: true };
     }
 
-    const existingLemmaNote = resolveRequestedVerbForm(verbData)
-      ? [...duplicateInfo.exactMatches, ...duplicateInfo.headwordMatches][0] || null
-      : null;
+    let existingLemmaNote = null;
+    if (resolveRequestedVerbForm(verbData)) {
+      const otherLookups = await Promise.allSettled([
+        findVerbLemmaDuplicates({ infinitive: verbData.infinitive }),
+        findVerbSentenceDuplicates({ infinitive: verbData.infinitive }),
+      ]);
+      lemmaLookupFailed ||= otherLookups.some(result => result.status === 'rejected');
+      existingLemmaNote = [
+        ...duplicateInfo.exactMatches, ...duplicateInfo.headwordMatches,
+        ...otherLookups.flatMap(result => result.status === 'fulfilled' ? result.value.exactMatches : []),
+      ][0] || null;
+    }
 
     let lexicalCefr = null;
     try {
@@ -881,7 +892,7 @@ async function prepareVerb(rawInput, options, spinner) {
       console.log(chalk.dim(`Lexical CEFR skipped: ${err.message}`));
     }
 
-    const audio = await buildVerbAudio(verbData, spinner);
+    const audio = resolveRequestedVerbForm(verbData) ? null : await buildVerbAudio(verbData, spinner);
 
     return {
       route,
@@ -891,6 +902,7 @@ async function prepareVerb(rawInput, options, spinner) {
       frequencyInfo,
       duplicateInfo,
       existingLemmaNote,
+      lemmaLookupFailed,
       imageChoice: null,
       audio,
       addDictionaryForm,
@@ -952,16 +964,18 @@ async function finalizePictureVerb(prepared, options, spinner) {
     frequencyInfo,
     duplicateInfo,
     existingLemmaNote,
-    audio,
+    audio: preparedAudio,
     addDictionaryForm,
   } = prepared;
 
-  const directFormReview = Boolean(resolveRequestedVerbForm(verbData) && existingLemmaNote);
-  if (directFormReview) {
+  let audio = preparedAudio;
+  let addInfinitive = !existingLemmaNote;
+  const directFormReview = Boolean(resolveRequestedVerbForm(verbData));
+  if (directFormReview && existingLemmaNote) {
     console.log(formatExistingInfinitiveNotice(chalk, verbData.infinitive));
   }
 
-  const confirmation = directFormReview ? {
+  let confirmation = directFormReview ? {
     confirmed: true,
     addDictionaryForm: true,
     personalConnection: null,
@@ -976,7 +990,6 @@ async function finalizePictureVerb(prepared, options, spinner) {
     audioPath: audio.audioPath,
     addDictionaryForm,
     requestedForm: resolveRequestedVerbForm(verbData),
-    existingLemmaNote,
     theme: options.theme || null,
   });
 
@@ -985,7 +998,7 @@ async function finalizePictureVerb(prepared, options, spinner) {
     return false;
   }
 
-  const imageChoice = existingLemmaNote ? null : await choosePictureVerbImage(prepared, spinner);
+  let imageChoice = directFormReview ? null : await choosePictureVerbImage(prepared, spinner);
   const formPronunciation = confirmation.addDictionaryForm
     ? await previewVerbFormPronunciation(verbData.displayForm, verbData.infinitive)
     : null;
@@ -1003,6 +1016,32 @@ async function finalizePictureVerb(prepared, options, spinner) {
   if (directFormReview && !formExplanation) {
     console.log(chalk.dim(`Form card skipped: ${verbData.displayForm}`));
     return false;
+  }
+
+  if (directFormReview) {
+    addInfinitive = false;
+    if (!existingLemmaNote && !prepared.lemmaLookupFailed) {
+      const optional = await confirmPictureVerbSelection({
+        verbData: { ...verbData, displayForm: verbData.infinitive },
+        selectedMeaning, frequencyInfo, duplicateInfo, imageChoice: null,
+        showImage: false, audioSource: null, audioPath: null,
+        loadAudio: async () => {
+          audio ||= await buildVerbAudio(verbData, spinner);
+          return audio.audioPath;
+        },
+        requestedForm: null, optionalInfinitive: true, addDictionaryForm: false,
+        dictionaryContext: buildDictionaryFormContext(verbData),
+        contrast: buildContrastHint(verbData.infinitive),
+        autoPlay: false, theme: options.theme || null,
+      });
+      addInfinitive = optional.confirmed;
+      if (addInfinitive) {
+        confirmation = { ...optional, addDictionaryForm: true };
+        imageChoice = await choosePictureVerbImage(prepared, spinner);
+      }
+    } else if (!existingLemmaNote) {
+      console.log(chalk.yellow('Could not check all existing verb cards. Continuing with the requested form only.'));
+    }
   }
 
   const metadata = {
@@ -1029,9 +1068,11 @@ async function finalizePictureVerb(prepared, options, spinner) {
       console.log(`  ${chalk.cyan('IPA:')} ${verbData.ipa}`);
     }
     console.log(`  ${chalk.cyan('Frequency:')} ${frequencyInfo.bandLabel}${frequencyInfo.rank ? ` (#${frequencyInfo.rank})` : ''}`);
-    console.log(`  ${chalk.cyan('Audio:')} ${audio.source}`);
+    console.log(`  ${chalk.cyan('Audio:')} ${audio?.source || 'requested form'}`);
     if (existingLemmaNote) {
       console.log(`  ${chalk.cyan('Infinitive card:')} ${verbData.infinitive} is already in Anki`);
+    } else if (!addInfinitive) {
+      console.log(`  ${chalk.cyan('Infinitive card:')} skipped`);
     } else {
       console.log(`  ${chalk.cyan('Image:')} ${imageChoice ? (imageChoice.source || imageChoice.type || 'image') : 'none'}`);
     }
@@ -1061,11 +1102,12 @@ async function finalizePictureVerb(prepared, options, spinner) {
     console.log(chalk.dim(`Form card skipped: ${verbData.displayForm}`));
   }
 
-  if (existingLemmaNote) {
-    console.log(chalk.dim(`Infinitive card ${verbData.infinitive} was already in Anki.`));
+  if (!addInfinitive) {
+    if (existingLemmaNote) console.log(chalk.dim(`Infinitive card ${verbData.infinitive} was already in Anki.`));
     return Boolean(formExplanation);
   }
 
+  audio ||= await buildVerbAudio(verbData, spinner);
   let imageFilename = null;
   if (imageChoice) {
     spinner.start('Downloading chosen image...');

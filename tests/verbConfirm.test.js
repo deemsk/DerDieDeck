@@ -104,56 +104,17 @@ describe("verb preview helpers", () => {
     expect(lines.join("\n")).toContain("does not contain the requested form geh")
   })
 
-  test("a requested form preview leads with its Front and explains the next review step", async () => {
-    const lines = []
-    const prompts = []
-    const result = await confirmPictureVerbSelection({
-      verbData: { infinitive: "gehen", displayForm: "geh", ipa: "[ˈɡeːən]" },
-      selectedMeaning: { russian: "идти" },
-      frequencyInfo: { bandLabel: "Essential", rank: 106 },
-      duplicateInfo: { exactMatches: [], headwordMatches: [{ noteId: 1777924962119, canonical: "gehen", meaning: "идти" }] },
-      audioSource: "Wiktionary/Wikimedia",
-      audioPath: "/tmp/gehen.mp3",
-      addDictionaryForm: true,
-      requestedForm: "geh",
-      existingLemmaNote: { noteId: 1777924962119 },
-      autoPlay: true,
-      askInput: async (prompt) => { prompts.push(prompt); return "c" },
-      write: (line) => lines.push(String(line ?? "")),
-    })
+  test.each([confirmPictureVerbSelection, confirmSentenceVerbSelection])(
+    "legacy confirmation cannot show a placeholder for a requested form", async confirm => {
+      const write = jest.fn(), askInput = jest.fn()
+      await expect(confirm({
+        verbData: { infinitive: "gehen", displayForm: "geh" }, requestedForm: "geh", write, askInput,
+      })).rejects.toThrow("complete dictionary review")
+      expect(write).not.toHaveBeenCalled()
+      expect(askInput).not.toHaveBeenCalled()
+    }
+  )
 
-    expect(result).toEqual({ confirmed: true, personalConnection: null, addDictionaryForm: true })
-    expect(lines.join("\n")).toContain("Front: geh")
-    expect(lines.join("\n")).toContain("gehen is already in Anki")
-    expect(lines.join("\n")).toContain("reviewed before saving")
-    expect(lines.join("\n")).not.toContain("1777924962119")
-    expect(lines.join("\n")).not.toContain("Existing notes with the same lemma")
-    expect(lines.join("\n")).not.toContain("IPA: [ˈɡeːən]")
-    expect(prompts[0]).toContain("[C]ontinue to review geh")
-    expect(mockPlayAudio).not.toHaveBeenCalled()
-  })
-
-  test("sentence-route preview also names the requested form as the proposed Front", async () => {
-    const lines = []
-    const prompts = []
-    const result = await confirmSentenceVerbSelection({
-      verbData: { infinitive: "gehen", displayForm: "geh" },
-      selectedMeaning: { russian: "идти" },
-      sentenceData: { german: "Geh bitte nach Hause.", russian: "Иди, пожалуйста, домой." },
-      chosenSentence: { focusForm: "geh" },
-      audioPath: null,
-      addDictionaryForm: true,
-      requestedForm: "geh",
-      autoPlay: false,
-      askInput: async (prompt) => { prompts.push(prompt); return "c" },
-      write: (line) => lines.push(String(line ?? "")),
-    })
-
-    expect(result).toEqual({ confirmed: true, addDictionaryForm: true })
-    expect(lines.join("\n")).toContain("Front: geh")
-    expect(lines.join("\n")).toContain("reviewed before saving")
-    expect(prompts[0]).toContain("[C]ontinue to review geh")
-  })
 })
 
 test('rejects another lemma before showing choices and validates manual replacement', async () => {
@@ -183,4 +144,55 @@ test('semantic filtering happens before the three-example display limit', async 
     write: () => {}, askInput: async () => { throw new Error('The fourth candidate is valid') },
   })
   expect(result.german).toBe(right.german)
+})
+
+test('optional infinitive defaults to skip, cannot toggle the form, and does not autoplay', async () => {
+  const loadAudio = jest.fn()
+  const prompts = [], lines = []
+  const answers = ['t', '']
+  const result = await confirmPictureVerbSelection({
+    verbData: { infinitive: 'sehen', displayForm: 'sehen', ipa: '[ˈzeːən]' },
+    selectedMeaning: { russian: 'видеть' }, frequencyInfo: { bandLabel: 'Essential' },
+    duplicateInfo: { headwordMatches: [] }, showImage: false,
+    optionalInfinitive: true, audioPath: '/tmp/sehen.mp3', loadAudio,
+    askInput: async prompt => { prompts.push(prompt); return answers.shift() },
+    write: line => lines.push(line),
+  })
+  expect(result.confirmed).toBe(false)
+  expect(result.addDictionaryForm).toBe(false)
+  expect(prompts).toEqual(['Choose [S]: ', 'Choose [S]: '])
+  expect(mockPlayAudio).not.toHaveBeenCalled()
+  expect(loadAudio).not.toHaveBeenCalled()
+  expect(lines.join(' ')).toContain('Optional infinitive card')
+  expect(lines.join(' ')).not.toContain('complete sehen card')
+})
+
+test('optional infinitive loads audio only on Listen and requires explicit Add', async () => {
+  const loadAudio = jest.fn(async () => '/tmp/sehen.mp3')
+  const answers = ['l', 'a']
+  const result = await confirmPictureVerbSelection({
+    verbData: { infinitive: 'sehen' }, selectedMeaning: { russian: 'видеть' },
+    frequencyInfo: { bandLabel: 'Essential' }, duplicateInfo: { headwordMatches: [] },
+    showImage: false, optionalInfinitive: true, loadAudio,
+    askInput: async () => answers.shift(), write: () => {},
+  })
+  expect(result.confirmed).toBe(true)
+  expect(loadAudio).toHaveBeenCalledTimes(1)
+  expect(mockPlayAudio).toHaveBeenCalledWith('/tmp/sehen.mp3')
+})
+
+test('optional infinitive shows the example and form context before Add', async () => {
+  const lines = []
+  const result = await confirmPictureVerbSelection({
+    verbData: { infinitive: 'sehen', exampleSentences: [{ german: 'Er sah den Arzt.', russian: 'Он видел врача.' }] },
+    selectedMeaning: { russian: 'видеть' }, frequencyInfo: { bandLabel: 'Essential' },
+    duplicateInfo: { headwordMatches: [] }, optionalInfinitive: true, showImage: false,
+    dictionaryContext: 'sah → sehen', contrast: 'sehen / schauen',
+    write: line => lines.push(line), askInput: async () => {
+      const preview = lines.join('\n')
+      for (const text of ['Er sah den Arzt.', 'Он видел врача.', 'sah → sehen', 'sehen / schauen']) expect(preview).toContain(text)
+      return 'a'
+    },
+  })
+  expect(result.confirmed).toBe(true)
 })

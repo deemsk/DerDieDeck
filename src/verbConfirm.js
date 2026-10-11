@@ -171,18 +171,22 @@ export async function confirmPictureVerbSelection({
   showImage = true,
   audioSource,
   audioPath,
+  loadAudio = null,
   addDictionaryForm = false,
   requestedForm = null,
-  existingLemmaNote = null,
+  optionalInfinitive = false,
+  dictionaryContext = null,
+  contrast = null,
   theme = null,
   autoPlay = true,
   askInput = ask,
   write = console.log,
 }) {
+  if (requestedForm) throw new Error('Requested forms require the complete dictionary review.');
   let personalConnection = null;
   let dictionaryFormEnabled = addDictionaryForm;
 
-  if (autoPlay && audioPath && !requestedForm) {
+  if (autoPlay && audioPath && !optionalInfinitive) {
     try {
       await playAudio(audioPath);
     } catch {
@@ -192,27 +196,23 @@ export async function confirmPictureVerbSelection({
 
   while (true) {
     write();
-    if (requestedForm) {
-      write(`${chalk.bold.cyan(requestedForm)} ${chalk.dim(`— form of ${verbData.infinitive}`)}`);
-      write(`${label('Front:')} ${chalk.bold(requestedForm)}`);
-      write(`The complete ${requestedForm} card will be reviewed before saving.`);
-      write(existingLemmaNote
-        ? formatExistingInfinitiveNotice(chalk, verbData.infinitive)
-        : `A separate ${verbData.infinitive} infinitive card will also be prepared.`);
-      if (!dictionaryFormEnabled) {
-        write(chalk.yellow(`The ${requestedForm} form card is currently skipped.`));
-      }
-    } else {
-      write(formatVerbPreviewSummary(chalk, verbData, selectedMeaning.russian, cefrLevel));
-      if (verbData.ipa) {
-        write(`${label('IPA:')} ${verbData.ipa}`);
-      }
-      write(`${label('Frequency:')} ${frequencyInfo.bandLabel}${frequencyInfo.rank ? ` (#${frequencyInfo.rank})` : ''}`);
-      write(`${label('Audio:')} ${audioSource}`);
-      if (showImage) {
-        write(`${label('Image:')} ${formatImageSelectionLabel(imageChoice)}`);
-      }
-      write(`${label('Dictionary form card:')} ${dictionaryFormEnabled ? 'yes' : 'no'}`);
+    if (optionalInfinitive) write(chalk.dim('Optional infinitive card'));
+    write(formatVerbPreviewSummary(chalk, verbData, selectedMeaning.russian, cefrLevel));
+    if (verbData.ipa) {
+      write(`${label('IPA:')} ${verbData.ipa}`);
+    }
+    write(`${label('Frequency:')} ${frequencyInfo.bandLabel}${frequencyInfo.rank ? ` (#${frequencyInfo.rank})` : ''}`);
+    if (audioSource) write(`${label('Audio:')} ${audioSource}`);
+    if (showImage) {
+      write(`${label('Image:')} ${formatImageSelectionLabel(imageChoice)}`);
+    }
+    if (!optionalInfinitive) write(`${label('Dictionary form card:')} ${dictionaryFormEnabled ? 'yes' : 'no'}`);
+    if (optionalInfinitive) {
+      const example = verbData.exampleSentences?.[0];
+      if (example?.german) write(`${label('Example:')} ${example.german}`);
+      if (example?.russian) write(`${label('Russian:')} ${example.russian}`);
+      if (dictionaryContext) write(`${label('Form context:')} ${dictionaryContext}`);
+      if (contrast) write(`${label('Contrast:')} ${contrast}`);
     }
     if (theme) {
       write(`${label('Theme:')} ${theme}`);
@@ -220,7 +220,7 @@ export async function confirmPictureVerbSelection({
     if (personalConnection) {
       write(`${label('Personal connection:')} ${personalConnection}`);
     }
-    if (!requestedForm && duplicateInfo.headwordMatches.length > 0) {
+    if (duplicateInfo.headwordMatches.length > 0) {
       write();
       write(label('Existing notes with the same lemma:'));
       duplicateInfo.headwordMatches.slice(0, 3).forEach((match) => {
@@ -228,19 +228,27 @@ export async function confirmPictureVerbSelection({
       });
     }
 
-    const prompt = requestedForm
-      ? `[C]ontinue to review ${requestedForm}, [L]isten to ${verbData.infinitive}, ${existingLemmaNote ? '' : '[P]ersonal connection, '}[D]ismiss: `
+    if (optionalInfinitive) {
+      write();
+      write(`  ${chalk.bold.yellow('[A]')} Add infinitive card    ${chalk.bold.yellow('[S]')} Skip`);
+      write(`  ${chalk.bold.yellow('[L]')} Listen                 ${chalk.bold.yellow('[P]')} Personal connection`);
+    }
+    const prompt = optionalInfinitive ? 'Choose [S]: '
       : '[A]dd, [L]isten, [T]oggle form card, [P]ersonal connection, [D]ismiss: ';
     const answer = await askInput(prompt);
     const normalized = answer.toLowerCase();
 
-    if (normalized === '' || normalized === 'a' || normalized === 'add' || (requestedForm && (normalized === 'c' || normalized === 'continue'))) {
+    if (optionalInfinitive && ['', 's', 'skip', 'd', 'dismiss'].includes(normalized)) {
+      return { confirmed: false, personalConnection: null, addDictionaryForm: false };
+    }
+    if (normalized === '' || normalized === 'a' || normalized === 'add') {
       return { confirmed: true, personalConnection, addDictionaryForm: dictionaryFormEnabled };
     }
 
     if (normalized === 'l' || normalized === 'listen') {
-      if (!audioPath) continue;
       try {
+        if (!audioPath && loadAudio) audioPath = await loadAudio();
+        if (!audioPath) continue;
         await playAudio(audioPath);
       } catch (err) {
         write(`Could not play audio: ${err.message}`);
@@ -249,12 +257,12 @@ export async function confirmPictureVerbSelection({
     }
 
     if (normalized === 't' || normalized === 'toggle') {
+      if (optionalInfinitive) continue;
       dictionaryFormEnabled = !dictionaryFormEnabled;
       continue;
     }
 
     if (normalized === 'p' || normalized === 'personal') {
-      if (existingLemmaNote) continue;
       const connection = await askInput('Personal connection (optional, Enter clears): ');
       personalConnection = connection || null;
       continue;
@@ -277,6 +285,7 @@ export async function confirmSentenceVerbSelection({
   askInput = ask,
   write = console.log,
 }) {
+  if (requestedForm) throw new Error('Requested forms require the complete dictionary review.');
   let dictionaryFormEnabled = addDictionaryForm;
 
   if (autoPlay && audioPath) {
@@ -289,14 +298,7 @@ export async function confirmSentenceVerbSelection({
 
   while (true) {
     write();
-    if (requestedForm) {
-      write(`${chalk.bold.cyan(requestedForm)} ${chalk.dim(`— form of ${verbData.infinitive}`)}`);
-      write(`${label('Front:')} ${chalk.bold(requestedForm)}`);
-      write(`The complete ${requestedForm} card will be reviewed before saving.`);
-      write(`${label('Also prepares:')} an audio sentence card`);
-    } else {
-      write(formatVerbPreviewSummary(chalk, verbData, selectedMeaning.russian, sentenceData.cefr?.level || null));
-    }
+    write(formatVerbPreviewSummary(chalk, verbData, selectedMeaning.russian, sentenceData.cefr?.level || null));
     write(`${label('Sentence:')} ${sentenceData.german}`);
     if (sentenceData.ipa) {
       write(`${label('IPA:')} ${sentenceData.ipa}`);
@@ -305,14 +307,10 @@ export async function confirmSentenceVerbSelection({
       write(`${label('Russian:')} ${sentenceData.russian}`);
     }
     const focusForm = resolveVerbFocusForm(verbData, chosenSentence);
-    if (focusForm && !requestedForm) {
+    if (focusForm) {
       write(`${label('Focus form:')} ${focusForm}`);
     }
-    if (requestedForm) {
-      if (!dictionaryFormEnabled) write(chalk.yellow(`The ${requestedForm} form card is currently skipped.`));
-    } else {
-      write(`${label('Dictionary form card:')} ${dictionaryFormEnabled ? 'yes' : 'no'}`);
-    }
+    write(`${label('Dictionary form card:')} ${dictionaryFormEnabled ? 'yes' : 'no'}`);
 
     if (similarCards.length > 0) {
       write();
@@ -322,12 +320,10 @@ export async function confirmSentenceVerbSelection({
       });
     }
 
-    const answer = await askInput(requestedForm
-      ? `[C]ontinue to review ${requestedForm}, [L]isten, [R]eview sentence, [D]ismiss: `
-      : '[A]dd, [L]isten, [T]oggle form card, [R]eview, [D]ismiss: ');
+    const answer = await askInput('[A]dd, [L]isten, [T]oggle form card, [R]eview, [D]ismiss: ');
     const normalized = answer.toLowerCase();
 
-    if (normalized === '' || normalized === 'a' || normalized === 'add' || (requestedForm && (normalized === 'c' || normalized === 'continue'))) {
+    if (normalized === '' || normalized === 'a' || normalized === 'add') {
       return { confirmed: true, addDictionaryForm: dictionaryFormEnabled };
     }
 

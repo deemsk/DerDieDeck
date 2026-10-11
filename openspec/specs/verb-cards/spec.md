@@ -217,7 +217,7 @@ Anki Browse query. The accepted form SHALL remain the target through writing.
 - **AND** no preliminary screen shows a placeholder Back or asks the learner
   to continue merely to see that answer; `gehen` is not added again.
 - **AND** it does not automatically play the infinitive's audio as if it were
-  pronunciation of `geh`; the learner may explicitly listen to `gehen`.
+  pronunciation of `geh`.
 
 #### Scenario: Requested form with an audio sentence
 
@@ -820,3 +820,45 @@ and defaults SHALL be preserved; explanatory card content SHALL remain unchanged
 - **GIVEN** two action columns would exceed the terminal width
 - **WHEN** the menu is formatted
 - **THEN** actions are stacked without relying on color for their meaning.
+
+### Requirement: VERB-23 — Requested picture forms precede optional infinitives
+
+A requested non-infinitive form in the picture workflow SHALL go directly to its
+complete dictionary review, regardless of existing lemma notes. It SHALL NOT
+show a placeholder continuation dialog. Existing picture, Basic verb lemma, and
+verb sentence notes SHALL be considered before offering an optional infinitive.
+The requested form SHALL remain independently saveable when the optional
+infinitive is skipped. A failed lookup SHALL NOT be treated as confirmed absence.
+
+#### Scenario: No existing lemma
+- **GIVEN** `sah` resolves to `sehen` with picture mode and no matching note
+- **WHEN** the learner proceeds
+- **THEN** the complete `sah` form preview appears first.
+- **AND** after accepting it, a separate `sehen` preview offers explicit addition,
+  defaults to Skip, and does not autoplay infinitive audio or toggle the form.
+- **AND** the optional preview includes its meaning, available IPA, example and
+  translation, form context, and any contrast that will be saved.
+
+#### Scenario: Existing Basic or sentence note
+- **GIVEN** a Basic lemma or verb sentence note already represents `sehen`
+- **WHEN** `sah` is prepared
+- **THEN** only the form is reviewed and saved, with no image selection or
+  infinitive audio preparation.
+
+#### Scenario: Skip form or optional infinitive
+- **WHEN** the form is skipped
+- **THEN** neither note is created and no optional infinitive is offered.
+- **WHEN** the form is accepted and the optional infinitive is skipped
+- **THEN** only the form is created.
+
+#### Scenario: Preview without writes
+- **GIVEN** dry-run is active
+- **WHEN** the form and optional infinitive are reviewed
+- **THEN** no Anki note or media writes occur.
+
+#### Scenario: No legacy placeholder remains
+- **GIVEN** either ordinary picture or sentence confirmation is called for a
+  requested form
+- **WHEN** the route is checked
+- **THEN** it requires the complete dictionary review instead of rendering an
+  old continuation screen. Legacy placeholder renderers SHALL be removed.
