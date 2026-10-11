@@ -7,9 +7,9 @@ const { explainVerbForm } = await import('../src/verbFormEnricher.js')
 const { getOpenAIModel, OPENAI_MODEL_ROLES } = await import('../src/lib/openaiModels.js')
 const explanation = {
   form: 'wurde', infinitive: 'werden', formMeaning: 'показатель прошедшего пассива',
-  grammar: 'Präteritum, Indikativ, 1-е или 3-е лицо ед. числа',
+  grammar: 'Präteritum, Indikativ, 3-е лицо, единственное число',
   usage: 'В примере — вспомогательный глагол пассива в прошлом.',
-  ambiguity: 'Без контекста ich / er / sie / es; здесь er.', contrast: 'wurde ≠ würde (Konjunktiv II)',
+  ambiguity: 'Без контекста также ich wurde — 1-е лицо, единственное число.', contrast: 'wurde ≠ würde (Konjunktiv II)',
   example: { german: 'Er wurde gefragt.', russian: 'Его спросили.' },
 }
 const answer = (value) => ({ choices: [{ message: { content: JSON.stringify(value) } }] })
@@ -55,4 +55,22 @@ test('uses progress preferences without replacing a selected sentence', async ()
   const context = JSON.parse(create.mock.calls[0][0].messages[1].content)
   expect(context.learnerProfileContext).toContain('Buch')
   expect(context.selectedSentence).toEqual(explanation.example)
+})
+
+test('ging uses contextual grammar and separate isolated-form ambiguity in generation and review', async () => {
+  const ging = {
+    form: 'ging', infinitive: 'gehen', formMeaning: 'шёл',
+    grammar: 'Präteritum Indikativ, 3-е лицо, единственное число.',
+    usage: 'В примере врач шёл домой в прошлом.',
+    ambiguity: 'Без контекста также ich ging — я шёл/шла.', contrast: null,
+    example: { german: 'Der Arzt ging nach Hause.', russian: 'Врач шёл домой.' },
+  }
+  create.mockResolvedValueOnce(answer(ging)).mockResolvedValueOnce(answer({ valid: true, reason: '' }))
+  expect(await explainVerbForm({ form: 'ging', infinitive: 'gehen', meaning: 'идти', selectedSentence: ging.example })).toEqual(ging)
+  for (const [call] of create.mock.calls) {
+    const rules = call.messages[0].content
+    expect(rules).toContain('grammar: describe ONLY the reading in the final example')
+    expect(rules).toContain('Der Arzt ging nach Hause.')
+    expect(rules).toContain('Do not demand other possible persons in grammar')
+  }
 })

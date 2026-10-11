@@ -58,6 +58,38 @@ export function formatVerbDictionaryPreview({ verbData, selectedMeaning, formExp
   return lines.join('\n');
 }
 
+export function formatDictionaryReviewActions({ ready, companion }, {
+  chalkRef = chalk, columns = process.stdout.columns || 80,
+} = {}) {
+  const actions = ready
+    ? companion
+      ? [['Y', 'Add both'], ['R', 'Regenerate'], ['E', 'Edit example'], ['S', 'Audio only'], ['D', 'Cancel']]
+      : [['Y', 'Add card'], ['R', 'Regenerate'], ['S', 'Skip']]
+    : companion
+      ? [['N', 'New example'], ['E', 'Edit example'], ['R', 'Retry explanation'], ['S', 'Audio only'], ['D', 'Cancel']]
+      : [['R', 'Retry'], ['S', 'Skip']];
+  const labels = actions.map(([key, label]) => `[${key}] ${label}`);
+  const cellWidth = Math.max(...labels.map(label => label.length)) + 4;
+  const twoColumns = 2 + cellWidth + Math.max(...labels.filter((_label, index) => index % 2).map(label => label.length), 0) <= columns;
+  const lines = [chalkRef.dim(`  ${ready ? 'Ready to add' : 'Form card unavailable'}`)];
+  if (ready) lines.push('    • Form card');
+  if (companion) lines.push(ready ? '    • Audio sentence card' : '    • Audio sentence card available');
+  lines.push('');
+  for (let index = 0; index < actions.length; index += twoColumns ? 2 : 1) {
+    const render = (position) => {
+      const [key, label] = actions[position];
+      const style = key === 'Y' ? chalkRef.bold.green : chalkRef.bold.yellow;
+      return `${style(`[${key}]`)} ${label}`;
+    };
+    let line = `  ${render(index)}`;
+    if (twoColumns && actions[index + 1]) {
+      line += ' '.repeat(cellWidth - labels[index].length) + render(index + 1);
+    }
+    lines.push(line);
+  }
+  return lines.join('\n') + '\n';
+}
+
 async function question(prompt) {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   try {
@@ -86,22 +118,14 @@ export async function prepareVerbDictionaryExplanation({
       log('Preparing dictionary form explanation...');
       explanation = validateVerbFormExplanation(await generate(context), context);
       log(`\n${formatVerbDictionaryPreview({ verbData, selectedMeaning, formExplanation: explanation, formPronunciation }, { chalkRef, columns })}\n`);
-      if (companionSentence) {
-        log('Accepting this card will also add an audio sentence card for the example above.');
-      }
     } catch (error) {
       explanation = null;
       failureReason = error.message;
       log(`Dictionary card not prepared: ${error.message}`);
     }
     while (true) {
-      const answer = String(await ask(explanation
-        ? companionSentence
-          ? 'Dictionary card + sentence: [Y]es (add both), [R]egenerate, [E]dit sentence, [S]kip form (add sentence), [D]ismiss both: '
-          : 'Dictionary card: [Y]es, [R]egenerate, [S]kip: '
-        : companionSentence
-          ? 'Dictionary explanation failed: [N]ew example, [E]dit sentence, [R]etry explanation, [S]kip form (add sentence), [D]ismiss both: '
-          : 'Dictionary explanation failed: [R]etry, [S]kip this card: ')).trim().toLowerCase();
+      log(formatDictionaryReviewActions({ ready: Boolean(explanation), companion: Boolean(companionSentence) }, { chalkRef, columns }));
+      const answer = String(await ask(explanation ? 'Choose [Y]: ' : 'Choose: ')).trim().toLowerCase();
       if (companionSentence && ['d', 'dismiss'].includes(answer)) return false;
       if (companionSentence && !explanation && ['n', 'new'].includes(answer)) {
         return { reviewFeedback: `Replace this example with a different short sentence using the exact form ${context.form} of ${context.infinitive}, preserving its intended meaning. Fix the reason for rejection: ${failureReason}` };

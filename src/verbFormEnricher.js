@@ -16,15 +16,21 @@ const reviewSchema = strictObject({ valid: { type: 'boolean' }, reason: string }
 const RULES = `Explain an encountered German verb form for a Russian-speaking learner.
 Return concise plain text, never HTML or Markdown. Copy form and infinitive exactly.
 formMeaning: Russian meaning of the FORM in the example, not merely the infinitive gloss.
-grammar: applicable German tense/mood, person and number with Russian explanation.
-For finite forms explicitly name the person numbers AND singular/plural (e.g. 1-е и 3-е лицо,
+grammar: describe ONLY the reading in the final example: applicable German tense/mood,
+with Russian person and number labels determined by that example's subject.
+For finite forms explicitly name the person AND singular/plural (e.g. 3-е лицо,
 единственное число); pronouns alone do not replace these labels. Non-finite forms have neither.
+This applies equally to supplied and generated examples. If the example itself is ambiguous,
+state that uncertainty instead of inventing one reading.
 usage: one short Russian sentence explaining the construction or time reference in THIS example.
 Do not repeat the tense/person label or give a generic description of the verb's meaning.
 ambiguity: null when there is no meaningful alternative reading to explain. Never fill it with
 statements such as "других распространённых нормативных чтений нет" or restate the subject.
 Otherwise give common alternative readings of the isolated form; distinguish them from the example's
-reading even if a subject appears in that example. Do not pretend an ambiguous form has one person.
+reading even if a subject appears in that example. Put other possible persons/readings HERE,
+not in grammar. Contextual grammar with one person is NOT a claim that the isolated form has only
+one reading. Do not demand other possible persons in grammar or treat that contextual scope as
+missing ambiguity when those other readings are covered here.
 Consider common finite/participle and indicative/imperative overlaps for the REQUESTED infinitive.
 Do not require readings belonging to unrelated lemmas. Formal Sie may address one or more people
 despite grammatical plural. Mention common useful alternatives, not every rare paradigm reading.
@@ -50,11 +56,16 @@ Accuracy rules:
   usage can be "Сейчас; в примере — думать о чём-то." Ambiguity and contrast should be null.
   Do not pad this explanation with a statement that no other readings exist or a list like
   "denken an — думать о; denken, dass — считать, полагать".
+- ging in Der Arzt ging nach Hause.: grammar = Präteritum Indikativ, 3-е лицо, единственное число.
+  ambiguity notes that isolated ging also permits ich ging (я шёл/шла).
+  Do not list 1-е и 3-е лицо in grammar for this example or repeat its subject in ambiguity.
 - wäre: Konjunktiv II of sein, hypothetical/wished state, usually present/future, NOT ordinary past.
   Isolated wäre permits ich / er / sie / es. Ich wäre gern zu Hause. = Я хотел бы быть дома.
+  grammar uses first-person singular for this example; ambiguity covers er / sie / es.
 - wurde: Präteritum Indikativ of werden, ich / er / sie / es. Contrast wurde with würde (Konjunktiv II).
   Er wurde müde. = Он устал. But Er wurde gefragt. = Его спросили.: past passive auxiliary,
-  NOT lexical стал in this passive context. Do not equate every werden form with future tense.
+  NOT lexical стал in this passive context. For either Er example, grammar uses third-person
+  singular; ambiguity includes ich. Do not equate every werden form with future tense.
 - läuft: Präsens Indikativ, third-person singular in Er läuft im Park.
 - verbunden: Partizip II, no finite person or number and not a complete tense on its own;
   explain the actual construction in the example (perfect, passive, or adjectival state).

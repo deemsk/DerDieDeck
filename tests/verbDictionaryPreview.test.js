@@ -1,7 +1,7 @@
 import { jest } from '@jest/globals'
 import { Chalk } from 'chalk'
 import { stripVTControlCharacters } from 'node:util'
-import { prepareVerbDictionaryExplanation } from '../src/verbDictionaryPreview.js'
+import { prepareVerbDictionaryExplanation, formatDictionaryReviewActions } from '../src/verbDictionaryPreview.js'
 import { buildVerbDictionaryNote } from '../src/templates/verb/dictionary.js'
 
 const explanation = {
@@ -64,8 +64,11 @@ test('sentence companion is named in the complete preview and may be dismissed t
   expect(result).toBe(false)
   const preview = log.mock.calls.flat().join('\n')
   expect(preview).toContain('┌─ Dictionary card')
-  expect(preview).toContain('also add an audio sentence card')
-  expect(ask.mock.calls[0][0]).toContain('[D]ismiss both')
+  expect(preview).toContain('Ready to add')
+  expect(preview).toContain('• Form card')
+  expect(preview).toContain('• Audio sentence card')
+  expect(preview).toContain('[D] Cancel')
+  expect(ask.mock.calls[0][0]).toBe('Choose [Y]: ')
 })
 
 test('the complete preview can request sentence revision before either note is written', async () => {
@@ -84,8 +87,10 @@ test('the complete preview can request sentence revision before either note is w
 test('failed explanation offers retry; invalid content is never accepted', async () => {
   const generate = jest.fn().mockResolvedValueOnce({}).mockResolvedValueOnce(explanation)
   const ask = jest.fn().mockResolvedValueOnce('r').mockResolvedValueOnce('y')
-  expect(await prepareVerbDictionaryExplanation(input, { generate, ask, log: () => {} })).toEqual(explanation)
-  expect(ask.mock.calls[0][0]).toContain('[R]etry')
+  const log = jest.fn()
+  expect(await prepareVerbDictionaryExplanation(input, { generate, ask, log })).toEqual(explanation)
+  expect(log.mock.calls.flat().join(' ')).toContain('[R] Retry')
+  expect(ask.mock.calls[0][0]).toBe('Choose: ')
   expect(generate).toHaveBeenCalledTimes(2)
 })
 
@@ -171,7 +176,7 @@ test('regeneration replaces the framed preview before the separated action promp
   let attempts = 0
   const ask = async () => {
     const text = log.mock.calls.flat().join('\n')
-    expect(text).toMatch(/└─\n$/)
+    expect(text.lastIndexOf('[Y] Add card')).toBeGreaterThan(text.lastIndexOf('└─'))
     if (attempts++ === 0) return 'r'
     expect(text.lastIndexOf(revised.usage)).toBeGreaterThan(text.lastIndexOf(denkst.usage))
     return 'y'
@@ -182,15 +187,41 @@ test('regeneration replaces the framed preview before the separated action promp
 })
 
 test('failed companion explanation can request a new example using the failure reason', async () => {
+  const log = jest.fn()
   const ask = jest.fn(async prompt => {
-    expect(prompt).toContain('[N]ew example')
-    expect(prompt).toContain('[E]dit sentence')
+    expect(prompt).toBe('Choose: ')
+    const menu = log.mock.calls.flat().join(' ')
+    expect(menu).toContain('[N] New example')
+    expect(menu).toContain('[E] Edit example')
     return 'n'
   })
   const result = await prepareVerbDictionaryExplanation({ ...input, companionSentence: explanation.example }, {
-    generate: async () => { throw new Error('wrong lemma: nachsehen') }, ask, log: () => {},
+    generate: async () => { throw new Error('wrong lemma: nachsehen') }, ask, log,
   })
   expect(result.reviewFeedback).toContain('nachsehen')
   expect(result.reviewFeedback).toContain('sein')
   expect(result.reviewFeedback).toContain('wäre')
+})
+
+
+test('action menu uses aligned columns, stacks on narrow terminals, and preserves text with color', () => {
+  const state = { ready: true, companion: true }
+  const plain = formatDictionaryReviewActions(state, { chalkRef: new Chalk({ level: 0 }), columns: 80 })
+  expect(plain).toContain('  [Y] Add both        [R] Regenerate')
+  expect(plain).toContain('  [E] Edit example    [S] Audio only')
+  expect(plain).not.toContain('Accepting this card')
+  const narrow = formatDictionaryReviewActions(state, { chalkRef: new Chalk({ level: 0 }), columns: 32 })
+  expect(narrow).toContain('  [Y] Add both\n  [R] Regenerate\n')
+  const color = formatDictionaryReviewActions(state, { chalkRef: new Chalk({ level: 1 }), columns: 80 })
+  expect(stripVTControlCharacters(color)).toBe(plain)
+  expect(color).toContain('\u001b[32m[Y]')
+  expect(color).toContain('\u001b[33m[R]')
+  expect(color).not.toContain('\u001b[36m')
+})
+
+test('Enter still accepts both cards and audio-only still skips the form', async () => {
+  const options = { generate: async () => explanation, log: () => {} }
+  const companion = { ...input, companionSentence: explanation.example }
+  expect(await prepareVerbDictionaryExplanation(companion, { ...options, ask: async () => '' })).toEqual(explanation)
+  expect(await prepareVerbDictionaryExplanation(companion, { ...options, ask: async () => 's' })).toBeNull()
 })
