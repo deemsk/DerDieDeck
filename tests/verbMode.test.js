@@ -1,5 +1,7 @@
 import { jest } from "@jest/globals"
 
+const mockShowWordDictionarySummary = jest.fn()
+
 const mockChooseMeaning = jest.fn(async () => ({
   russian: "принадлежать",
   english: "belong",
@@ -94,6 +96,7 @@ jest.unstable_mockModule("ora", () => ({
 
 jest.unstable_mockModule("../src/wordConfirm.js", () => ({
   chooseMeaning: mockChooseMeaning,
+  showWordDictionarySummary: mockShowWordDictionarySummary,
   chooseGoogleImage: mockChooseGoogleImage,
 }))
 
@@ -237,6 +240,17 @@ describe("verb mode sentence flow", () => {
       russian: "Тест.",
       focusForm: form,
     }))
+  })
+
+  test("shows selected verb meaning before sentence selection", async () => {
+    mockChooseMeaning.mockResolvedValueOnce({ russian: "прибираться" })
+    mockChooseVerbSentence.mockResolvedValueOnce(null)
+    await runVerbWorkflow("aufräumen", {
+      analysisResult: { shouldCreateVerbCard: true, infinitive: "aufräumen", displayForm: "aufräumen", ipa: "[ˈaʊ̯fˌʁɔɪ̯mən]", recommendedMode: "sentence-form", meanings: [{ russian: "прибираться" }, { russian: "устранять" }] },
+      skipHeader: true, disableStrongVerbPackage: true,
+    })
+    expect(mockShowWordDictionarySummary).toHaveBeenCalledWith(expect.objectContaining({ canonical: "aufräumen", lexicalType: "verb", meanings: [{ russian: "прибираться" }] }))
+    expect(mockShowWordDictionarySummary.mock.invocationCallOrder[0]).toBeLessThan(mockChooseVerbSentence.mock.invocationCallOrder[0])
   })
 
   test("runVerbWorkflow uses the confirmed form-card flag when creating sentence-form verb cards", async () => {

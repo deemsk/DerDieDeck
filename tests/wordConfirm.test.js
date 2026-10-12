@@ -11,10 +11,10 @@ describe("word confirmation helpers", () => {
       meanings: [{ russian: "над; через; о", english: "above; across; about" }],
       patternHint: "Предлог с Akkusativ или Dativ в зависимости от значения.",
     })).toBe([
-      "über · предлог",
-      "Значение: над; через; о",
+      "über · prep",
+      "Meaning: над; через; о",
       "IPA: [ˈyːbɐ]",
-      "Грамматика: Предлог с Akkusativ или Dativ в зависимости от значения.",
+      "Grammar: Предлог с Akkusativ или Dativ в зависимости от значения.",
     ].join("\n"))
   })
 
@@ -25,7 +25,7 @@ describe("word confirmation helpers", () => {
       lexicalType: "noun",
       meanings: [{ russian: "вода" }],
       noPlural: true,
-    })).toContain("Множественное число: обычно без множественного числа")
+    })).toContain("Plural: usually no plural")
   })
 
   test("renders the dictionary summary as a compact framed block", () => {
@@ -41,8 +41,8 @@ describe("word confirmation helpers", () => {
     const output = log.mock.calls.map(([line = ""]) => line).join("\n")
     log.mockRestore()
 
-    expect(output).toContain("┌─ Кратко о слове")
-    expect(output).toContain("│  über · предлог")
+    expect(output).toContain("┌─ Word summary")
+    expect(output).toContain("│  über · prep")
     expect(output).toContain("└─")
   })
 
@@ -120,4 +120,12 @@ describe("word confirmation helpers", () => {
       })
     )
   })
+})
+
+
+test('verb form summary labels lemma meaning and pronunciation explicitly', () => {
+  expect(formatWordDictionarySummary({
+    canonical: 'ging', lemma: 'gehen', lexicalType: 'verb', ipa: '[ˈɡeːən]',
+    meanings: [{ russian: 'идти' }],
+  })).toBe(['ging · verb', 'Infinitive: gehen', 'Infinitive meaning: идти', 'Infinitive IPA: [ˈɡeːən]'].join('\n'))
 })

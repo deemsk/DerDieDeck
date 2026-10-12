@@ -21,7 +21,7 @@ import { prepareVerbDictionaryExplanation } from './verbDictionaryPreview.js';
 import { buildVerbKeyFormProductionBack, buildVerbKeyFormProductionFront, buildVerbKeyFormRecognitionBack, buildVerbKeyFormRecognitionFront } from './templates/verb/keyForm.js';
 import { enrichVerb, generateVerbFormSentence, hasStructuredVerbAnalysis, shouldOfferDictionaryFormCard } from './verbEnricher.js';
 import { shouldSuggestVerbInfinitive, suggestVerbInfinitives } from './verbCorrection.js';
-import { chooseGoogleImage, chooseMeaning } from './wordConfirm.js';
+import { chooseGoogleImage, chooseMeaning, showWordDictionarySummary } from './wordConfirm.js';
 import { chooseVerbSentence, confirmPictureVerbSelection, confirmSentenceVerbSelection, confirmStrongVerbPackage, filterVerbExampleSentences, formatExistingInfinitiveNotice, formatVerbPreviewSummary, resolveVerbFocusForm } from './verbConfirm.js';
 import { buildVerbGoogleImagesSearch, resolveImageAsset, resolveWordPronunciation } from './lib/wordSources.js';
 import {
@@ -770,6 +770,14 @@ async function prepareVerb(rawInput, options, spinner) {
     console.log(chalk.yellow('Skipped: no meaning selected'));
     return { rejected: true };
   }
+
+  showWordDictionarySummary({
+    canonical: verbData.displayForm || verbData.infinitive,
+    lemma: verbData.infinitive,
+    lexicalType: 'verb',
+    meanings: [selectedMeaning],
+    ipa: verbData.ipa,
+  });
 
   if (!options.dryRun) {
     spinner.start('Checking verb duplicates...');

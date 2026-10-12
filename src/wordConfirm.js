@@ -63,36 +63,41 @@ function buildWordSummaryLine(wordData, translation, cefrLevel = null) {
 
 function buildWordDictionarySummary(wordData = {}) {
   const canonical = String(wordData.canonical || wordData.lemma || '').trim();
-  const lexicalType = formatRussianLexicalTypeLabel(wordData.lexicalType);
+  const lexicalType = formatLexicalTypeLabel(wordData.lexicalType);
+  const infinitive = String(wordData.lemma || '').trim();
+  const isVerbForm = wordData.lexicalType === 'verb' && infinitive &&
+    normalizeGermanForCompare(canonical) !== normalizeGermanForCompare(infinitive);
   const meanings = Array.isArray(wordData.meanings)
     ? [...new Set(wordData.meanings.map((meaning) => String(meaning?.russian || '').trim()).filter(Boolean))].slice(0, 3)
     : [];
   const rows = [];
+  if (isVerbForm) rows.push(['Infinitive', infinitive]);
 
   if (meanings.length > 0) {
-    rows.push([meanings.length === 1 ? 'Значение' : 'Значения', meanings.join('; ')]);
+    rows.push([isVerbForm ? 'Infinitive meaning' : meanings.length === 1 ? 'Meaning' : 'Meanings', meanings.join('; ')]);
   }
   if (wordData.ipa) {
-    rows.push(['IPA', wordData.ipa]);
+    rows.push([isVerbForm ? 'Infinitive IPA' : 'IPA', wordData.ipa]);
   }
   if (wordData.lexicalType === 'noun') {
     const plural = wordData.noPlural
-      ? 'обычно без множественного числа'
+      ? 'usually no plural'
       : String(wordData.plural || '').trim();
     if (plural) {
-      rows.push(['Множественное число', plural]);
+      rows.push(['Plural', plural]);
     }
   }
   if (wordData.anchorPhrase) {
-    rows.push(['Конструкция', wordData.anchorPhrase]);
+    rows.push(['Pattern', wordData.anchorPhrase]);
   }
   if (wordData.opposite) {
-    rows.push(['Антоним', wordData.opposite]);
+    rows.push(['Opposite', wordData.opposite]);
   }
 
   const grammarHint = String(wordData.patternHint || wordData.clozeHint || '').trim();
-  if (grammarHint && grammarHint.toLocaleLowerCase('ru') !== lexicalType.toLocaleLowerCase('ru')) {
-    rows.push(['Грамматика', grammarHint]);
+  if (grammarHint && ![lexicalType, formatRussianLexicalTypeLabel(wordData.lexicalType)]
+    .some(value => value.toLocaleLowerCase('ru') === grammarHint.toLocaleLowerCase('ru'))) {
+    rows.push(['Grammar', grammarHint]);
   }
 
   return { canonical, lexicalType, rows };
@@ -111,7 +116,7 @@ export function showWordDictionarySummary(wordData = {}) {
   const labelWidth = rows.reduce((width, [name]) => Math.max(width, name.length), 0);
 
   console.log();
-  console.log(`${chalk.cyan('┌─')} ${chalk.bold('Кратко о слове')}`);
+  console.log(`${chalk.cyan('┌─')} ${chalk.bold('Word summary')}`);
   console.log(`${chalk.cyan('│')}  ${chalk.bold.cyan(canonical)} ${chalk.dim(`· ${lexicalType}`)}`);
   rows.forEach(([name, value]) => {
     console.log(`${chalk.cyan('│')}  ${chalk.dim(name.padEnd(labelWidth))}  ${value}`);
