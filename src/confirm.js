@@ -1,3 +1,4 @@
+import { formatCardPreview } from './cardPreview.js';
 import { createInterface } from 'readline';
 import { writeFile, readFile, unlink } from 'fs/promises';
 import { join } from 'path';
@@ -313,26 +314,14 @@ export async function confirmCardSet(cards, data, chalk, similarCards = null, au
     // Show card set preview
     const enabledCount = enabled.filter(Boolean).length;
     console.log();
-    console.log(chalk.bold('Card set preview:'));
-    if (enabledCount !== cards.length) {
-      console.log(chalk.dim(`Enabled: ${enabledCount} of ${cards.length}`));
-      console.log();
-    }
-    if (enabledCount === cards.length) {
-      console.log();
-    }
-
-    for (let i = 0; i < cards.length; i++) {
-      const card = cards[i];
-      const num = i + 1;
-      const status = enabled[i] ? chalk.green('✓') : chalk.dim('○');
-      const label = enabled[i] ? chalk.bold(card.label) : chalk.dim(card.label);
-
-      console.log(`${status} [${num}] ${label}`);
-      console.log(chalk.dim(`    Front: ${formatCardFront(card)}`));
-      console.log(chalk.dim(`    Back:  ${formatCardBack(card)}`));
-      console.log();
-    }
+    console.log(formatCardPreview([
+      [['Enabled', `${enabledCount} of ${cards.length}`]],
+      ...cards.map((card, index) => [
+        [null, `${enabled[index] ? '✓' : '○'} [${index + 1}] ${card.label}`, enabled[index] ? chalk.bold : chalk.dim],
+        ['Front', formatCardFront(card)],
+        ['Back', formatCardBack(card)],
+      ]),
+    ], { chalkRef: chalk }));
 
     return enabledCount;
   };
@@ -407,13 +396,10 @@ export async function confirmCardSet(cards, data, chalk, similarCards = null, au
 export async function confirmCard(cardData, chalk, similarCards = null, audioPath = null, autoPlay = true, options = {}) {
   const allowReview = Boolean(options.allowReview);
   console.log();
-  console.log(chalk.bold('Card preview:'));
-  console.log(`  German:  ${cardData.german}`);
-  console.log(`  IPA:     ${cardData.ipa}`);
-  console.log(`  Russian: ${cardData.russian}`);
-  if (cardData.cefr) {
-    console.log(`  CEFR:    ${formatCEFR(cardData.cefr)}`);
-  }
+  console.log(formatCardPreview([[
+    ['German', cardData.german], ['IPA', cardData.ipa], ['Russian', cardData.russian],
+    ['CEFR', cardData.cefr ? formatCEFR(cardData.cefr) : null],
+  ]], { chalkRef: chalk }));
 
   if (similarCards && similarCards.length > 0) {
     console.log();

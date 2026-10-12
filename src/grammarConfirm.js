@@ -1,3 +1,4 @@
+import { formatCardPreview } from './cardPreview.js';
 import { createInterface } from 'readline';
 import chalk from 'chalk';
 
@@ -25,10 +26,6 @@ export async function confirmGrammarSelection({
 
   while (true) {
     console.log();
-    console.log(chalk.bold(`Grammar: ${family.title}`));
-    console.log(`Lemma: ${lemma}`);
-    console.log(`Generated slots: ${units.length}`);
-
     if (duplicateMatches.length > 0) {
       console.log();
       console.log(chalk.yellow('Existing slots already in Anki:'));
@@ -38,13 +35,13 @@ export async function confirmGrammarSelection({
     }
 
     console.log();
-    units.forEach((unit, index) => {
-      const status = enabled[index] ? chalk.green('✓') : chalk.dim('○');
-      console.log(`${status} [${index + 1}] ${unit.slotHint} → ${unit.surfaceForm}`);
-      console.log(chalk.dim(`    Sentence: ${unit.previewGerman}`));
-      console.log(chalk.dim(`    Back:     ${unit.russian}`));
-      console.log(chalk.dim(`    Rule:     ${unit.explanation}`));
-    });
+    console.log(formatCardPreview([
+      [['Grammar', family.title], ['Lemma', lemma, chalk.bold.cyan], ['Generated slots', units.length]],
+      ...units.map((unit, index) => [
+        [null, `${enabled[index] ? '✓' : '○'} [${index + 1}] ${unit.slotHint} → ${unit.surfaceForm}`],
+        ['Sentence', unit.previewGerman], ['Back', unit.russian], ['Rule', unit.explanation],
+      ]),
+    ]));
 
     const enabledCount = enabled.filter(Boolean).length;
     console.log();

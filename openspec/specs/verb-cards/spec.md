@@ -537,14 +537,17 @@ work to be retried without duplicating notes or overwriting completed upgrades.
 The dictionary-card terminal preview SHALL visually distinguish Front from Back
 and organize the complete proposed answer into labeled, consistently indented
 sections. Meaning and grammar, usage, optional ambiguity and contrast notes,
-the German example with its Russian translation, and the infinitive with its
-available pronunciation and lexical meaning SHALL remain identifiable without
+the German example with its Russian translation, form pronunciation when
+available, and a compact infinitive reference SHALL remain identifiable without
 relying on terminal colors. The action prompt SHALL appear separately after the
 complete preview.
 
 The presentation SHALL follow the existing word dictionary summary's visual
 conventions: `┌─`, `│`, and `└─` framing, emphasized heading and target, muted
-aligned labels, consistent padding, and cyan accents when terminal color is enabled.
+aligned English labels and consistent padding. The heading SHALL be `Card preview`.
+When terminal color is enabled, the frame SHALL be green while the target
+remains cyan; the informational `Word summary` frame SHALL remain cyan.
+Translations and learning explanations SHALL remain in Russian.
 
 #### Scenario: Full explanation for denkst
 
@@ -554,7 +557,7 @@ aligned labels, consistent padding, and cyan accents when terminal color is enab
 - **THEN** Front and Back have explicit boundaries, each explanation section has
   a descriptive label, and blank lines separate the sections.
 - **AND** the German example and its Russian translation are grouped together,
-  followed by the grouped infinitive information.
+  with the compact infinitive reference in the Back section.
 - **AND** all proposed answer content is shown before accept/regenerate/skip.
 - **AND** the preview uses the same framing and emphasis conventions as the
   existing word dictionary summary.

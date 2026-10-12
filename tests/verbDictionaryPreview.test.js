@@ -15,7 +15,7 @@ test('shows the complete answer before accepting the optional card', async () =>
   const log = jest.fn()
   const ask = jest.fn(async () => {
     const preview = log.mock.calls.flat().join('\n')
-    for (const text of ['был бы', 'Konjunktiv II', 'Ich wäre gern zu Hause.', 'Я хотел бы быть дома.', 'От глагола', 'sein']) {
+    for (const text of ['был бы', 'Konjunktiv II', 'Ich wäre gern zu Hause.', 'Я хотел бы быть дома.', 'Infinitive', 'sein']) {
       expect(preview).toContain(text)
     }
     expect(preview).not.toContain('[zaɪn]')
@@ -41,8 +41,8 @@ test('shows the requested form IPA separately from the infinitive IPA', async ()
     ask: async () => 'y', log, chalkRef: new Chalk({ level: 0 }),
   })
   const preview = log.mock.calls.flat().join('\n')
-  expect(preview).toMatch(/Произношение\s+\[ɡeː\]/)
-  expect(preview).toMatch(/От глагола\s+gehen/)
+  expect(preview).toMatch(/Pronunciation\s+\[ɡeː\]/)
+  expect(preview).toMatch(/Infinitive\s+gehen/)
   expect(preview).not.toContain('[ˈɡeːən]')
   expect(preview).toContain('Back')
   expect(preview).toContain('иди')
@@ -63,7 +63,7 @@ test('sentence companion is named in the complete preview and may be dismissed t
   }, { generate: async () => explanation, ask, log, chalkRef: new Chalk({ level: 0 }) })
   expect(result).toBe(false)
   const preview = log.mock.calls.flat().join('\n')
-  expect(preview).toContain('┌─ Dictionary card')
+  expect(preview).toContain('┌─ Card preview')
   expect(preview).toContain('Ready to add')
   expect(preview).toContain('• Form card')
   expect(preview).toContain('• Audio sentence card')
@@ -125,20 +125,20 @@ async function capturePreview(value = denkst, options = {}) {
 test('uses the existing framed summary style with aligned groups and no empty optional rows', async () => {
   const { text } = await capturePreview()
   expect(text).toContain([
-    '┌─ Dictionary card',
-    '│  Front         denkst',
+    '┌─ Card preview',
+    '│  Front       denkst',
     '│',
-    '│  Back          думаешь',
-    '│  От глагола    denken',
-    '│  Грамматика    Präsens Indikativ · 2-е лицо, ед. число',
-    '│  Употребление  Сейчас; в примере — думать о чём-то.',
+    '│  Back        думаешь',
+    '│  Infinitive  denken',
+    '│  Grammar     Präsens Indikativ · 2-е лицо, ед. число',
+    '│  Usage       Сейчас; в примере — думать о чём-то.',
     '│',
-    '│  Пример        Woran denkst du gerade?',
-    '│                О чём ты сейчас думаешь?',
+    '│  Example     Woran denkst du gerade?',
+    '│              О чём ты сейчас думаешь?',
     '└─',
   ].join('\n'))
-  expect(text).not.toContain('Другие чтения')
-  expect(text).not.toContain('Различие')
+  expect(text).not.toContain('Other readings')
+  expect(text).not.toContain('Contrast')
   expect(text).not.toContain('\u001b[')
 })
 
@@ -146,14 +146,17 @@ test('wraps long prose and aligns continuations within a narrow terminal', async
   const { text } = await capturePreview(denkst, { columns: 42 })
   const lines = text.split('\n').filter((line) => line.startsWith('│'))
   expect(lines.every((line) => [...line].length <= 42)).toBe(true)
-  expect(lines).toContain('│                лицо, ед. число')
+  expect(lines).toContain('│              лицо, ед. число')
   expect(lines.join(' ').replace(/│/g, '').replace(/\s+/g, ' ')).toContain(denkst.usage)
 })
 
 test('uses color and emphasis without changing the plain text or wrapping', async () => {
   const plain = await capturePreview(denkst, { columns: 42 })
   const colored = await capturePreview(denkst, { columns: 42, chalkRef: new Chalk({ level: 1 }) })
-  expect(colored.text).toContain('\u001b[36m')
+  expect(colored.text).toContain('\u001b[32m┌─\u001b[39m')
+  expect(colored.text).toContain('\u001b[32m│\u001b[39m')
+  expect(colored.text).toContain('\u001b[32m└─\u001b[39m')
+  expect(colored.text).toContain('\u001b[36mdenkst\u001b[39m')
   expect(colored.text).toContain('\u001b[1m')
   expect(colored.text).toContain('\u001b[2m')
   expect(stripVTControlCharacters(colored.text)).toBe(plain.text)
@@ -162,8 +165,8 @@ test('uses color and emphasis without changing the plain text or wrapping', asyn
 test('shows useful optional notes and returns the same complete content for the saved card', async () => {
   const value = { ...denkst, ambiguity: 'Полезное уточнение.', contrast: 'Полезное различие.' }
   const { text, result } = await capturePreview(value)
-  expect(text).toMatch(/Другие чтения\s+Полезное уточнение\./)
-  expect(text).toMatch(/Различие\s+Полезное различие\./)
+  expect(text).toMatch(/Other readings\s+Полезное уточнение\./)
+  expect(text).toMatch(/Contrast\s+Полезное различие\./)
   expect(result).toBe(value)
   const saved = buildVerbDictionaryNote({ ...denkenInput, formExplanation: result })
   expect(saved.back).toContain(value.ambiguity)

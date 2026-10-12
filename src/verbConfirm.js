@@ -1,3 +1,4 @@
+import { formatCardPreview } from './cardPreview.js';
 import { reviewVerbExamples } from './verbSentenceValidation.js';
 import { createInterface } from 'readline';
 import chalk from 'chalk';
@@ -196,30 +197,33 @@ export async function confirmPictureVerbSelection({
 
   while (true) {
     write();
-    if (optionalInfinitive) write(chalk.dim('Optional infinitive card'));
-    write(formatVerbPreviewSummary(chalk, verbData, selectedMeaning.russian, cefrLevel));
+    const rows = [];
+    if (optionalInfinitive) rows.push(['Type', 'Optional infinitive card']);
+    rows.push([null, formatVerbPreviewSummary(chalk, verbData, selectedMeaning.russian, cefrLevel)]);
     if (verbData.ipa) {
-      write(`${label('IPA:')} ${verbData.ipa}`);
+      rows.push(['IPA', `${verbData.ipa}`]);
     }
-    write(`${label('Frequency:')} ${frequencyInfo.bandLabel}${frequencyInfo.rank ? ` (#${frequencyInfo.rank})` : ''}`);
-    if (audioSource) write(`${label('Audio:')} ${audioSource}`);
+    rows.push(['Frequency', `${frequencyInfo.bandLabel}${frequencyInfo.rank ? ` (#${frequencyInfo.rank})` : ''}`]);
+    if (audioSource) rows.push(['Audio', `${audioSource}`]);
     if (showImage) {
-      write(`${label('Image:')} ${formatImageSelectionLabel(imageChoice)}`);
+      rows.push(['Image', `${formatImageSelectionLabel(imageChoice)}`]);
     }
-    if (!optionalInfinitive) write(`${label('Dictionary form card:')} ${dictionaryFormEnabled ? 'yes' : 'no'}`);
+    if (!optionalInfinitive) rows.push(['Dictionary form card', `${dictionaryFormEnabled ? 'yes' : 'no'}`]);
     if (optionalInfinitive) {
       const example = verbData.exampleSentences?.[0];
-      if (example?.german) write(`${label('Example:')} ${example.german}`);
-      if (example?.russian) write(`${label('Russian:')} ${example.russian}`);
-      if (dictionaryContext) write(`${label('Form context:')} ${dictionaryContext}`);
-      if (contrast) write(`${label('Contrast:')} ${contrast}`);
+      if (example?.german) rows.push(['Example', `${example.german}`]);
+      if (example?.russian) rows.push(['Russian', `${example.russian}`]);
+      if (dictionaryContext) rows.push(['Form context', `${dictionaryContext}`]);
+      if (contrast) rows.push(['Contrast', `${contrast}`]);
     }
     if (theme) {
-      write(`${label('Theme:')} ${theme}`);
+      rows.push(['Theme', `${theme}`]);
     }
     if (personalConnection) {
-      write(`${label('Personal connection:')} ${personalConnection}`);
+      rows.push(['Personal connection', `${personalConnection}`]);
     }
+    write(formatCardPreview([rows]));
+
     if (duplicateInfo.headwordMatches.length > 0) {
       write();
       write(label('Existing notes with the same lemma:'));
@@ -298,19 +302,22 @@ export async function confirmSentenceVerbSelection({
 
   while (true) {
     write();
-    write(formatVerbPreviewSummary(chalk, verbData, selectedMeaning.russian, sentenceData.cefr?.level || null));
-    write(`${label('Sentence:')} ${sentenceData.german}`);
+    const rows = [];
+    rows.push([null, formatVerbPreviewSummary(chalk, verbData, selectedMeaning.russian, sentenceData.cefr?.level || null)]);
+    rows.push(['Sentence', `${sentenceData.german}`]);
     if (sentenceData.ipa) {
-      write(`${label('IPA:')} ${sentenceData.ipa}`);
+      rows.push(['IPA', `${sentenceData.ipa}`]);
     }
     if (sentenceData.russian) {
-      write(`${label('Russian:')} ${sentenceData.russian}`);
+      rows.push(['Russian', `${sentenceData.russian}`]);
     }
     const focusForm = resolveVerbFocusForm(verbData, chosenSentence);
     if (focusForm) {
-      write(`${label('Focus form:')} ${focusForm}`);
+      rows.push(['Focus form', `${focusForm}`]);
     }
-    write(`${label('Dictionary form card:')} ${dictionaryFormEnabled ? 'yes' : 'no'}`);
+    rows.push(['Dictionary form card', `${dictionaryFormEnabled ? 'yes' : 'no'}`]);
+
+    write(formatCardPreview([rows]));
 
     if (similarCards.length > 0) {
       write();
@@ -365,17 +372,17 @@ export async function confirmStrongVerbPackage({
 }) {
   while (true) {
     console.log();
-    console.log(formatVerbPreviewSummary(chalk, verbData, selectedMeaning.russian, null));
-    console.log(`${label('Morphology:')} ${morphology.classification} (${morphology.source})`);
-    console.log(`${label('Forms:')} ${packagePlan.forms.map((form) => `${form.label} ${form.form}`).join(', ')}`);
-    console.log(`${label('Cards:')} 1 lemma, ${packagePlan.forms.length * 2} key-form, ${packagePlan.sentences.length} sentence, ${packagePlan.sentences.length} cloze`);
-    console.log();
-    packagePlan.sentences.forEach((sentence) => {
-      console.log(`  - ${sentence.german}`);
-      if (sentence.russian) {
-        console.log(chalk.dim(`    ${sentence.russian}`));
-      }
-    });
+    console.log(formatCardPreview([
+      [
+        [null, formatVerbPreviewSummary(chalk, verbData, selectedMeaning.russian, null)],
+        ['Morphology', `${morphology.classification} (${morphology.source})`],
+        ['Forms', packagePlan.forms.map(form => `${form.label} ${form.form}`).join(', ')],
+        ['Cards', `1 lemma, ${packagePlan.forms.length * 2} key-form, ${packagePlan.sentences.length} sentence, ${packagePlan.sentences.length} cloze`],
+      ],
+      ...packagePlan.sentences.map(sentence => [
+        ['Example', sentence.german], ['', sentence.russian, chalk.dim],
+      ]),
+    ]));
 
     const answer = await ask('[A]dd package or [D]ismiss: ');
     const normalized = answer.toLowerCase();

@@ -1,22 +1,9 @@
+import { formatCardPreview } from './cardPreview.js';
 import { createInterface } from 'node:readline/promises';
 import chalk from 'chalk';
 import { explainVerbForm } from './verbFormEnricher.js';
 import { validateVerbFormExplanation } from './cardContent/verbFormExplanation.js';
 import { askReviewFeedback } from './confirm.js';
-
-function wrapText(text, width) {
-  const lines = [];
-  let line = '';
-  for (const word of String(text).trim().split(/\s+/u)) {
-    if (line && [...`${line} ${word}`].length > width) {
-      lines.push(line);
-      line = '';
-    }
-    line = line ? `${line} ${word}` : word;
-  }
-  if (line) lines.push(line);
-  return lines;
-}
 
 export function formatVerbDictionaryPreview({ verbData, selectedMeaning, formExplanation, formPronunciation = null }, {
   chalkRef = chalk, columns = process.stdout.columns || 80,
@@ -27,35 +14,16 @@ export function formatVerbDictionaryPreview({ verbData, selectedMeaning, formExp
     [['Front', e.form, emphasize]],
     [
       ['Back', e.formMeaning, chalkRef.bold],
-      ['Произношение', formPronunciation?.ipa],
-      ['От глагола', verbData.infinitive],
-      ['Грамматика', e.grammar],
-      ['Употребление', e.usage],
-      ['Другие чтения', e.ambiguity],
-      ['Различие', e.contrast],
+      ['Pronunciation', formPronunciation?.ipa],
+      ['Infinitive', verbData.infinitive],
+      ['Grammar', e.grammar],
+      ['Usage', e.usage],
+      ['Other readings', e.ambiguity],
+      ['Contrast', e.contrast],
     ],
-    [['Пример', e.example.german, chalkRef.bold], ['', e.example.russian, chalkRef.dim]],
+    [['Example', e.example.german, chalkRef.bold], ['', e.example.russian, chalkRef.dim]],
   ].map((group) => group.filter(([, value]) => String(value || '').trim()));
-  const labelWidth = Math.max(...groups.flat().map(([name]) => name.length));
-  const width = Number.isFinite(columns) && columns > 0 ? columns : 80;
-  const stacked = width - labelWidth - 5 < 12;
-  const valueWidth = Math.max(1, width - (stacked ? 5 : labelWidth + 5));
-  const border = chalkRef.cyan('│');
-  const lines = [`${chalkRef.cyan('┌─')} ${chalkRef.bold('Dictionary card')}`];
-  groups.forEach((group, index) => {
-    if (index) lines.push(border);
-    for (const [name, value, style = (text) => text] of group) {
-      if (stacked && name) lines.push(`${border}  ${chalkRef.dim(name)}`);
-      wrapText(value, valueWidth).forEach((part, lineIndex) => {
-        const label = (lineIndex === 0 ? name : '').padEnd(labelWidth);
-        lines.push(stacked
-          ? `${border}    ${style(part)}`
-          : `${border}  ${chalkRef.dim(label)}  ${style(part)}`);
-      });
-    }
-  });
-  lines.push(chalkRef.cyan('└─'));
-  return lines.join('\n');
+  return formatCardPreview(groups, { chalkRef, columns });
 }
 
 export function formatDictionaryReviewActions({ ready, companion }, {
