@@ -138,6 +138,7 @@ describe('lexical cloze uniqueness verification', () => {
       })
     )
     expect(mockCreate.mock.calls[0][0].messages[0].content).toContain('governing verb')
+    expect(mockCreate.mock.calls[0][0].messages[0].content).toContain('Preserve the intendedMeaning exactly')
     expect(mockCreate.mock.calls[0][0]).toEqual(expect.objectContaining({
       model: 'gpt-5.6-terra',
       reasoning_effort: 'low',

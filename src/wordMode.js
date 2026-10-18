@@ -462,11 +462,6 @@ async function prepareWord(rawInput, options, spinner) {
 
   if (route === 'picture-word') {
     const selectedMeaning = await chooseMeaning(wordData, options.meaning);
-    if (!selectedMeaning) {
-      console.log(chalk.yellow('Skipped: no meaning selected'));
-      return { rejected: true };
-    }
-
     let duplicateInfo = { exactMatches: [], headwordMatches: [] };
     spinner.start('Checking duplicates...');
     try {
@@ -524,6 +519,17 @@ async function prepareWord(rawInput, options, spinner) {
       return { rejected: true };
     }
 
+    spinner.stop();
+    const selectedMeaning = await chooseMeaning(wordData, options.meaning, {
+      manualPrompt: `Enter the intended meaning/gloss for "${wordData.canonical}" (not an example sentence), or press Enter to skip: `,
+      editPrompt: 'Enter the intended meaning/gloss (not an example sentence): ',
+      allowBlank: true,
+    });
+    if (!selectedMeaning) return { rejected: true };
+    // Keep alternative senses out of repair prompts and subsequent enrichment.
+    wordData.meanings = [selectedMeaning];
+    wordData.clozeHint = buildMeaningAwareClozeHint(wordData, selectedMeaning);
+
     spinner.start('Checking that the cloze has one answer...');
     const sentenceIsStructurallyValid = validateLexicalClozeSentence(chosenSentence, wordData);
     let uniqueness = sentenceIsStructurallyValid
@@ -535,18 +541,6 @@ async function prepareWord(rawInput, options, spinner) {
           alternatives: [],
           reason: `The sentence did not use ${wordData.canonical} as a valid ${wordData.lexicalType}.`,
         };
-    let selectedMeaning = null;
-    if (!uniqueness.valid) {
-      selectedMeaning = await chooseMeaning(wordData, options.meaning, {
-        manualPrompt: `Enter the intended meaning/gloss for "${wordData.canonical}" (not an example sentence), or press Enter to skip: `,
-        editPrompt: 'Enter the intended meaning/gloss (not an example sentence): ',
-        allowBlank: true,
-      });
-      wordData.clozeHint = buildMeaningAwareClozeHint(wordData, selectedMeaning);
-      if (sentenceIsStructurallyValid) {
-        uniqueness = await verifyLexicalClozeUniqueness(chosenSentence, wordData);
-      }
-    }
 
     let repairAttempts = 0;
     while (!uniqueness.valid && repairAttempts < MAX_LEXICAL_CLOZE_REPAIR_ATTEMPTS) {

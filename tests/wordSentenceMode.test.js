@@ -396,7 +396,7 @@ describe("word mode sentence flow", () => {
     expect(mockBuildWordGoogleImagesSearch).not.toHaveBeenCalled()
     expect(mockCreateBasicNote).not.toHaveBeenCalled()
     expect(mockCreateClozeNote).toHaveBeenCalledWith(expect.objectContaining({
-      text: "[sound:word-sentence.mp3]<br>Ich bin müde, {{c1::aber::contrast connector}} ich komme.",
+      text: "[sound:word-sentence.mp3]<br>Ich bin müde, {{c1::aber::но; contrast connector}} ich komme.",
       deck: "German::Test",
       tags: expect.arrayContaining([
         "mode-lexical-cloze",
@@ -415,6 +415,30 @@ describe("word mode sentence flow", () => {
     expect(mockCreateClozeNote.mock.calls[0][0].extra).toContain("Я устал, но я приду.")
   })
 
+  test("selects the cloze meaning with spinner stopped before checking uniqueness", async () => {
+    const selected = { russian: "довольно", english: "rather" }
+    mockChooseMeaning.mockImplementationOnce(async () => {
+      const spinner = mockSpinnerFactory.mock.results.at(-1).value
+      expect(spinner.stop).toHaveBeenCalled()
+      expect(mockVerifyLexicalClozeUniqueness).not.toHaveBeenCalled()
+      return selected
+    })
+    mockChooseWordSentence.mockResolvedValue({ german: "Das ist recht teuer.", russian: "Это довольно дорого.", focusForm: "recht" })
+    mockEnrich.mockResolvedValue({ german: "Das ist recht teuer.", russian: "Это довольно дорого.", ipa: "[ipa]" })
+    mockVerifyLexicalClozeUniqueness.mockResolvedValueOnce({ valid: false, reason: "More context needed" }).mockResolvedValue({ valid: true })
+    mockGenerateUnambiguousLexicalClozeSentence.mockResolvedValue({ german: "Das ist recht teuer.", russian: "Это довольно дорого.", focusForm: "recht" })
+    await runWordWorkflow("recht", { dryRun: true, analysisResult: {
+      shouldCreateWordCard: true, isImageable: false, recommendedMode: "cloze-form",
+      canonical: "recht", lemma: "recht", lexicalType: "adverb", clozeHint: "наречие степени",
+      meanings: [selected, { russian: "быть правым" }],
+    } })
+    expect(mockChooseMeaning).toHaveBeenCalledTimes(1)
+    expect(mockGenerateUnambiguousLexicalClozeSentence).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ meanings: [selected] }), expect.anything())
+    expect(mockVerifyLexicalClozeUniqueness).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      meanings: [selected], clozeHint: "довольно; наречие степени",
+    }))
+  })
+
   test("rewrites an AI cloze when more than one answer fits the learner-visible front", async () => {
     mockChooseMeaning.mockResolvedValue({ russian: "ему", english: "him, to him" })
     mockChooseWordSentence.mockResolvedValue({
@@ -424,7 +448,7 @@ describe("word mode sentence flow", () => {
     })
     mockVerifyLexicalClozeUniqueness
       .mockResolvedValueOnce({ valid: false, unique: false, answer: "" })
-      .mockResolvedValueOnce({ valid: false, unique: false, answer: "" })
+
       .mockResolvedValueOnce({ valid: true, unique: true, answer: "ihm" })
     mockGenerateUnambiguousLexicalClozeSentence.mockResolvedValue({
       german: "Der Mann sagt die Wahrheit, aber sie glaubt ihm nicht.",
@@ -456,7 +480,7 @@ describe("word mode sentence flow", () => {
     })
 
     expect(added).toBe(true)
-    expect(mockVerifyLexicalClozeUniqueness).toHaveBeenCalledTimes(3)
+    expect(mockVerifyLexicalClozeUniqueness).toHaveBeenCalledTimes(2)
     expect(mockGenerateUnambiguousLexicalClozeSentence).toHaveBeenCalledTimes(1)
     expect(mockExplainLexicalCloze).toHaveBeenCalledWith(expect.objectContaining({
       sentence: "Der Mann sagt die Wahrheit, aber sie glaubt ihm nicht.",
@@ -482,13 +506,7 @@ describe("word mode sentence flow", () => {
         alternatives: ["daran", "darüber"],
         reason: "Several pronominal adverbs fit.",
       })
-      .mockResolvedValueOnce({
-        valid: false,
-        unique: false,
-        answer: "",
-        alternatives: ["daran"],
-        reason: "The governing construction is still unclear.",
-      })
+
       .mockResolvedValueOnce({
         valid: false,
         unique: false,
@@ -645,7 +663,7 @@ describe("word mode sentence flow", () => {
 
     await expect(result).rejects.toThrow('Could not build an unambiguous cloze for "darauf"')
     expect(mockGenerateUnambiguousLexicalClozeSentence).toHaveBeenCalledTimes(3)
-    expect(mockVerifyLexicalClozeUniqueness).toHaveBeenCalledTimes(5)
+    expect(mockVerifyLexicalClozeUniqueness).toHaveBeenCalledTimes(4)
     expect(mockCreateClozeNote).not.toHaveBeenCalled()
   })
 
@@ -664,13 +682,7 @@ describe("word mode sentence flow", () => {
         alternatives: ["hinter", "neben"],
         reason: "Several spatial prepositions fit.",
       })
-      .mockResolvedValueOnce({
-        valid: false,
-        unique: false,
-        answer: "",
-        alternatives: ["hinter", "neben"],
-        reason: "Several spatial prepositions fit.",
-      })
+
       .mockResolvedValueOnce({
         valid: true,
         unique: true,
@@ -763,7 +775,7 @@ describe("word mode sentence flow", () => {
 
     expect(added).toBe(true)
     expect(mockCreateClozeNote).toHaveBeenCalledWith(expect.objectContaining({
-      text: "[sound:word-sentence.mp3]<br>Ich lerne, {{c1::damit::so that + subordinate clause}} ich die Prüfung bestehe.",
+      text: "[sound:word-sentence.mp3]<br>Ich lerne, {{c1::damit::чтобы; so that + subordinate clause}} ich die Prüfung bestehe.",
       tags: expect.arrayContaining([
         "mode-lexical-cloze",
         "word-subjunction",
@@ -810,7 +822,7 @@ describe("word mode sentence flow", () => {
 
     expect(added).toBe(true)
     expect(mockCreateClozeNote).toHaveBeenCalledWith(expect.objectContaining({
-      text: "[sound:word-sentence.mp3]<br>Ich trinke {{c1::nie::frequency adverb}} Kaffee.",
+      text: "[sound:word-sentence.mp3]<br>Ich trinke {{c1::nie::никогда; frequency adverb}} Kaffee.",
       tags: expect.arrayContaining([
         "mode-lexical-cloze",
         "word-adverb",

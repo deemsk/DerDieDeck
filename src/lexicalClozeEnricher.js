@@ -145,6 +145,10 @@ export async function generateUnambiguousLexicalClozeSentence(
         role: 'system',
         content: `Rewrite one German lexical cloze example so the target is the only reasonable answer from the German sentence and hint alone.
 
+Preserve the intendedMeaning exactly: do not switch to another sense or construction of the target
+to make uniqueness easier. For example, degree-adverb recht (довольно) must not become recht haben.
+If the existing hint or pattern suggests another sense, keep the intended meaning and correct the hint.
+
 Add concise context that rules out grammatical or semantic alternatives. For pronouns, include an explicit antecedent that fixes person, number, and gender. For case forms, make the governing verb or preposition clear. For connectors, particles, determiners, prepositions, and adverbs, make the intended relation or meaning uniquely recoverable.
 
 For pronominal adverbs such as darauf, daran, darüber, davon, and damit, use a governing verb, adjective, noun, or fixed construction that selects the target preposition. Add a following dass-clause or infinitive clause when it makes the construction explicit. Do not rely only on broad topic context if competing pronominal adverbs would still be grammatical.
@@ -162,6 +166,7 @@ Keep the sentence natural and concise. Include the exact target as a standalone 
           lexicalType: wordData.lexicalType || null,
           hint: wordData.clozeHint || null,
           patternHint: wordData.patternHint || null,
+          intendedMeaning: wordData.meanings?.length === 1 ? wordData.meanings[0]?.russian : null,
           russianMeanings: Array.isArray(wordData.meanings)
             ? wordData.meanings.map((meaning) => meaning?.russian).filter(Boolean)
             : [],
