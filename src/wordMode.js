@@ -1,3 +1,4 @@
+import { prepareNounExample } from './wordExampleEnricher.js';
 import { createInterface } from 'readline';
 import { join } from 'path';
 import ora from 'ora';
@@ -483,6 +484,20 @@ async function prepareWord(rawInput, options, spinner) {
     if (duplicateInfo.exactMatches.length > 0) {
       console.log(chalk.yellow(`Exact duplicate exists for ${wordData.canonical} (${selectedMeaning.russian})`));
       return { rejected: true };
+    }
+
+    if (isNounWord(wordData)) {
+      spinner.start('Preparing an example for the selected meaning...');
+      try {
+        const example = await prepareNounExample({ wordData, selectedMeaning, learnerProfileContext });
+        wordData.exampleSentences = [example];
+        spinner.succeed('Example meaning checked');
+      } catch (error) {
+        spinner.stop();
+        throw new RecoverableWorkflowError(error.message, {
+          code: 'noun-example-meaning-failed', workflow: 'word',
+        });
+      }
     }
 
     let lexicalCefr = null;

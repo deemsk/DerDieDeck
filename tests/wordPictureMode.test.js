@@ -102,6 +102,9 @@ jest.unstable_mockModule("../src/cardContent/cefr.js", () => ({
   estimateLexicalCEFR: jest.fn(async () => null),
 }))
 
+const mockPrepareNounExample = jest.fn()
+jest.unstable_mockModule("../src/wordExampleEnricher.js", () => ({ prepareNounExample: mockPrepareNounExample }))
+
 const { runWordWorkflow } = await import("../src/wordMode.js")
 
 describe("word mode picture flow", () => {
@@ -149,4 +152,33 @@ describe("word mode picture flow", () => {
       deck: "German::Test",
     }))
   })
+})
+
+const schatzAnalysis = () => ({
+  shouldCreateWordCard: true, isImageable: true, recommendedMode: 'picture-word',
+  lexicalType: 'noun', canonical: 'der Schatz', lemma: 'Schatz', gender: 'm', plural: 'Schätze',
+  meanings: [{ russian: 'клад' }, { russian: 'дорогой / дорогая' }],
+  exampleSentences: [{ german: 'Die Kinder finden einen Schatz.', russian: 'Дети находят клад.' }],
+})
+test('Schatz preview and saved card use the same example for the chosen affectionate sense', async () => {
+  jest.clearAllMocks()
+  const selected = { russian: 'дорогой / дорогая' }
+  const example = { german: 'Schatz, komm bitte her.', russian: 'Дорогой, подойди, пожалуйста.', focusForm: 'Schatz' }
+  mockChooseMeaning.mockResolvedValue(selected)
+  mockPrepareNounExample.mockResolvedValue(example)
+  await runWordWorkflow('Schatz', { learnerProfileContext: false, analysisResult: schatzAnalysis(), deck: 'German::Test' })
+  expect(mockPrepareNounExample).toHaveBeenCalledWith(expect.objectContaining({ selectedMeaning: selected }))
+  expect(mockConfirmWordSelection.mock.calls[0][0].wordData.exampleSentences).toEqual([example])
+  const extra = mockCreatePictureWordNote.mock.calls[0][0].extraInfoField
+  expect(extra).toContain(example.german)
+  expect(extra).toContain(example.russian)
+  expect(extra).not.toContain('Die Kinder finden')
+})
+test('failed noun example validation prevents preview, audio and note creation', async () => {
+  jest.clearAllMocks()
+  mockPrepareNounExample.mockRejectedValue(new Error('Wrong sense'))
+  await expect(runWordWorkflow('Schatz', { learnerProfileContext: false, analysisResult: schatzAnalysis() })).rejects.toThrow('Wrong sense')
+  expect(mockConfirmWordSelection).not.toHaveBeenCalled()
+  expect(mockGenerateSimpleSpeech).not.toHaveBeenCalled()
+  expect(mockCreatePictureWordNote).not.toHaveBeenCalled()
 })
