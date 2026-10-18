@@ -89,7 +89,7 @@ test('failed explanation offers retry; invalid content is never accepted', async
   const ask = jest.fn().mockResolvedValueOnce('r').mockResolvedValueOnce('y')
   const log = jest.fn()
   expect(await prepareVerbDictionaryExplanation(input, { generate, ask, log })).toEqual(explanation)
-  expect(log.mock.calls.flat().join(' ')).toContain('[R] Retry')
+  expect(log.mock.calls.flat().join(' ')).toContain('[R] Repair')
   expect(ask.mock.calls[0][0]).toBe('Choose: ')
   expect(generate).toHaveBeenCalledTimes(2)
 })
@@ -227,4 +227,18 @@ test('Enter still accepts both cards and audio-only still skips the form', async
   const companion = { ...input, companionSentence: explanation.example }
   expect(await prepareVerbDictionaryExplanation(companion, { ...options, ask: async () => '' })).toEqual(explanation)
   expect(await prepareVerbDictionaryExplanation(companion, { ...options, ask: async () => 's' })).toBeNull()
+})
+
+test('manual Repair carries diagnostics across failures and resets after success', async () => {
+  const first = [{ attempt: 1, explanation, blockingIssues: [{ field: 'ambiguity', reason: 'Include ich' }], review: null }]
+  const second = [...first, { ...first[0], attempt: 2 }]
+  const generate = jest.fn()
+    .mockRejectedValueOnce(Object.assign(new Error('first'), { attempts: first }))
+    .mockRejectedValueOnce(Object.assign(new Error('second'), { attempts: second }))
+    .mockResolvedValue(explanation)
+  const ask = jest.fn().mockResolvedValueOnce('r').mockResolvedValueOnce('r').mockResolvedValueOnce('r').mockResolvedValueOnce('y')
+  await prepareVerbDictionaryExplanation(input, { generate, ask, log: () => {} })
+  expect(generate.mock.calls[1][0].repairAttempts).toEqual(first)
+  expect(generate.mock.calls[2][0].repairAttempts).toEqual(second)
+  expect(generate.mock.calls[3][0].repairAttempts).toEqual([])
 })

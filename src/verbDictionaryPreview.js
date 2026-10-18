@@ -34,8 +34,8 @@ export function formatDictionaryReviewActions({ ready, companion }, {
       ? [['Y', 'Add both'], ['R', 'Regenerate'], ['E', 'Edit example'], ['S', 'Audio only'], ['D', 'Cancel']]
       : [['Y', 'Add card'], ['R', 'Regenerate'], ['S', 'Skip']]
     : companion
-      ? [['N', 'New example'], ['E', 'Edit example'], ['R', 'Retry explanation'], ['S', 'Audio only'], ['D', 'Cancel']]
-      : [['R', 'Retry'], ['S', 'Skip']];
+      ? [['N', 'New example'], ['E', 'Edit example'], ['R', 'Repair explanation'], ['S', 'Audio only'], ['D', 'Cancel']]
+      : [['R', 'Repair'], ['S', 'Skip']];
   const labels = actions.map(([key, label]) => `[${key}] ${label}`);
   const cellWidth = Math.max(...labels.map(label => label.length)) + 4;
   const twoColumns = 2 + cellWidth + Math.max(...labels.filter((_label, index) => index % 2).map(label => label.length), 0) <= columns;
@@ -79,16 +79,28 @@ export async function prepareVerbDictionaryExplanation({
     meaning: selectedMeaning?.russian,
     selectedSentence,
   };
+  let repairAttempts = [];
   while (true) {
     let explanation;
     let failureReason;
     try {
       log('Preparing dictionary form explanation...');
-      explanation = validateVerbFormExplanation(await generate(context), context);
+      const proposed = await generate({ ...context, repairAttempts });
+      try {
+        explanation = validateVerbFormExplanation(proposed, context);
+      } catch (error) {
+        error.attempts = [...repairAttempts, {
+          attempt: repairAttempts.length + 1, explanation: proposed, review: null,
+          blockingIssues: [{ field: 'structure', reason: error.message }],
+        }];
+        throw error;
+      }
+      repairAttempts = [];
       log(`\n${formatVerbDictionaryPreview({ verbData, selectedMeaning, formExplanation: explanation, formPronunciation }, { chalkRef, columns })}\n`);
     } catch (error) {
       explanation = null;
       failureReason = error.message;
+      if (Array.isArray(error.attempts)) repairAttempts = error.attempts;
       log(`Dictionary card not prepared: ${error.message}`);
     }
     while (true) {

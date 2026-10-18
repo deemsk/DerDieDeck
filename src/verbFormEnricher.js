@@ -99,70 +99,75 @@ async function requestJson(api, role, name, schema, system, input) {
   return JSON.parse(response.choices?.[0]?.message?.content || 'null');
 }
 
-export async function explainVerbForm({ form, infinitive, meaning, selectedSentence = null, learnerProfileContext = null }) {
+export async function explainVerbForm({ form, infinitive, meaning, selectedSentence = null, learnerProfileContext = null, repairAttempts = [] }) {
   const api = await getClient();
   const context = {
     ...(learnerProfileContext ? { learnerProfileContext } : {}),
     form, infinitive, meaning,
     selectedSentence: containsVerbForm(selectedSentence?.german, form) ? selectedSentence : null,
   };
-  const attempts = [];
-  const blockingFeedback = [];
-  let feedback = null;
-  let previousExplanation = null;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const role = attempt === 0 ? OPENAI_MODEL_ROLES.generation : OPENAI_MODEL_ROLES.validation;
-    const result = await requestJson(api, role, 'verb_form_explanation',
-      explanationSchema, RULES, { ...context, feedback, blockingFeedback, previousExplanation });
-    previousExplanation = result;
-    const diagnostic = { attempt: attempt + 1, explanation: result, review: null, blockingIssues: [] };
-    attempts.push(diagnostic);
-    try {
-      validateVerbFormExplanation(result, context);
-    } catch (error) {
-      diagnostic.blockingIssues = [{ field: 'structure', reason: error.message }];
-      blockingFeedback.push(...diagnostic.blockingIssues);
+  const attempts = [...repairAttempts];
+  const blockingFeedback = attempts.flatMap(entry => entry.blockingIssues || []);
+  let feedback = blockingFeedback.map(issue => `${issue.field}: ${issue.reason}`).join('\n') || null;
+  let previousExplanation = attempts.findLast(entry => entry.explanation)?.explanation || null;
+  try {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const role = attempt === 0 && !previousExplanation ? OPENAI_MODEL_ROLES.generation : OPENAI_MODEL_ROLES.validation;
+      const result = await requestJson(api, role, 'verb_form_explanation',
+        explanationSchema, RULES, { ...context, feedback, blockingFeedback, previousExplanation });
+      previousExplanation = result;
+      const diagnostic = { attempt: attempts.length + 1, explanation: result, review: null, blockingIssues: [] };
+      attempts.push(diagnostic);
+      try {
+        validateVerbFormExplanation(result, context);
+      } catch (error) {
+        diagnostic.blockingIssues = [{ field: 'structure', reason: error.message }];
+        blockingFeedback.push(...diagnostic.blockingIssues);
+        feedback = blockingFeedback.map(issue => `${issue.field}: ${issue.reason}`).join('\n');
+        continue;
+      }
+      const review = await requestJson(api, OPENAI_MODEL_ROLES.validation, 'verb_form_review', reviewSchema,
+        `Independently verify the proposed learning card against ALL these rules. Reject wrong grammar,
+        misleading form meanings, missing important ambiguity, wrong examples or incomplete translations.
+        Accept concise equivalent wording and natural alternative translations. This is a compact learning
+        card, not an exhaustive paradigm: do not reject it solely for omitting a rare reading or an optional
+        additional contrast. Reject false claims of uniqueness and missing common competing readings.
+        Treat redundant wording, repeated grammar and irrelevant construction lists as suggestions
+        unless they introduce a factual error. Suggest null optional fields when they add no useful
+        distinction; do not demand filler.
+        Formal Sie is grammatically third-person plural, semantically polite second-person address.
+        Return blockingIssues and suggestions arrays, each issue with a field and concrete reason.
+        Blocking issues must identify an actual correctness problem in the proposed explanation:
+        wrong identity, grammar, materially wrong/incomplete meaning or translation, or a missing
+        common competing reading. Do not promote optional details or editorial preferences to blockers.
+        Alternative natural translations, stylistic concision and optional contrasts are suggestions
+        unless they cause a concrete factual or comprehension error. Do not impose a tense or implied
+        context on the translation that the German sentence does not establish.
+        Evaluate explanation.example.russian, not a superseded selectedSentence.russian; a corrected
+        proposed translation must not be rejected for retaining an error only in the original input.
+        Return empty blockingIssues when the proposed card is accurate enough to learn from.\n${RULES}`,
+        { form, infinitive, selectedSentence: context.selectedSentence, explanation: result });
+      diagnostic.review = review;
+      const isIssueList = value => Array.isArray(value) && value.every(issue =>
+        typeof issue?.field === 'string' && issue.field.trim() &&
+        typeof issue?.reason === 'string' && issue.reason.trim());
+      if (!isIssueList(review?.blockingIssues) || !isIssueList(review?.suggestions)) {
+        const error = new Error('Invalid verb form review');
+        error.attempts = attempts;
+        throw error;
+      }
+      diagnostic.blockingIssues = review.blockingIssues;
+      if (review.blockingIssues.length === 0) return result;
+      blockingFeedback.push(...review.blockingIssues);
       feedback = blockingFeedback.map(issue => `${issue.field}: ${issue.reason}`).join('\n');
-      continue;
     }
-    const review = await requestJson(api, OPENAI_MODEL_ROLES.validation, 'verb_form_review', reviewSchema,
-      `Independently verify the proposed learning card against ALL these rules. Reject wrong grammar,
-      misleading form meanings, missing important ambiguity, wrong examples or incomplete translations.
-      Accept concise equivalent wording and natural alternative translations. This is a compact learning
-      card, not an exhaustive paradigm: do not reject it solely for omitting a rare reading or an optional
-      additional contrast. Reject false claims of uniqueness and missing common competing readings.
-      Treat redundant wording, repeated grammar and irrelevant construction lists as suggestions
-      unless they introduce a factual error. Suggest null optional fields when they add no useful
-      distinction; do not demand filler.
-      Formal Sie is grammatically third-person plural, semantically polite second-person address.
-      Return blockingIssues and suggestions arrays, each issue with a field and concrete reason.
-      Blocking issues must identify an actual correctness problem in the proposed explanation:
-      wrong identity, grammar, materially wrong/incomplete meaning or translation, or a missing
-      common competing reading. Do not promote optional details or editorial preferences to blockers.
-      Alternative natural translations, stylistic concision and optional contrasts are suggestions
-      unless they cause a concrete factual or comprehension error. Do not impose a tense or implied
-      context on the translation that the German sentence does not establish.
-      Evaluate explanation.example.russian, not a superseded selectedSentence.russian; a corrected
-      proposed translation must not be rejected for retaining an error only in the original input.
-      Return empty blockingIssues when the proposed card is accurate enough to learn from.\n${RULES}`,
-      { form, infinitive, selectedSentence: context.selectedSentence, explanation: result });
-    diagnostic.review = review;
-    const isIssueList = value => Array.isArray(value) && value.every(issue =>
-      typeof issue?.field === 'string' && issue.field.trim() &&
-      typeof issue?.reason === 'string' && issue.reason.trim());
-    if (!isIssueList(review?.blockingIssues) || !isIssueList(review?.suggestions)) {
-      const error = new Error('Invalid verb form review');
-      error.attempts = attempts;
-      throw error;
-    }
-    diagnostic.blockingIssues = review.blockingIssues;
-    if (review.blockingIssues.length === 0) return result;
-    blockingFeedback.push(...review.blockingIssues);
-    feedback = blockingFeedback.map(issue => `${issue.field}: ${issue.reason}`).join('\n');
+    const history = attempts.map(entry =>
+      `Attempt ${entry.attempt}: ${entry.blockingIssues.map(issue => `${issue.field}: ${issue.reason}`).join('; ')}`);
+    const error = new Error(`Could not prepare verb form explanation:\n${history.join('\n')}`);
+    error.attempts = attempts;
+    throw error;
+  } catch (error) {
+    error.attempts = attempts;
+    throw error;
   }
-  const history = attempts.map(entry =>
-    `Attempt ${entry.attempt}: ${entry.blockingIssues.map(issue => `${issue.field}: ${issue.reason}`).join('; ')}`);
-  const error = new Error(`Could not prepare verb form explanation:\n${history.join('\n')}`);
-  error.attempts = attempts;
-  throw error;
 }

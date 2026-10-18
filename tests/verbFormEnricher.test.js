@@ -131,3 +131,32 @@ test('repairs hör ambiguity and translation without blocking on a later wording
   expect(reviewInput.explanation.example).toEqual(repaired.example)
   expect(create).toHaveBeenCalledTimes(4)
 })
+
+test('manual repair resumes the previous answer and issues with continuous attempt numbers', async () => {
+  const repairAttempts = [{ attempt: 1, explanation, review: null, blockingIssues: [issue('ambiguity', 'Include ich')] }]
+  create.mockResolvedValueOnce(answer(explanation))
+    .mockResolvedValueOnce(answer({ blockingIssues: [], suggestions: [] }))
+  expect(await explainVerbForm({ ...request, repairAttempts })).toEqual(explanation)
+  const prompt = JSON.parse(create.mock.calls[0][0].messages[1].content)
+  expect(prompt.previousExplanation).toEqual(explanation)
+  expect(prompt.blockingFeedback).toEqual(repairAttempts[0].blockingIssues)
+  expect(create.mock.calls[0][0].model).toBe(getOpenAIModel(OPENAI_MODEL_ROLES.validation))
+  create.mockReset().mockRejectedValue(new Error('offline'))
+  const error = await explainVerbForm({ ...request, repairAttempts }).catch(error => error)
+  expect(error.attempts).toEqual(repairAttempts)
+  expect(repairAttempts).toHaveLength(1)
+})
+
+test('failed resumed repair appends diagnostics without resetting or duplicating history', async () => {
+  const repairAttempts = [{ attempt: 1, explanation, review: null, blockingIssues: [issue('ambiguity', 'Include ich')] }]
+  create.mockResolvedValueOnce(answer(explanation))
+    .mockResolvedValueOnce(answer({ blockingIssues: [issue('ambiguity', 'Include er')], suggestions: [] }))
+    .mockResolvedValueOnce(answer(explanation))
+    .mockResolvedValueOnce(answer({ blockingIssues: [issue('ambiguity', 'Include es')], suggestions: [] }))
+  const error = await explainVerbForm({ ...request, repairAttempts }).catch(error => error)
+  expect(error.attempts.map(entry => entry.attempt)).toEqual([1, 2, 3])
+  expect(error.message).toContain('Attempt 3: ambiguity: Include es')
+  const second = JSON.parse(create.mock.calls[2][0].messages[1].content)
+  expect(second.blockingFeedback.map(entry => entry.reason)).toEqual(['Include ich', 'Include er'])
+  expect(repairAttempts).toHaveLength(1)
+})
