@@ -94,6 +94,7 @@ jest.unstable_mockModule("../src/enricher.js", () => ({
 }))
 
 jest.unstable_mockModule("../src/lexicalClozeEnricher.js", () => ({
+  prepareCompactClozeHint: jest.fn(async (_sentence, word) => word.meanings[0].russian),
   generateUnambiguousLexicalClozeSentence: jest.fn(),
   verifyLexicalClozeUniqueness: jest.fn(async () => ({ valid: true, unique: true, answer: "" })),
 }))

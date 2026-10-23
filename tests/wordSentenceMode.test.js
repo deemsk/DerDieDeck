@@ -123,6 +123,7 @@ jest.unstable_mockModule("../src/enricher.js", () => ({
 }))
 
 jest.unstable_mockModule("../src/lexicalClozeEnricher.js", () => ({
+  prepareCompactClozeHint: jest.fn(async (_sentence, word) => word.meanings[0].russian),
   generateUnambiguousLexicalClozeSentence: mockGenerateUnambiguousLexicalClozeSentence,
   verifyLexicalClozeUniqueness: mockVerifyLexicalClozeUniqueness,
 }))
@@ -398,7 +399,7 @@ describe("word mode sentence flow", () => {
     expect(mockBuildWordGoogleImagesSearch).not.toHaveBeenCalled()
     expect(mockCreateBasicNote).not.toHaveBeenCalled()
     expect(mockCreateClozeNote).toHaveBeenCalledWith(expect.objectContaining({
-      text: "[sound:word-sentence.mp3]<br>Ich bin müde, {{c1::aber::но; contrast connector}} ich komme.",
+      text: "[sound:word-sentence.mp3]<br>Ich bin müde, {{c1::aber::но}} ich komme.",
       deck: "German::Test",
       tags: expect.arrayContaining([
         "mode-lexical-cloze",
@@ -437,7 +438,7 @@ describe("word mode sentence flow", () => {
     expect(mockChooseMeaning).toHaveBeenCalledTimes(1)
     expect(mockGenerateUnambiguousLexicalClozeSentence).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ meanings: [selected] }), expect.anything())
     expect(mockVerifyLexicalClozeUniqueness).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-      meanings: [selected], clozeHint: "довольно; наречие степени",
+      meanings: [selected], clozeHint: "довольно",
     }))
   })
 
@@ -489,7 +490,7 @@ describe("word mode sentence flow", () => {
       target: "ihm",
     }))
     expect(mockCreateClozeNote).toHaveBeenCalledWith(expect.objectContaining({
-      text: expect.stringContaining("Der Mann sagt die Wahrheit, aber sie glaubt {{c1::ihm::ему; dative pronoun}} nicht."),
+      text: expect.stringContaining("Der Mann sagt die Wahrheit, aber sie glaubt {{c1::ihm::ему}} nicht."),
     }))
   })
 
@@ -570,7 +571,7 @@ describe("word mode sentence flow", () => {
       attempt: 2,
     })
     expect(mockCreateClozeNote).toHaveBeenCalledWith(expect.objectContaining({
-      text: expect.stringContaining("Wir warten {{c1::darauf::на это; ждать этого; местоименное наречие}}, dass der Zug endlich kommt."),
+      text: expect.stringContaining("Wir warten {{c1::darauf::на это}}, dass der Zug endlich kommt."),
     }))
   })
 
@@ -735,7 +736,7 @@ describe("word mode sentence flow", () => {
       expect.objectContaining({ german: "Das Bild hängt oberhalb des Sofas." })
     )
     expect(mockCreateClozeNote).toHaveBeenCalledWith(expect.objectContaining({
-      text: expect.stringContaining("Wir sprechen {{c1::über::над; говорить о чём-либо, Akkusativ}} das Wetter."),
+      text: expect.stringContaining("Wir sprechen {{c1::über::над}} das Wetter."),
     }))
   })
 
@@ -777,7 +778,7 @@ describe("word mode sentence flow", () => {
 
     expect(added).toBe(true)
     expect(mockCreateClozeNote).toHaveBeenCalledWith(expect.objectContaining({
-      text: "[sound:word-sentence.mp3]<br>Ich lerne, {{c1::damit::чтобы; so that + subordinate clause}} ich die Prüfung bestehe.",
+      text: "[sound:word-sentence.mp3]<br>Ich lerne, {{c1::damit::чтобы}} ich die Prüfung bestehe.",
       tags: expect.arrayContaining([
         "mode-lexical-cloze",
         "word-subjunction",
@@ -824,7 +825,7 @@ describe("word mode sentence flow", () => {
 
     expect(added).toBe(true)
     expect(mockCreateClozeNote).toHaveBeenCalledWith(expect.objectContaining({
-      text: "[sound:word-sentence.mp3]<br>Ich trinke {{c1::nie::никогда; frequency adverb}} Kaffee.",
+      text: "[sound:word-sentence.mp3]<br>Ich trinke {{c1::nie::никогда}} Kaffee.",
       tags: expect.arrayContaining([
         "mode-lexical-cloze",
         "word-adverb",
@@ -974,4 +975,27 @@ test('ganz existing picture meaning can add only a sentence without a second mai
   expect(mockCreateBasicNote).not.toHaveBeenCalled()
   expect(mockResolveWordPronunciation).not.toHaveBeenCalled()
   expect(mockCreateNote).toHaveBeenCalledTimes(1)
+})
+
+test('Deshalb verifies and saves the same compact hint without the full definition', async () => {
+  jest.clearAllMocks()
+  const { prepareCompactClozeHint } = await import('../src/lexicalClozeEnricher.js')
+  prepareCompactClozeHint.mockResolvedValueOnce('поэтому')
+  const sentence = { german: 'Der Zug fiel aus. Deshalb nahm Anna den Bus.', russian: 'Поезд отменили. Поэтому Анна поехала на автобусе.', focusForm: 'Deshalb' }
+  const meaning = 'поэтому, по этой причине (следствие ранее названной причины)'
+  mockChooseMeaning.mockResolvedValue({ russian: meaning })
+  mockChooseWordSentence.mockResolvedValue(sentence)
+  mockEnrich.mockResolvedValue({ ...sentence, ipa: '[ipa]' })
+  mockVerifyLexicalClozeUniqueness.mockReset().mockResolvedValue({ valid: true })
+  mockFindLexicalClozeDuplicates.mockResolvedValue({ exactMatches: [], headwordMatches: [] })
+  await runWordWorkflow('deshalb', { learnerProfileContext: false, analysisResult: {
+    shouldCreateWordCard: true, isImageable: false, recommendedMode: 'cloze-form',
+    canonical: 'deshalb', lemma: 'deshalb', lexicalType: 'adverb', meanings: [{ russian: meaning }],
+    clozeHint: 'Поэтому, по этой причине; нейтральное наречие следствия с компонентом половина.',
+  }, deck: 'German::Test' })
+  expect(mockVerifyLexicalClozeUniqueness.mock.calls[0][1].clozeHint).toBe('поэтому')
+  const saved = mockCreateClozeNote.mock.calls[0][0].text
+  expect(saved).toContain('{{c1::Deshalb::поэтому}}')
+  expect(saved).not.toContain('половина')
+  expect(saved).not.toContain('следствие ранее')
 })

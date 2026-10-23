@@ -49,7 +49,7 @@ import {
 } from './anki.js';
 import { generateSimpleSpeech, generateSpeech } from './lib/tts.js';
 import { enrich, reviewEnrichedText } from './enricher.js';
-import { generateUnambiguousLexicalClozeSentence, verifyLexicalClozeUniqueness } from './lexicalClozeEnricher.js';
+import { prepareCompactClozeHint, generateUnambiguousLexicalClozeSentence, verifyLexicalClozeUniqueness } from './lexicalClozeEnricher.js';
 import { explainLexicalCloze } from './lexicalRuleEnricher.js';
 import { RecoverableWorkflowError } from './workflowRecovery.js';
 
@@ -71,16 +71,6 @@ function formatWordPreviewSummary(chalk, wordData, translation, cefrLevel = null
   const head = `${chalk.bold.cyan(wordData.canonical)} ${chalk.dim(`(${meta.join(', ')})`)}`;
 
   return translation ? `${head} ${chalk.dim('—')} ${translation}` : head;
-}
-
-function buildMeaningAwareClozeHint(wordData = {}, selectedMeaning = {}) {
-  const hint = String(wordData.clozeHint || '').trim();
-  const russian = String(selectedMeaning?.russian || '').trim();
-  if (!russian || hint.toLocaleLowerCase('ru').includes(russian.toLocaleLowerCase('ru'))) {
-    return hint;
-  }
-
-  return [russian, hint].filter(Boolean).join('; ');
 }
 
 export function resolveWordAudioPlan(wordData = {}) {
@@ -541,7 +531,13 @@ async function prepareWord(rawInput, options, spinner) {
     if (!selectedMeaning) return { rejected: true };
     // Keep alternative senses out of repair prompts and subsequent enrichment.
     wordData.meanings = [selectedMeaning];
-    wordData.clozeHint = buildMeaningAwareClozeHint(wordData, selectedMeaning);
+    spinner.start('Preparing a short cloze hint...');
+    try {
+      wordData.clozeHint = await prepareCompactClozeHint(chosenSentence, wordData);
+    } catch (error) {
+      spinner.stop();
+      throw new RecoverableWorkflowError(error.message, { code: 'cloze-hint-failed', workflow: 'word' });
+    }
 
     spinner.start('Checking that the cloze has one answer...');
     const sentenceIsStructurallyValid = validateLexicalClozeSentence(chosenSentence, wordData);
@@ -564,12 +560,6 @@ async function prepareWord(rawInput, options, spinner) {
           attempt: repairAttempts,
         });
         chosenSentence = rewritten;
-        if (rewritten.clozeHint) {
-          wordData.clozeHint = buildMeaningAwareClozeHint({
-            ...wordData,
-            clozeHint: rewritten.clozeHint,
-          }, selectedMeaning);
-        }
         if (!validateLexicalClozeSentence(rewritten, wordData)) {
           uniqueness = {
             valid: false,
@@ -581,6 +571,7 @@ async function prepareWord(rawInput, options, spinner) {
           continue;
         }
 
+        wordData.clozeHint = await prepareCompactClozeHint(rewritten, wordData);
         uniqueness = await verifyLexicalClozeUniqueness(rewritten, wordData);
       } catch (err) {
         uniqueness = {
@@ -604,14 +595,6 @@ async function prepareWord(rawInput, options, spinner) {
     spinner.succeed(repairAttempts > 0
       ? `Cloze repaired and verified after ${repairAttempts} attempt${repairAttempts === 1 ? '' : 's'}`
       : 'Cloze answer is uniquely recoverable');
-
-    if (!selectedMeaning) {
-      selectedMeaning = await chooseMeaning(wordData, options.meaning, {
-        manualPrompt: `Enter the intended meaning/gloss for "${wordData.canonical}" (not an example sentence), or press Enter to skip: `,
-        editPrompt: 'Enter the intended meaning/gloss (not an example sentence): ',
-        allowBlank: true,
-      });
-    }
 
     let duplicateInfo = { exactMatches: [], headwordMatches: [] };
     spinner.start('Checking duplicates...');

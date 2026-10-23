@@ -13,6 +13,7 @@ jest.unstable_mockModule('../src/lib/secrets.js', () => ({
 }))
 
 const {
+  prepareCompactClozeHint,
   buildMaskedLexicalCloze,
   generateUnambiguousLexicalClozeSentence,
   verifyLexicalClozeUniqueness,
@@ -173,4 +174,19 @@ describe('lexical cloze uniqueness verification', () => {
       clozeHint: 'о чём-либо',
     })
   })
+})
+
+test('prepares a short Deshalb hint without copying the long analysis hint', async () => {
+  mockCreate.mockReset().mockResolvedValue({ choices: [{ message: { content: JSON.stringify({ hint: 'поэтому' }) } }] })
+  const hint = await prepareCompactClozeHint({ german: 'Deshalb nahm Anna den Bus.' }, {
+    canonical: 'deshalb', clozeHint: 'нейтральное наречие с компонентом половина',
+    meanings: [{ russian: 'поэтому, по этой причине (следствие ранее названной причины)' }],
+  })
+  expect(hint).toBe('поэтому')
+  expect(mockCreate.mock.calls[0][0].messages[1].content).not.toContain('половина')
+})
+test.each(['слово '.repeat(12), '{{c1::ответ}}', 'deshalb', 'therefore'])('rejects invalid hint %s without truncating it', async hint => {
+  mockCreate.mockReset().mockResolvedValue({ choices: [{ message: { content: JSON.stringify({ hint }) } }] })
+  await expect(prepareCompactClozeHint({ german: 'Deshalb komme ich.' }, { canonical: 'deshalb', meanings: [{ russian: 'поэтому' }] })).rejects.toThrow('compact cloze hint')
+  expect(mockCreate).toHaveBeenCalledTimes(2)
 })
