@@ -136,6 +136,8 @@ jest.unstable_mockModule("../src/cardContent/cefr.js", () => ({
 }))
 
 const { enrichWord: mockProfiledWord } = await import("../src/wordEnricher.js")
+const mockReviewWordDuplicates = jest.fn(async duplicates => duplicates.exactMatches.length ? 'skip' : 'new')
+jest.unstable_mockModule('../src/wordDuplicateReview.js', () => ({ reviewWordDuplicates: mockReviewWordDuplicates }))
 const { runWordWorkflow } = await import("../src/wordMode.js")
 
 describe("word mode sentence flow", () => {
@@ -955,4 +957,21 @@ describe("word mode sentence flow", () => {
     expect(payload.russian).toBe("Этот дом большой.")
     expect(payload.imageFilename).toBe("word-sentence-image.jpg")
   })
+})
+
+test('ganz existing picture meaning can add only a sentence without a second main card', async () => {
+  jest.clearAllMocks()
+  mockReviewWordDuplicates.mockResolvedValueOnce('example')
+  mockFindSentenceWordDuplicates.mockResolvedValueOnce({ exactMatches: [], headwordMatches: [{ noteId: 42, canonical: 'ganz', meaning: 'целый, весь; взятый полностью' }] })
+  mockChooseMeaning.mockResolvedValue({ russian: 'целый, весь (полностью взятый)' })
+  mockChooseWordSentence.mockResolvedValue({ german: 'Ich esse den ganzen Kuchen.', russian: 'Я съедаю весь торт.', focusForm: 'ganzen' })
+  mockEnrich.mockResolvedValue({ german: 'Ich esse den ganzen Kuchen.', russian: 'Я съедаю весь торт.', ipa: '[ipa]' })
+  await runWordWorkflow('ganz', { learnerProfileContext: false, analysisResult: {
+    shouldCreateWordCard: true, isImageable: false, recommendedMode: 'sentence-form',
+    canonical: 'ganz', lemma: 'ganz', lexicalType: 'adjective', meanings: [{ russian: 'целый, весь' }],
+  }, deck: 'German::Test' })
+  expect(mockReviewWordDuplicates).toHaveBeenCalledWith(expect.objectContaining({ headwordMatches: [expect.objectContaining({ noteId: 42 })] }), { sentence: true })
+  expect(mockCreateBasicNote).not.toHaveBeenCalled()
+  expect(mockResolveWordPronunciation).not.toHaveBeenCalled()
+  expect(mockCreateNote).toHaveBeenCalledTimes(1)
 })

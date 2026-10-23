@@ -729,57 +729,34 @@ export async function findSimilarCards(germanText, threshold = 70) {
   return similar;
 }
 
-export async function findWordDuplicates({
-  canonical,
-  meaning,
-  lexicalType = null,
-  modelName = config.wordNoteType || PICTURE_WORD_MODEL,
-}) {
+export async function findWordDuplicates({ canonical, meaning = null, lexicalType = null,
+  modelName = config.wordNoteType || PICTURE_WORD_MODEL }) {
   const noteIds = await ankiConnect('findNotes', {
-    query: `note:"${modelName}"`,
+    query: `(note:"${modelName}" or tag:mode-word or tag:mode-word-main or tag:mode-word-sentence or tag:mode-lexical-cloze)`,
   });
-
-  if (noteIds.length === 0) {
-    return { exactMatches: [], headwordMatches: [] };
-  }
-
+  if (!noteIds.length) return { exactMatches: [], headwordMatches: [] };
   const notes = await ankiConnect('notesInfo', { notes: noteIds });
-  const normalizedCanonical = normalizeGerman(canonical);
-  const normalizedMeaning = normalizeGerman(meaning);
   const exactMatches = [];
   const headwordMatches = [];
-
   for (const note of notes) {
-    const wordField = note.fields?.[PICTURE_WORD_FIELDS.word]?.value || '';
-    const extraField = note.fields?.[PICTURE_WORD_FIELDS.extra]?.value || '';
-    const existingCanonical = extractCanonicalWord(wordField, extraField);
-    const existingLexicalType = extractWordLexicalType(extraField);
-
-    if (!existingCanonical) continue;
-    if (normalizeGerman(existingCanonical) !== normalizedCanonical) continue;
-    if (lexicalType && existingLexicalType && existingLexicalType !== lexicalType) continue;
-
+    const extra = note.fields?.[PICTURE_WORD_FIELDS.extra]?.value || '';
+    const metadata = extractWordMetadataFromSentenceNote(note);
+    const existingCanonical = metadata?.canonical || metadata?.lemma ||
+      extractCanonicalWord(note.fields?.[PICTURE_WORD_FIELDS.word]?.value || '', extra);
+    if (!existingCanonical || normalizeGerman(existingCanonical) !== normalizeGerman(canonical)) continue;
     const duplicate = {
-      noteId: note.noteId,
-      canonical: existingCanonical,
-      lexicalType: existingLexicalType,
-      meaning: extractWordMeaning(extraField),
+      noteId: note.noteId, canonical: existingCanonical,
+      lexicalType: metadata?.lexicalType || extractWordLexicalType(extra),
+      meaning: metadata?.meaning || extractWordMeaning(extra),
     };
-
-    if (duplicate.meaning && normalizeGerman(duplicate.meaning) === normalizedMeaning) {
-      exactMatches.push(duplicate);
-      continue;
-    }
-
-    headwordMatches.push(duplicate);
+    if (meaning && duplicate.meaning && normalizeGerman(meaning) === normalizeGerman(duplicate.meaning) &&
+        (!lexicalType || !duplicate.lexicalType || lexicalType === duplicate.lexicalType)) exactMatches.push(duplicate);
+    else headwordMatches.push(duplicate);
   }
-
   return { exactMatches, headwordMatches };
 }
 
-/**
- * Find existing Basic-style verb lemma notes created by the morphology package workflow.
- */
+
 export async function findVerbLemmaDuplicates({
   infinitive,
   modelName = config.ankiNoteType,
@@ -843,93 +820,12 @@ export async function findVerbFormDuplicates({
   };
 }
 
-export async function findSentenceWordDuplicates({
-  canonical,
-  meaning = null,
-  lexicalType = null,
-}) {
-  const noteIds = await ankiConnect('findNotes', {
-    query: 'tag:mode-word-sentence',
-  });
-
-  if (noteIds.length === 0) {
-    return { exactMatches: [], headwordMatches: [] };
-  }
-
-  const notes = await ankiConnect('notesInfo', { notes: noteIds });
-  const normalizedCanonical = normalizeGerman(canonical);
-  const normalizedMeaning = meaning ? normalizeGerman(meaning) : null;
-  const exactMatches = [];
-  const headwordMatches = [];
-
-  for (const note of notes) {
-    const metadata = extractWordMetadataFromSentenceNote(note);
-    if (!metadata?.canonical) continue;
-    if (normalizeGerman(metadata.canonical) !== normalizedCanonical) continue;
-    if (lexicalType && metadata.lexicalType && metadata.lexicalType !== lexicalType) continue;
-
-    const duplicate = {
-      noteId: note.noteId,
-      canonical: metadata.canonical,
-      lexicalType: metadata.lexicalType,
-      meaning: metadata.meaning || null,
-    };
-
-    if (normalizedMeaning && duplicate.meaning && normalizeGerman(duplicate.meaning) === normalizedMeaning) {
-      exactMatches.push(duplicate);
-      continue;
-    }
-
-    headwordMatches.push(duplicate);
-  }
-
-  return { exactMatches, headwordMatches };
+export async function findSentenceWordDuplicates(options) {
+  return findWordDuplicates(options);
 }
 
-/**
- * Find existing lexical Cloze notes for a canonical function word.
- */
-export async function findLexicalClozeDuplicates({
-  canonical,
-  meaning = null,
-  lexicalType = null,
-}) {
-  const noteIds = await ankiConnect('findNotes', {
-    query: `tag:mode-lexical-cloze tag:lemma-${toTagSlug(canonical)}`,
-  });
-
-  if (noteIds.length === 0) {
-    return { exactMatches: [], headwordMatches: [] };
-  }
-
-  const notes = await ankiConnect('notesInfo', { notes: noteIds });
-  const normalizedCanonical = normalizeGerman(canonical);
-  const normalizedMeaning = meaning ? normalizeGerman(meaning) : null;
-  const exactMatches = [];
-  const headwordMatches = [];
-
-  for (const note of notes) {
-    const metadata = extractWordMetadataFromSentenceNote(note);
-    if (!metadata?.canonical) continue;
-    if (normalizeGerman(metadata.canonical) !== normalizedCanonical) continue;
-    if (lexicalType && metadata.lexicalType && metadata.lexicalType !== lexicalType) continue;
-
-    const duplicate = {
-      noteId: note.noteId,
-      canonical: metadata.canonical,
-      lexicalType: metadata.lexicalType,
-      meaning: metadata.meaning || null,
-    };
-
-    if (normalizedMeaning && duplicate.meaning && normalizeGerman(duplicate.meaning) === normalizedMeaning) {
-      exactMatches.push(duplicate);
-      continue;
-    }
-
-    headwordMatches.push(duplicate);
-  }
-
-  return { exactMatches, headwordMatches };
+export async function findLexicalClozeDuplicates(options) {
+  return findWordDuplicates(options);
 }
 
 export async function findGrammarDuplicates({

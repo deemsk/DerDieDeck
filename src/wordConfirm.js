@@ -720,6 +720,7 @@ export async function confirmSentenceWordSelection({
   while (true) {
     console.log();
     const rows = [];
+    if (wordData.skipMainCard) rows.push(['Adds', 'Audio sentence card only']);
     rows.push([null, buildWordSummaryLine(wordData, selectedMeaning?.russian, sentenceData.cefr?.level || null)]);
     rows.push(['Sentence', `${sentenceData.german}`]);
     if (sentenceData.ipa) {

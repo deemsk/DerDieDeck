@@ -1,3 +1,4 @@
+import { reviewWordDuplicates } from './wordDuplicateReview.js';
 import { prepareNounExample } from './wordExampleEnricher.js';
 import { createInterface } from 'readline';
 import { join } from 'path';
@@ -481,10 +482,7 @@ async function prepareWord(rawInput, options, spinner) {
       spinner.stop();
     }
 
-    if (duplicateInfo.exactMatches.length > 0) {
-      console.log(chalk.yellow(`Exact duplicate exists for ${wordData.canonical} (${selectedMeaning.russian})`));
-      return { rejected: true };
-    }
+    if (await reviewWordDuplicates(duplicateInfo) === 'skip') return { rejected: true };
 
     if (isNounWord(wordData)) {
       spinner.start('Preparing an example for the selected meaning...');
@@ -632,10 +630,7 @@ async function prepareWord(rawInput, options, spinner) {
       spinner.stop();
     }
 
-    if (duplicateInfo.exactMatches.length > 0) {
-      console.log(chalk.yellow(`Exact duplicate exists for ${wordData.canonical} (${selectedMeaning.russian})`));
-      return { rejected: true };
-    }
+    if (await reviewWordDuplicates(duplicateInfo) === 'skip') return { rejected: true };
 
     spinner.start('Preparing cloze sentence...');
     const sentenceData = applyChosenSentenceGloss(
@@ -703,10 +698,9 @@ async function prepareWord(rawInput, options, spinner) {
     spinner.stop();
   }
 
-  if (duplicateInfo.exactMatches.length > 0) {
-    console.log(chalk.yellow(`Exact duplicate exists for ${wordData.canonical} (${selectedMeaning.russian})`));
-    return { rejected: true };
-  }
+  const duplicateDecision = await reviewWordDuplicates(duplicateInfo, { sentence: true });
+  if (duplicateDecision === 'skip') return { rejected: true };
+  wordData.skipMainCard = duplicateDecision === 'example';
 
   spinner.start('Preparing example sentence...');
   const sentenceData = applyChosenSentenceGloss(
@@ -920,7 +914,7 @@ async function finalizeLexicalCloze(prepared, options, spinner) {
 
 function shouldCreateSentenceWordMainNote(wordData = {}, selectedMeaning = {}) {
   const lexicalType = wordData.lexicalType || 'adjective';
-  return ['adjective', 'adverb'].includes(lexicalType) && Boolean(String(selectedMeaning?.russian || '').trim());
+  return !wordData.skipMainCard && ['adjective', 'adverb'].includes(lexicalType) && Boolean(String(selectedMeaning?.russian || '').trim());
 }
 
 async function createSentenceWordMainNote({

@@ -177,7 +177,7 @@ describe("word note helpers", () => {
     ])
   })
 
-  test("findWordDuplicates ignores notes with a different lexical type when metadata is present", async () => {
+  test("findWordDuplicates surfaces notes with a different lexical type as headword matches", async () => {
     global.fetch = async (_url, options) => {
       const body = JSON.parse(options.body)
 
@@ -251,7 +251,7 @@ describe("word note helpers", () => {
         lexicalType: "adjective",
       })
     )
-    expect(duplicates.headwordMatches).toEqual([])
+    expect(duplicates.headwordMatches).toEqual([expect.objectContaining({ lexicalType: "noun" })])
   })
 
   test("findSentenceWordDuplicates reads hidden lexical metadata from sentence notes", async () => {
@@ -375,7 +375,8 @@ describe("word note helpers", () => {
       const body = JSON.parse(options.body)
 
       if (body.action === "findNotes") {
-        expect(body.params.query).toBe("tag:mode-lexical-cloze tag:lemma-aber")
+        expect(body.params.query).toContain("tag:mode-word-main")
+        expect(body.params.query).toContain("tag:mode-lexical-cloze")
         return {
           async json() {
             return { result: [41], error: null }
