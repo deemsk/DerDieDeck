@@ -1,3 +1,4 @@
+import { reviewClozeAlternatives } from './clozeAlternativeReview.js';
 import { reviewWordDuplicates } from './wordDuplicateReview.js';
 import { prepareNounExample } from './wordExampleEnricher.js';
 import { createInterface } from 'readline';
@@ -49,7 +50,7 @@ import {
 } from './anki.js';
 import { generateSimpleSpeech, generateSpeech } from './lib/tts.js';
 import { enrich, reviewEnrichedText } from './enricher.js';
-import { prepareCompactClozeHint, generateUnambiguousLexicalClozeSentence, verifyLexicalClozeUniqueness } from './lexicalClozeEnricher.js';
+import { assessClozeSynonyms, prepareCompactClozeHint, generateUnambiguousLexicalClozeSentence, verifyLexicalClozeUniqueness } from './lexicalClozeEnricher.js';
 import { explainLexicalCloze } from './lexicalRuleEnricher.js';
 import { RecoverableWorkflowError } from './workflowRecovery.js';
 
@@ -552,7 +553,26 @@ async function prepareWord(rawInput, options, spinner) {
         };
 
     let repairAttempts = 0;
-    while (!uniqueness.valid && repairAttempts < MAX_LEXICAL_CLOZE_REPAIR_ATTEMPTS) {
+    while (!uniqueness.valid) {
+      const alternatives = await assessClozeSynonyms(chosenSentence, wordData, uniqueness);
+      if (alternatives) {
+        spinner.stop();
+        const choice = await reviewClozeAlternatives(wordData.canonical, alternatives);
+        if (choice.action === 'skip') return { rejected: true };
+        if (choice.action === 'sentence') {
+          wordData.skipMainCard = true;
+          return prepareSentenceWord({ wordData, frequencyInfo, selectedMeaning, chosenSentence }, options, spinner);
+        }
+        chosenSentence = await chooseWordSentence(wordData, choice.german);
+        spinner.start('Checking the edited cloze...');
+        wordData.clozeHint = await prepareCompactClozeHint(chosenSentence, wordData);
+        uniqueness = validateLexicalClozeSentence(chosenSentence, wordData)
+          ? await verifyLexicalClozeUniqueness(chosenSentence, wordData)
+          : { valid: false, unique: false, alternatives: [], reason: 'Edited sentence does not contain a valid target.' };
+        repairAttempts = 0;
+        continue;
+      }
+      if (repairAttempts >= MAX_LEXICAL_CLOZE_REPAIR_ATTEMPTS) break;
       repairAttempts += 1;
       try {
         const rewritten = await generateUnambiguousLexicalClozeSentence(chosenSentence, wordData, {
@@ -664,6 +684,10 @@ async function prepareWord(rawInput, options, spinner) {
     allowBlank: true,
   });
 
+  return prepareSentenceWord({ wordData, frequencyInfo, selectedMeaning, chosenSentence }, options, spinner);
+}
+
+async function prepareSentenceWord({ wordData, frequencyInfo, selectedMeaning, chosenSentence }, options, spinner) {
   let duplicateInfo = { exactMatches: [], headwordMatches: [] };
   spinner.start('Checking duplicates...');
   try {
@@ -683,7 +707,7 @@ async function prepareWord(rawInput, options, spinner) {
 
   const duplicateDecision = await reviewWordDuplicates(duplicateInfo, { sentence: true });
   if (duplicateDecision === 'skip') return { rejected: true };
-  wordData.skipMainCard = duplicateDecision === 'example';
+  wordData.skipMainCard = wordData.skipMainCard || duplicateDecision === 'example';
 
   spinner.start('Preparing example sentence...');
   const sentenceData = applyChosenSentenceGloss(
@@ -709,7 +733,7 @@ async function prepareWord(rawInput, options, spinner) {
   const audio = await buildWordSentenceAudio(sentenceData.german, spinner);
 
   return {
-    route,
+    route: 'sentence-form',
     wordData,
     frequencyInfo,
     selectedMeaning,

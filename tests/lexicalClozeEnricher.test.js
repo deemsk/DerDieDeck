@@ -13,6 +13,7 @@ jest.unstable_mockModule('../src/lib/secrets.js', () => ({
 }))
 
 const {
+  assessClozeSynonyms,
   prepareCompactClozeHint,
   buildMaskedLexicalCloze,
   generateUnambiguousLexicalClozeSentence,
@@ -189,4 +190,18 @@ test.each(['слово '.repeat(12), '{{c1::ответ}}', 'deshalb', 'therefore
   mockCreate.mockReset().mockResolvedValue({ choices: [{ message: { content: JSON.stringify({ hint }) } }] })
   await expect(prepareCompactClozeHint({ german: 'Deshalb komme ich.' }, { canonical: 'deshalb', meanings: [{ russian: 'поэтому' }] })).rejects.toThrow('compact cloze hint')
   expect(mockCreate).toHaveBeenCalledTimes(2)
+})
+
+test.each([true, false])('synonym assessment confirms only correct interchangeable readings (%s)', async synonymOnly => {
+  mockCreate.mockReset().mockResolvedValue({ choices: [{ message: { content: JSON.stringify({ synonymOnly, alternatives: ['nie', 'niemals'] }) } }] })
+  const result = await assessClozeSynonyms({ german: 'Er kommt niemals zu spät.', focusForm: 'niemals' }, {
+    canonical: 'niemals', meanings: [{ russian: 'никогда' }], clozeHint: 'никогда',
+  }, { valid: false, unique: false, alternatives: ['nie', 'niemals'] })
+  expect(result).toEqual(synonymOnly ? ['nie'] : null)
+  expect(JSON.parse(mockCreate.mock.calls[0][0].messages[1].content).meaning).toBe('никогда')
+})
+test('a failed uniqueness service is not mistaken for synonym ambiguity', async () => {
+  mockCreate.mockReset()
+  expect(await assessClozeSynonyms({}, {}, { valid: false, unique: false, error: 'offline', alternatives: ['nie'] })).toBeNull()
+  expect(mockCreate).not.toHaveBeenCalled()
 })

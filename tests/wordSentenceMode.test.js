@@ -123,6 +123,7 @@ jest.unstable_mockModule("../src/enricher.js", () => ({
 }))
 
 jest.unstable_mockModule("../src/lexicalClozeEnricher.js", () => ({
+  assessClozeSynonyms: jest.fn(async () => null),
   prepareCompactClozeHint: jest.fn(async (_sentence, word) => word.meanings[0].russian),
   generateUnambiguousLexicalClozeSentence: mockGenerateUnambiguousLexicalClozeSentence,
   verifyLexicalClozeUniqueness: mockVerifyLexicalClozeUniqueness,
@@ -139,6 +140,8 @@ jest.unstable_mockModule("../src/cardContent/cefr.js", () => ({
 const { enrichWord: mockProfiledWord } = await import("../src/wordEnricher.js")
 const mockReviewWordDuplicates = jest.fn(async duplicates => duplicates.exactMatches.length ? 'skip' : 'new')
 jest.unstable_mockModule('../src/wordDuplicateReview.js', () => ({ reviewWordDuplicates: mockReviewWordDuplicates }))
+const mockReviewClozeAlternatives = jest.fn(async () => ({ action: 'skip' }))
+jest.unstable_mockModule('../src/clozeAlternativeReview.js', () => ({ reviewClozeAlternatives: mockReviewClozeAlternatives }))
 const { runWordWorkflow } = await import("../src/wordMode.js")
 
 describe("word mode sentence flow", () => {
@@ -998,4 +1001,37 @@ test('Deshalb verifies and saves the same compact hint without the full definiti
   expect(saved).toContain('{{c1::Deshalb::поэтому}}')
   expect(saved).not.toContain('половина')
   expect(saved).not.toContain('следствие ранее')
+})
+
+test.each(['sentence', 'skip', 'edit'])('niemals synonym ambiguity supports %s without reanalysis', async action => {
+  jest.clearAllMocks()
+  const { assessClozeSynonyms } = await import('../src/lexicalClozeEnricher.js')
+  assessClozeSynonyms.mockResolvedValueOnce(['nie'])
+  mockReviewClozeAlternatives.mockResolvedValueOnce({ action, german: 'Das mache ich niemals.' })
+  const sentence = { german: 'Er kommt niemals zu spät.', russian: 'Он никогда не опаздывает.', focusForm: 'niemals' }
+  mockChooseMeaning.mockResolvedValue({ russian: 'никогда' })
+  mockChooseWordSentence.mockReset().mockResolvedValueOnce(sentence).mockResolvedValue({ ...sentence, german: 'Das mache ich niemals.' })
+  mockEnrich.mockResolvedValue({ ...sentence, ipa: '[ipa]' })
+  mockVerifyLexicalClozeUniqueness.mockReset().mockResolvedValueOnce({ valid: false, unique: false, alternatives: ['nie', 'niemals'] }).mockResolvedValue({ valid: true })
+  mockFindSentenceWordDuplicates.mockResolvedValue({ exactMatches: [], headwordMatches: [] })
+  mockFindLexicalClozeDuplicates.mockResolvedValue({ exactMatches: [], headwordMatches: [] })
+  await runWordWorkflow('niemals', { learnerProfileContext: false, analysisResult: {
+    shouldCreateWordCard: true, isImageable: false, recommendedMode: 'cloze-form',
+    canonical: 'niemals', lemma: 'niemals', lexicalType: 'adverb', meanings: [{ russian: 'никогда' }],
+  }, deck: 'German::Test' })
+  expect(mockProfiledWord).not.toHaveBeenCalled()
+  expect(mockGenerateUnambiguousLexicalClozeSentence).not.toHaveBeenCalled()
+  expect(mockCreateBasicNote).not.toHaveBeenCalled()
+  if (action === 'sentence') {
+    expect(mockCreateClozeNote).not.toHaveBeenCalled()
+    expect(mockCreateNote).toHaveBeenCalledTimes(1)
+    expect(mockConfirmSentenceWordSelection.mock.calls[0][0].chosenSentence).toEqual(sentence)
+  } else if (action === 'skip') {
+    expect(mockCreateClozeNote).not.toHaveBeenCalled()
+    expect(mockCreateNote).not.toHaveBeenCalled()
+    expect(mockGenerateSimpleSpeech).not.toHaveBeenCalled()
+  } else {
+    expect(mockChooseWordSentence.mock.calls[1][1]).toBe('Das mache ich niemals.')
+    expect(mockVerifyLexicalClozeUniqueness).toHaveBeenCalledTimes(2)
+  }
 })
