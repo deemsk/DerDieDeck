@@ -1,3 +1,4 @@
+import { prepareInfinitiveExample } from './verbFormEnricher.js';
 import { reviewVerbExamples } from './verbSentenceValidation.js';
 import { resolveLearnerProfileForInput } from './knowledgeProfile/index.js';
 import { createInterface } from 'readline';
@@ -979,6 +980,7 @@ async function finalizePictureVerb(prepared, options, spinner) {
   let audio = preparedAudio;
   let addInfinitive = !existingLemmaNote;
   const directFormReview = Boolean(resolveRequestedVerbForm(verbData));
+  let infinitiveExample = directFormReview ? null : verbData.exampleSentences?.[0];
   if (directFormReview && existingLemmaNote) {
     console.log(formatExistingInfinitiveNotice(chalk, verbData.infinitive));
   }
@@ -1029,23 +1031,32 @@ async function finalizePictureVerb(prepared, options, spinner) {
   if (directFormReview) {
     addInfinitive = false;
     if (!existingLemmaNote && !prepared.lemmaLookupFailed) {
-      const optional = await confirmPictureVerbSelection({
-        verbData: { ...verbData, displayForm: verbData.infinitive },
-        selectedMeaning, frequencyInfo, duplicateInfo, imageChoice: null,
-        showImage: false, audioSource: null, audioPath: null,
-        loadAudio: async () => {
-          audio ||= await buildVerbAudio(verbData, spinner);
-          return audio.audioPath;
-        },
-        requestedForm: null, optionalInfinitive: true, addDictionaryForm: false,
-        dictionaryContext: buildDictionaryFormContext(verbData),
-        contrast: buildContrastHint(verbData.infinitive),
-        autoPlay: false, theme: options.theme || null,
-      });
-      addInfinitive = optional.confirmed;
-      if (addInfinitive) {
-        confirmation = { ...optional, addDictionaryForm: true };
-        imageChoice = await choosePictureVerbImage(prepared, spinner);
+      try {
+        spinner.start('Preparing an infinitive example...');
+        infinitiveExample = await prepareInfinitiveExample(verbData.infinitive, selectedMeaning.russian, options.learnerProfileContext);
+        spinner.stop();
+        const optional = await confirmPictureVerbSelection({
+          verbData: { ...verbData, displayForm: verbData.infinitive, exampleSentences: [infinitiveExample] },
+          selectedMeaning, frequencyInfo, duplicateInfo, imageChoice: null,
+          showImage: false, audioSource: null, audioPath: null,
+          loadAudio: async () => {
+            audio ||= await buildVerbAudio(verbData, spinner);
+            return audio.audioPath;
+          },
+          requestedForm: null, optionalInfinitive: true, addDictionaryForm: false,
+          dictionaryContext: null,
+          contrast: buildContrastHint(verbData.infinitive),
+          autoPlay: false, theme: options.theme || null,
+        });
+        addInfinitive = optional.confirmed;
+        if (addInfinitive) {
+          confirmation = { ...optional, addDictionaryForm: true };
+          imageChoice = await choosePictureVerbImage(prepared, spinner);
+        }
+      } catch (error) {
+        spinner.stop();
+        addInfinitive = false;
+        console.log(chalk.yellow(`Optional infinitive card unavailable: ${error.message}`));
       }
     } else if (!existingLemmaNote) {
       console.log(chalk.yellow('Could not check all existing verb cards. Continuing with the requested form only.'));
@@ -1061,9 +1072,9 @@ async function finalizePictureVerb(prepared, options, spinner) {
   };
   const extraInfoField = buildWordExtraInfo({
     meaning: selectedMeaning.russian,
-    exampleSentence: verbData.exampleSentences?.[0]?.german || null,
-    exampleSentenceTranslation: verbData.exampleSentences?.[0]?.russian || null,
-    dictionaryForm: buildDictionaryFormContext(verbData),
+    exampleSentence: infinitiveExample?.german || null,
+    exampleSentenceTranslation: infinitiveExample?.russian || null,
+    dictionaryForm: null,
     contrast: buildContrastHint(verbData.infinitive),
     metadata,
   });

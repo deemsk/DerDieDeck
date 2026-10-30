@@ -270,16 +270,18 @@ function normalizeFinitePresentForm(form = '', slot = '') {
 
   const withoutPronoun = String(form || '')
     .trim()
+    .replace(/^(?:ich|du|er|sie|es|wir|ihr)(?:\s*[/,]\s*(?:ich|du|er|sie|es|wir|ihr))+\s+/i, '')
     .replace(pronounPattern || /^$/, '')
     .replace(/^(ich|du|er|sie|es|wir|ihr)\s+/i, '')
     .trim();
 
-  return withoutPronoun
+  const normalized = withoutPronoun
     .replace(/\([^)]*\)/g, '')
     .replace(/\[[^\]]*\]/g, '')
     .split(/\s*(?:,|;|\/|\boder\b|\bor\b)\s*/i)[0]
     .replace(/!+$/g, '')
     .trim();
+  return /^(?:ich|du|er|sie|es|wir|ihr)$/i.test(normalized) ? '' : normalized;
 }
 
 /**

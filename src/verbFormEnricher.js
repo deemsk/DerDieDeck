@@ -19,7 +19,11 @@ const reviewSchema = strictObject({
 
 const RULES = `Explain an encountered German verb form for a Russian-speaking learner.
 Return concise plain text, never HTML or Markdown. Copy form and infinitive exactly.
-formMeaning: Russian meaning of the FORM in the example, not merely the infinitive gloss.
+formMeaning: Russian lexical meaning of the FORM in the example, not merely the infinitive gloss.
+Do not assign the translation of an entire idiomatic construction to a single token.
+For ging in ins Bett gehen, use шёл / пошёл for ging, not standalone лёг. Explain the
+construction in usage and translate the complete sentence naturally as лёг спать.
+Preserve real auxiliary or grammatical uses (e.g. passive wurde) instead of forcing a lexical gloss.
 grammar: describe ONLY the reading in the final example: applicable German tense/mood,
 with Russian person and number labels determined by that example's subject.
 For finite forms explicitly name the person AND singular/plural (e.g. 3-е лицо,
@@ -170,4 +174,13 @@ export async function explainVerbForm({ form, infinitive, meaning, selectedSente
     error.attempts = attempts;
     throw error;
   }
+}
+
+
+export async function prepareInfinitiveExample(infinitive, meaning, learnerProfileContext = null) {
+  const explanation = await explainVerbForm({ form: infinitive, infinitive, meaning, learnerProfileContext });
+  if (!containsVerbForm(explanation.example.german, infinitive)) {
+    throw new Error(`Infinitive example must contain ${infinitive}.`);
+  }
+  return explanation.example;
 }

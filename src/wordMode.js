@@ -1,3 +1,5 @@
+import { containsVerbForm } from './cardContent/verbFormExplanation.js';
+import { prepareAdjectiveForm, validateAdjectiveFormSentence } from './adjectiveFormEnricher.js';
 import { reviewClozeAlternatives } from './clozeAlternativeReview.js';
 import { reviewWordDuplicates } from './wordDuplicateReview.js';
 import { prepareNounExample } from './wordExampleEnricher.js';
@@ -94,6 +96,7 @@ function buildWordMetadata(wordData, selectedMeaning, frequencyInfo) {
 }
 
 function resolveWordRoute(wordData = {}) {
+  if (wordData.requestedForm) return 'sentence-form';
   if (isNounWord(wordData)) {
     return 'picture-word';
   }
@@ -260,7 +263,7 @@ async function buildWordAudio(wordData, spinner) {
   const audioPlan = resolveWordAudioPlan(wordData);
 
   try {
-    const pronunciation = await resolveWordPronunciation(wordData);
+    const pronunciation = await resolveWordPronunciation(wordData.requestedForm ? { ...wordData, lemma: wordData.requestedForm } : wordData);
     if (pronunciation?.ipa) {
       wordData.ipa = pronunciation.ipa;
       wiktionaryIpa = pronunciation.ipa;
@@ -355,6 +358,7 @@ async function rebuildSentenceWordPreview(prepared, feedback, options, spinner) 
     imageBrief: germanChanged ? null : chosenSentence?.imageBrief || null,
   };
   const reviewedSentenceData = applyChosenSentenceGloss(reviewed, reviewedChosenSentence);
+  await validateAdjectiveFormSentence(reviewedSentenceData, wordData);
   spinner.succeed(`Sentence reviewed: ${reviewedSentenceData.german}`);
 
   let similarCards = currentSimilarCards;
@@ -392,7 +396,17 @@ async function rebuildSentenceWordPreview(prepared, feedback, options, spinner) 
 async function prepareWord(rawInput, options, spinner) {
   const learnerProfileContext = await resolveLearnerProfileForWord(rawInput, options);
   spinner.start('Analyzing word...');
-  const wordData = options.analysisResult && (!learnerProfileContext || options.sentence) ? options.analysisResult : await enrichWord(rawInput, { learnerProfileContext, analysisResult: options.analysisResult });
+  let wordData = options.analysisResult && (!learnerProfileContext || options.sentence) ? options.analysisResult : await enrichWord(rawInput, { learnerProfileContext, analysisResult: options.analysisResult });
+  const requested = String(rawInput).trim();
+  if (wordData.lexicalType === 'adjective' && /^[\p{L}-]+$/u.test(requested) &&
+      normalizeGermanForCompare(requested) !== normalizeGermanForCompare(getWordLemma(wordData))) {
+    spinner.start('Preparing the requested adjective form...');
+    try {
+      wordData = await prepareAdjectiveForm(requested, wordData, learnerProfileContext);
+    } catch (error) {
+      throw new RecoverableWorkflowError(error.message, { code: 'adjective-form-failed', workflow: 'word' });
+    }
+  }
   const route = resolveWordRoute(wordData);
   const structuredAnalysis = hasStructuredWordAnalysis(wordData);
   const recoverableWeakCandidate = route === 'picture-word' && canProceedWithWeakWordCard(wordData);
@@ -709,11 +723,14 @@ async function prepareSentenceWord({ wordData, frequencyInfo, selectedMeaning, c
   if (duplicateDecision === 'skip') return { rejected: true };
   wordData.skipMainCard = wordData.skipMainCard || duplicateDecision === 'example';
 
+  if (wordData.requestedForm && !containsVerbForm(chosenSentence.german, wordData.requestedForm)) {
+    throw new RecoverableWorkflowError(`Example must contain the exact requested form ${wordData.requestedForm}.`,
+      { code: 'adjective-form-sentence-failed', workflow: 'word', allowManualSentence: true });
+  }
   spinner.start('Preparing example sentence...');
-  const sentenceData = applyChosenSentenceGloss(
-    await enrich(chosenSentence.german),
-    chosenSentence
-  );
+  const enrichedSentence = await enrich(chosenSentence.german);
+  const sentenceData = wordData.requestedForm ? enrichedSentence : applyChosenSentenceGloss(enrichedSentence, chosenSentence);
+  await validateAdjectiveFormSentence(sentenceData, wordData);
   spinner.succeed(`Sentence ready: ${sentenceData.german}`);
 
   let similarCards = [];
@@ -941,9 +958,13 @@ async function createSentenceWordMainNote({
 
   return createBasicNote({
     front: [soundTag(audioFilename), formatPlainWord(wordData.canonical)].filter(Boolean).join('<br>'),
-    back: `${escapeHtml(selectedMeaning.russian)}${metadata}`,
+    back: wordData.requestedForm ? buildWordExtraInfo({
+      meaning: selectedMeaning.russian, grammar: wordData.patternHint,
+      dictionaryForm: wordData.lemma, metadata: { canonical: wordData.canonical, lemma: wordData.lemma,
+        meaning: selectedMeaning.russian, lexicalType: wordData.lexicalType },
+    }) : `${escapeHtml(selectedMeaning.russian)}${metadata}`,
     deck,
-    addReversed: true,
+    addReversed: !wordData.requestedForm,
     tags: [
       'yt2anki',
       'mode-word-main',

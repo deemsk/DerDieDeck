@@ -58,6 +58,8 @@ const prepareDictionaryResult = async ({ verbData, focusForm, selectedSentence }
   usage: "Состояние в настоящем.", ambiguity: null, contrast: null,
   example: selectedSentence || { german: "Er läuft im Park.", russian: "Он бежит в парке." },
 })
+const mockPrepareInfinitiveExample = jest.fn(async infinitive => ({ german: `Ich möchte ${infinitive}.`, russian: 'Я хочу это сделать.' }))
+jest.unstable_mockModule('../src/verbFormEnricher.js', () => ({ prepareInfinitiveExample: mockPrepareInfinitiveExample }))
 const mockPrepareDictionary = jest.fn(prepareDictionaryResult)
 const mockReviewEnrichedText = jest.fn()
 const mockEnrich = jest.fn(async () => ({
@@ -383,6 +385,14 @@ describe("verb mode sentence flow", () => {
     expect(mockCreatePictureWordNote).not.toHaveBeenCalled()
     expect(mockChooseGoogleImage).not.toHaveBeenCalled()
     expect(mockResolveWordPronunciation.mock.calls.some(([word]) => word.canonical === "sehen")).toBe(false)
+  })
+
+  test("failed optional infinitive example still saves the accepted requested form", async () => {
+    mockPrepareInfinitiveExample.mockRejectedValueOnce(new Error('unavailable'))
+    expect(await runVerbWorkflow('sah', sahOptions)).toBe(true)
+    expect(mockConfirmPictureVerbSelection).not.toHaveBeenCalled()
+    expect(mockCreatePictureWordNote).not.toHaveBeenCalled()
+    expect(mockCreateBasicNote).toHaveBeenCalledTimes(1)
   })
 
   test.each(["lemma", "sentence"])("existing %s note avoids placeholder and extra infinitive", async kind => {
@@ -1151,8 +1161,9 @@ describe("verb mode sentence flow", () => {
       deck: "German::Test",
     }))
     const note = mockCreatePictureWordNote.mock.calls[0][0]
-    expect(note.extraInfoField).toContain("Er läuft im Park.")
-    expect(note.extraInfoField).toContain("Он бегает в парке.")
+    expect(note.extraInfoField).toContain("Ich möchte laufen.")
+    expect(note.extraInfoField).not.toContain("läuft → laufen")
+    expect(note.extraInfoField).toContain("Я хочу это сделать.")
     expect(note.extraInfoField).toContain("ddd-extra-example-translation")
   })
 })

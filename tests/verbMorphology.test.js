@@ -346,3 +346,16 @@ describe("verb morphology resolution", () => {
     expect(morphology.selectedForms.map((entry) => entry.displayForm)).toEqual(["fährst zurück", "fährt zurück"])
   })
 })
+
+test('strips grouped pronouns before splitting alternate forms', async () => {
+  const result = await resolveVerbMorphology('gefallen', { payload: { tags: ['strong'], forms: [
+    form('er/sie/es gefällt', ['third-person', 'singular']),
+  ] } })
+  expect(result.selectedForms.find(f => f.key === 'er').form).toBe('gefällt')
+})
+test('does not emit pronoun-only finite forms', async () => {
+  const result = await resolveVerbMorphology('gefallen', { payload: { tags: ['strong'], forms: [
+    form('er', ['third-person', 'singular']),
+  ] } })
+  expect(result.selectedForms.some(f => f.form === 'er')).toBe(false)
+})

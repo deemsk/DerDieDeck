@@ -77,6 +77,8 @@ export function validateVerbFormSentence(sentence, formSpec, morphology) {
   const tokens = normalized.split(/\s+/).filter(Boolean);
 
   return Boolean(
+    !/^(?:ich|du|er|sie|es|wir|ihr)$/i.test(form) &&
+    form !== pronoun &&
     isSimpleSentence(german) &&
     tokens.includes(pronoun) &&
     tokens.includes(form) &&

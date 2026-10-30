@@ -73,6 +73,7 @@ function buildWordDictionarySummary(wordData = {}) {
     : [];
   const rows = [];
   if (isVerbForm) rows.push(['Infinitive', infinitive]);
+  if (wordData.requestedForm) rows.push(['Base form', wordData.lemma]);
 
   if (meanings.length > 0) {
     rows.push([isVerbForm ? 'Infinitive meaning' : meanings.length === 1 ? 'Meaning' : 'Meanings', meanings.join('; ')]);
@@ -720,6 +721,9 @@ export async function confirmSentenceWordSelection({
   while (true) {
     console.log();
     const rows = [];
+    if (wordData.requestedForm) {
+      rows.push(['Base form', wordData.lemma], ['Grammar', wordData.patternHint]);
+    }
     if (wordData.skipMainCard) rows.push(['Adds', 'Audio sentence card only']);
     rows.push([null, buildWordSummaryLine(wordData, selectedMeaning?.russian, sentenceData.cefr?.level || null)]);
     rows.push(['Sentence', `${sentenceData.german}`]);

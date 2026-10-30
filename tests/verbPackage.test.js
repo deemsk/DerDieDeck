@@ -186,3 +186,8 @@ describe("strong verb package planning", () => {
     expect(extra).toContain("du steigst ein → einsteigen")
   })
 })
+
+test('rejects pronoun-only targets even when the sentence contains the subject', () => {
+  expect(validateVerbFormSentence({ german: 'Er gefällt dem Arzt.', russian: 'Он нравится врачу.' },
+    { key: 'er', pronoun: 'er', form: 'er', russianPronoun: 'он' }, { particle: null })).toBe(false)
+})

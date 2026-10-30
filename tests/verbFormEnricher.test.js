@@ -160,3 +160,12 @@ test('failed resumed repair appends diagnostics without resetting or duplicating
   expect(second.blockingFeedback.map(entry => entry.reason)).toEqual(['Include ich', 'Include er'])
   expect(repairAttempts).toHaveLength(1)
 })
+
+test('generation and review distinguish a lexical form gloss from an idiom translation', async () => {
+  create.mockResolvedValueOnce(answer(explanation)).mockResolvedValueOnce(answer({ blockingIssues: [], suggestions: [] }))
+  await explainVerbForm(request)
+  for (const [call] of create.mock.calls) {
+    expect(call.messages[0].content).toContain('not standalone лёг')
+    expect(call.messages[0].content).toContain('translate the complete sentence naturally as лёг спать')
+  }
+})

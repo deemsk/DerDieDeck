@@ -185,12 +185,15 @@ export async function storeMedia(mediaPath) {
   const base64 = mediaData.toString('base64');
   const filename = basename(mediaPath);
 
-  await ankiConnect('storeMediaFile', {
+  const storedFilename = await ankiConnect('storeMediaFile', {
     filename,
     data: base64,
   });
 
-  return filename;
+  if (typeof storedFilename !== 'string' || !storedFilename.trim()) {
+    throw new Error('AnkiConnect returned an invalid media filename');
+  }
+  return storedFilename;
 }
 
 export async function storeAudio(audioPath) {

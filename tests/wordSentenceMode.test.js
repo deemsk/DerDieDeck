@@ -142,6 +142,12 @@ const mockReviewWordDuplicates = jest.fn(async duplicates => duplicates.exactMat
 jest.unstable_mockModule('../src/wordDuplicateReview.js', () => ({ reviewWordDuplicates: mockReviewWordDuplicates }))
 const mockReviewClozeAlternatives = jest.fn(async () => ({ action: 'skip' }))
 jest.unstable_mockModule('../src/clozeAlternativeReview.js', () => ({ reviewClozeAlternatives: mockReviewClozeAlternatives }))
+const mockPrepareAdjectiveForm = jest.fn()
+const mockValidateAdjectiveFormSentence = jest.fn(async () => {})
+jest.unstable_mockModule('../src/adjectiveFormEnricher.js', () => ({
+  prepareAdjectiveForm: mockPrepareAdjectiveForm,
+  validateAdjectiveFormSentence: mockValidateAdjectiveFormSentence,
+}))
 const { runWordWorkflow } = await import("../src/wordMode.js")
 
 describe("word mode sentence flow", () => {
@@ -1034,4 +1040,42 @@ test.each(['sentence', 'skip', 'edit'])('niemals synonym ambiguity supports %s w
     expect(mockChooseWordSentence.mock.calls[1][1]).toBe('Das mache ich niemals.')
     expect(mockVerifyLexicalClozeUniqueness).toHaveBeenCalledTimes(2)
   }
+})
+
+test.each([['besten', 'gut', 'лучший'], ['festen', 'fest', 'твёрдый']])('requested adjective %s stays on Front and uses form pronunciation', async (form, lemma, meaning) => {
+  jest.clearAllMocks()
+  const example = { german: form === 'besten' ? 'Ich nehme den besten Kuchen.' : 'Ich brauche einen festen Plan.', russian: 'Проверенный перевод.', focusForm: form }
+  const formData = { canonical: form, lemma, requestedForm: form, lexicalType: 'adjective',
+    recommendedMode: 'sentence-form', shouldCreateWordCard: true, isImageable: false,
+    meanings: [{ russian: meaning }], patternHint: 'Проверенная грамматика формы.', ipa: '', exampleSentences: [example] }
+  mockPrepareAdjectiveForm.mockResolvedValue(formData)
+  mockChooseMeaning.mockResolvedValue({ russian: meaning })
+  mockChooseWordSentence.mockResolvedValue(example)
+  mockEnrich.mockResolvedValue({ ...example, ipa: '[ipa]' })
+  mockFindSentenceWordDuplicates.mockResolvedValue({ exactMatches: [], headwordMatches: [] })
+  await runWordWorkflow(form, { learnerProfileContext: false, analysisResult: {
+    canonical: lemma, lemma, lexicalType: 'adjective', recommendedMode: 'sentence-form',
+    shouldCreateWordCard: true, isImageable: false, meanings: [{ russian: 'значение леммы' }],
+  }, deck: 'German::Test' })
+  expect(mockShowWordDictionarySummary).toHaveBeenCalledWith(expect.objectContaining({ canonical: form, lemma, requestedForm: form }))
+  expect(mockChooseWordSentence.mock.calls[0][0].exampleSentences).toEqual([example])
+  expect(mockFindSentenceWordDuplicates.mock.calls[0][0].canonical).toBe(form)
+  expect(mockResolveWordPronunciation).toHaveBeenCalledWith(expect.objectContaining({ canonical: form, lemma: form }))
+  const saved = mockCreateBasicNote.mock.calls[0][0]
+  expect(saved.front).toContain(`>${form}<`)
+  expect(saved.back).toContain(meaning)
+  expect(saved.back).toContain(formData.patternHint)
+  expect(saved.back).toContain(lemma)
+  expect(saved.addReversed).toBe(false)
+})
+test('manual adjective example using the lemma is blocked before enrichment/audio/saving', async () => {
+  jest.clearAllMocks()
+  mockPrepareAdjectiveForm.mockResolvedValue({ canonical: 'besten', lemma: 'gut', requestedForm: 'besten', lexicalType: 'adjective',
+    shouldCreateWordCard: true, recommendedMode: 'sentence-form', meanings: [{ russian: 'лучший' }] })
+  mockChooseWordSentence.mockResolvedValue({ german: 'Das ist gut.', russian: 'Это хорошо.' })
+  mockFindSentenceWordDuplicates.mockResolvedValue({ exactMatches: [], headwordMatches: [] })
+  await expect(runWordWorkflow('besten', { learnerProfileContext: false, analysisResult: { canonical: 'gut', lemma: 'gut', lexicalType: 'adjective' } })).rejects.toThrow('besten')
+  expect(mockEnrich).not.toHaveBeenCalled()
+  expect(mockGenerateSimpleSpeech).not.toHaveBeenCalled()
+  expect(mockCreateBasicNote).not.toHaveBeenCalled()
 })

@@ -19,6 +19,7 @@ export function buildWordExtraInfo({
   exampleSentence = null,
   exampleSentenceTranslation = null,
   dictionaryForm = null,
+  grammar = null,
   contrast = null,
   metadata,
 }) {
@@ -29,6 +30,8 @@ export function buildWordExtraInfo({
       ? `<div class="yt2anki-extra-meaning ddd-extra-meaning">${escapeHtml(meaning)}</div>`
       : infoRow('Значение', meaning, 'yt2anki-extra-meaning'));
   }
+
+  if (grammar) lines.push(infoRow('Грамматика', grammar));
 
   if (plural) {
     lines.push(infoRow('Множественное число', plural));
