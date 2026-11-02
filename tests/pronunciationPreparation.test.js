@@ -1,0 +1,30 @@
+import { jest } from '@jest/globals'
+const resolve = jest.fn()
+const speak = jest.fn()
+const sentence = jest.fn()
+jest.unstable_mockModule('../src/lib/wordSources.js', () => ({ resolveWordPronunciation: resolve }))
+jest.unstable_mockModule('../src/lib/tts.js', () => ({ generateSimpleSpeech: speak, generateSpeech: sentence }))
+const { preparePronunciation, prepareSentenceAudio } = await import('../src/lib/audioPreparation.js')
+beforeEach(() => { jest.clearAllMocks() })
+test('uses human recording for the requested form', async () => {
+  resolve.mockResolvedValueOnce({ audioPath: '/tmp/human.mp3', ipa: '[haːp]', source: 'Wiktionary/Wikimedia' })
+  const result = await preparePronunciation({ wordData: { lemma: 'hab' }, spokenText: 'hab', fallbackPath: '/tmp/fallback.mp3' })
+  expect(result).toEqual({ audioPath: '/tmp/human.mp3', ipa: '[haːp]', source: 'Wiktionary/Wikimedia' })
+  expect(speak).not.toHaveBeenCalled()
+})
+test('falls back to article text after lookup failure', async () => {
+  resolve.mockRejectedValueOnce(new Error('download failed'))
+  const result = await preparePronunciation({ wordData: { lemma: 'Papa' }, spokenText: 'der Papa', fallbackPath: '/tmp/fallback.mp3', speed: 0.9 })
+  expect(result.source).toBe('Google TTS')
+  expect(speak).toHaveBeenCalledWith('der Papa', '/tmp/fallback.mp3', { speed: 0.9, ipa: null })
+})
+test('sentence preparation synthesizes the supplied sentence', async () => {
+  expect(await prepareSentenceAudio('Geh nach Hause.', '/tmp/sentence.mp3')).toEqual({ audioPath: '/tmp/sentence.mp3', source: 'Google TTS' })
+  expect(sentence).toHaveBeenCalledWith('Geh nach Hause.', '/tmp/sentence.mp3')
+})
+test('uses available IPA for TTS when no human recording exists', async () => {
+  resolve.mockResolvedValueOnce({ audioPath: null, ipa: '[ˈɡeːən]', source: 'Wiktionary' })
+  const result = await preparePronunciation({ wordData: { lemma: 'gehen' }, spokenText: 'gehen', fallbackPath: '/tmp/gehen.mp3', speed: 0.9 })
+  expect(result).toEqual({ audioPath: '/tmp/gehen.mp3', ipa: '[ˈɡeːən]', source: 'Google TTS' })
+  expect(speak).toHaveBeenCalledWith('gehen', '/tmp/gehen.mp3', { speed: 0.9, ipa: '[ˈɡeːən]' })
+})

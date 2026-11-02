@@ -33,8 +33,9 @@ import {
   confirmWordSelection,
   showWordDictionarySummary,
 } from './wordConfirm.js';
-import { buildWordGoogleImagesSearch, resolveImageAsset, resolveWordPronunciation } from './lib/wordSources.js';
-import { consumeLearnerProfileWarning, getLearnerProfilePromptContext } from './knowledgeProfile/index.js';
+import { buildWordGoogleImagesSearch, resolveImageAsset } from './lib/wordSources.js';
+import { resolveLearnerProfileForInput } from './knowledgeProfile/index.js';
+import { preparePronunciation, prepareSentenceAudio } from './lib/audioPreparation.js';
 import {
   checkConnection,
   createBasicNote,
@@ -50,7 +51,6 @@ import {
   storeAudio,
   storeMedia,
 } from './anki.js';
-import { generateSimpleSpeech, generateSpeech } from './lib/tts.js';
 import { enrich, reviewEnrichedText } from './enricher.js';
 import { assessClozeSynonyms, prepareCompactClozeHint, generateUnambiguousLexicalClozeSentence, verifyLexicalClozeUniqueness } from './lexicalClozeEnricher.js';
 import { explainLexicalCloze } from './lexicalRuleEnricher.js';
@@ -211,31 +211,6 @@ function showWordHeader(rawInput) {
   console.log(chalk.bold(label));
 }
 
-async function resolveLearnerProfileForWord(rawInput, options = {}) {
-  if (options.learnerProfileContext === false) {
-    return null;
-  }
-
-  if (typeof options.learnerProfileContext === 'string') {
-    return options.learnerProfileContext;
-  }
-
-  try {
-    const result = await getLearnerProfilePromptContext({
-      target: { rawInput, canonical: options.analysisResult?.canonical, lemma: options.analysisResult?.lemma },
-      allowRefresh: options.knowledgeProfileRefresh !== false,
-    });
-    const warning = consumeLearnerProfileWarning(result);
-    if (warning) {
-      console.log(chalk.yellow(warning));
-    }
-
-    return result.promptContext || null;
-  } catch {
-    return null;
-  }
-}
-
 async function ensureWordSetup(deck, dryRun) {
   if (dryRun) return;
 
@@ -258,52 +233,25 @@ async function ensureWordSetup(deck, dryRun) {
 
 async function buildWordAudio(wordData, spinner) {
   spinner.start('Resolving pronunciation audio...');
-  let wiktionaryIpa = null;
-  const audioPlan = resolveWordAudioPlan(wordData);
-
-  try {
-    const pronunciation = await resolveWordPronunciation(wordData.requestedForm ? { ...wordData, lemma: wordData.requestedForm } : wordData);
-    if (pronunciation?.ipa) {
-      wordData.ipa = pronunciation.ipa;
-      wiktionaryIpa = pronunciation.ipa;
-    }
-
-    if (audioPlan.preferHumanAudio && pronunciation?.audioPath) {
-      spinner.succeed(wiktionaryIpa
-        ? 'Using Wikimedia human audio and Wiktionary IPA'
-        : 'Using Wikimedia human audio');
-      return {
-        audioPath: pronunciation.audioPath,
-        source: pronunciation.source,
-      };
-    }
-  } catch {
-    // Fall back to TTS below.
-  }
-
-  const audioPath = join(config.dataDir, `word_tts_${Date.now()}.mp3`);
-  await generateSimpleSpeech(audioPlan.spokenText, audioPath, {
-    speed: audioPlan.speed,
-    ipa: wiktionaryIpa,
+  const plan = resolveWordAudioPlan(wordData);
+  const result = await preparePronunciation({
+    wordData: wordData.requestedForm ? { ...wordData, lemma: wordData.requestedForm } : wordData,
+    spokenText: plan.spokenText,
+    fallbackPath: join(config.dataDir, `word_tts_${Date.now()}.mp3`),
+    speed: plan.speed,
   });
-  spinner.succeed(wiktionaryIpa
-    ? 'Using Google TTS fallback audio (IPA from Wiktionary)'
-    : 'Using Google TTS fallback audio');
-  return {
-    audioPath,
-    source: 'Google TTS',
-  };
+  if (result.ipa) wordData.ipa = result.ipa;
+  spinner.succeed(result.source === 'Google TTS'
+    ? (result.ipa ? 'Using Google TTS fallback audio (IPA from Wiktionary)' : 'Using Google TTS fallback audio')
+    : (result.ipa ? 'Using Wikimedia human audio and Wiktionary IPA' : 'Using Wikimedia human audio'));
+  return { audioPath: result.audioPath, source: result.source };
 }
 
 async function buildWordSentenceAudio(sentence, spinner) {
   spinner.start('Generating sentence audio...');
-  const audioPath = join(config.dataDir, `word_sentence_${Date.now()}.mp3`);
-  await generateSpeech(sentence, audioPath);
+  const result = await prepareSentenceAudio(sentence, join(config.dataDir, `word_sentence_${Date.now()}.mp3`));
   spinner.succeed('Sentence audio ready');
-  return {
-    audioPath,
-    source: 'Google TTS',
-  };
+  return result;
 }
 
 async function choosePictureWordImage(prepared, spinner) {
@@ -389,7 +337,7 @@ async function rebuildSentenceWordPreview(prepared, feedback, options, spinner) 
 }
 
 async function prepareWord(rawInput, options, spinner) {
-  const learnerProfileContext = await resolveLearnerProfileForWord(rawInput, options);
+  const learnerProfileContext = await resolveLearnerProfileForInput(rawInput, options, (warning) => console.log(chalk.yellow(warning)));
   spinner.start('Analyzing word...');
   let wordData = options.analysisResult && (!learnerProfileContext || options.sentence) ? options.analysisResult : await enrichWord(rawInput, { learnerProfileContext, analysisResult: options.analysisResult });
   const requested = String(rawInput).trim();

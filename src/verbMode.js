@@ -1,3 +1,4 @@
+import { preparePronunciation, prepareSentenceAudio } from './lib/audioPreparation.js';
 import { prepareInfinitiveExample } from './verbFormEnricher.js';
 import { reviewVerbExamples } from './verbSentenceValidation.js';
 import { resolveLearnerProfileForInput } from './knowledgeProfile/index.js';
@@ -41,7 +42,7 @@ import {
   storeAudio,
   storeMedia,
 } from './anki.js';
-import { generateSimpleSpeech, generateSpeech } from './lib/tts.js';
+import { generateSpeech } from './lib/tts.js';
 import { enrich, reviewEnrichedText } from './enricher.js';
 import { RecoverableWorkflowError } from './workflowRecovery.js';
 
@@ -185,44 +186,17 @@ async function ensureVerbSetup(deck, dryRun) {
 
 async function buildVerbAudio(verbData, spinner) {
   spinner.start('Resolving verb audio...');
-  let wiktionaryIpa = null;
-
-  try {
-    const pronunciation = await resolveWordPronunciation({
-      bareNoun: verbData.infinitive,
-      canonical: verbData.infinitive,
-    });
-    if (pronunciation?.ipa) {
-      verbData.ipa = pronunciation.ipa;
-      wiktionaryIpa = pronunciation.ipa;
-    }
-
-    if (pronunciation?.audioPath) {
-      spinner.succeed(wiktionaryIpa
-        ? 'Using Wikimedia human audio and Wiktionary IPA'
-        : 'Using Wikimedia human audio');
-      return {
-        audioPath: pronunciation.audioPath,
-        source: pronunciation.source,
-      };
-    }
-  } catch {
-    // Fall back to Google TTS below.
-  }
-
-  const audioPath = join(config.dataDir, `verb_tts_${Date.now()}.mp3`);
-  await generateSimpleSpeech(verbData.infinitive, audioPath, {
+  const result = await preparePronunciation({
+    wordData: { bareNoun: verbData.infinitive, canonical: verbData.infinitive },
+    spokenText: verbData.infinitive,
+    fallbackPath: join(config.dataDir, `verb_tts_${Date.now()}.mp3`),
     speed: config.ttsSpeed || 0.9,
-    ipa: wiktionaryIpa,
   });
-  spinner.succeed(wiktionaryIpa
-    ? 'Using Google TTS fallback audio (IPA from Wiktionary)'
-    : 'Using Google TTS fallback audio');
-
-  return {
-    audioPath,
-    source: 'Google TTS',
-  };
+  if (result.ipa) verbData.ipa = result.ipa;
+  spinner.succeed(result.source === 'Google TTS'
+    ? (result.ipa ? 'Using Google TTS fallback audio (IPA from Wiktionary)' : 'Using Google TTS fallback audio')
+    : (result.ipa ? 'Using Wikimedia human audio and Wiktionary IPA' : 'Using Wikimedia human audio'));
+  return { audioPath: result.audioPath, source: result.source };
 }
 
 async function previewVerbFormPronunciation(form, infinitive) {
@@ -245,21 +219,14 @@ async function storeVerbFormPronunciation(form, infinitive, previewPronunciation
     return null;
   }
   try {
-    const pronunciation = await resolveWordPronunciation({ bareNoun: form, canonical: form });
-    if (pronunciation?.audioPath) {
-      return await storeAudio(pronunciation.audioPath);
-    }
-  } catch {
-    // Use a spoken form when human audio cannot be retrieved.
-  }
-
-  try {
-    const path = join(config.dataDir, `verb_requested_form_${Date.now()}_${toTagSlug(form)}.mp3`);
-    await generateSimpleSpeech(form, path, {
+    const result = await preparePronunciation({
+      wordData: { bareNoun: form, canonical: form },
+      spokenText: form,
+      fallbackPath: join(config.dataDir, `verb_requested_form_${Date.now()}_${toTagSlug(form)}.mp3`),
       speed: config.ttsSpeed || 0.9,
-      ipa: previewPronunciation?.ipa || null,
+      fallbackIpa: previewPronunciation?.ipa || null,
     });
-    return await storeAudio(path);
+    return await storeAudio(result.audioPath);
   } catch (err) {
     console.log(chalk.dim(`Form audio unavailable: ${err.message}`));
     return null;
@@ -269,12 +236,9 @@ async function storeVerbFormPronunciation(form, infinitive, previewPronunciation
 async function buildVerbSentenceAudio(sentence, spinner) {
   spinner.start('Generating sentence audio...');
   const audioPath = join(config.dataDir, `verb_sentence_${Date.now()}.mp3`);
-  await generateSpeech(sentence, audioPath);
+  const result = await prepareSentenceAudio(sentence, audioPath);
   spinner.succeed('Sentence audio ready');
-  return {
-    audioPath,
-    source: 'Google TTS',
-  };
+  return result;
 }
 
 async function buildVerbFormAudio(text, formKey, spinner) {
