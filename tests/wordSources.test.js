@@ -836,6 +836,13 @@ describe("word image sources", () => {
     )
   })
 
+  test("reports a Wiktionary lookup failure without exposing error details", async () => {
+    global.fetch = async () => { throw new Error("secret URL") }
+    const reasons = []
+    expect(await resolveWordPronunciation({ canonical: "Papa", lemma: "Papa" }, { onDiagnostic: (reason) => reasons.push(reason) })).toBeNull()
+    expect(reasons).toEqual(["lookup-failed"])
+  })
+
   test("resolveWordPronunciation uses Wiktionary IPA even when no audio is available", async () => {
     global.fetch = async (url) => {
       const parsed = new URL(url)

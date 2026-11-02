@@ -1540,7 +1540,7 @@ function extractWiktionaryIpa(html = '') {
   return match ? `[${match[1].trim()}]` : null;
 }
 
-async function getWiktionaryPronunciationData(word) {
+async function getWiktionaryPronunciationData(word, onDiagnostic = () => {}) {
   const url = new URL('https://de.wiktionary.org/w/api.php');
   url.searchParams.set('action', 'parse');
   url.searchParams.set('page', word);
@@ -1562,6 +1562,7 @@ async function getWiktionaryPronunciationData(word) {
       ),
     };
   } catch {
+    onDiagnostic('lookup-failed');
     return {
       ipa: null,
       audioUrls: [],
@@ -1573,7 +1574,7 @@ async function getWiktionaryPronunciationData(word) {
  * Fetch human pronunciation audio and IPA from Wiktionary/Wikimedia when available.
  */
 export async function resolveWordPronunciation(wordData, options = {}) {
-  const pronunciationData = await getWiktionaryPronunciationData(getWordLemma(wordData));
+  const pronunciationData = await getWiktionaryPronunciationData(getWordLemma(wordData), options.onDiagnostic);
   const normalizedIpa = pronunciationData.ipa
     ? normalizeWordIpa(wordData.canonical, pronunciationData.ipa)
     : null;

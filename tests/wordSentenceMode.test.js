@@ -301,7 +301,7 @@ describe("word mode sentence flow", () => {
     expect(mockResolveWordPronunciation).toHaveBeenCalledWith(expect.objectContaining({
       canonical: "groß",
       lexicalType: "adjective",
-    }))
+    }), expect.any(Object))
     expect(mockGenerateSimpleSpeech).not.toHaveBeenCalled()
 
     const payload = mockCreateNote.mock.calls[0][0]
@@ -1060,7 +1060,7 @@ test.each([['besten', 'gut', 'лучший'], ['festen', 'fest', 'твёрдый
   expect(mockShowWordDictionarySummary).toHaveBeenCalledWith(expect.objectContaining({ canonical: form, lemma, requestedForm: form }))
   expect(mockChooseWordSentence.mock.calls[0][0].exampleSentences).toEqual([example])
   expect(mockFindSentenceWordDuplicates.mock.calls[0][0].canonical).toBe(form)
-  expect(mockResolveWordPronunciation).toHaveBeenCalledWith(expect.objectContaining({ canonical: form, lemma: form }))
+  expect(mockResolveWordPronunciation).toHaveBeenCalledWith(expect.objectContaining({ canonical: form, lemma: form }), expect.any(Object))
   const saved = mockCreateBasicNote.mock.calls[0][0]
   expect(saved.front).toContain(`>${form}<`)
   expect(saved.back).toContain(meaning)
