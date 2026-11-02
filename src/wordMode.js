@@ -884,7 +884,7 @@ function shouldCreateSentenceWordMainNote(wordData = {}, selectedMeaning = {}) {
   return !wordData.skipMainCard && ['adjective', 'adverb'].includes(lexicalType) && Boolean(String(selectedMeaning?.russian || '').trim());
 }
 
-async function createSentenceWordMainNote({
+function buildSentenceWordMainNote({
   wordData,
   selectedMeaning,
   frequencyInfo,
@@ -899,7 +899,7 @@ async function createSentenceWordMainNote({
     contrast: wordData.opposite || buildContrastHint(wordData.canonical || getWordLemma(wordData)),
   });
 
-  return createBasicNote({
+  return {
     front: [soundTag(audioFilename), formatPlainWord(wordData.canonical)].filter(Boolean).join('<br>'),
     back: wordData.requestedForm ? buildWordExtraInfo({
       meaning: selectedMeaning.russian, grammar: wordData.patternHint,
@@ -921,7 +921,7 @@ async function createSentenceWordMainNote({
       }),
       ...buildContrastTags(wordData.canonical || getWordLemma(wordData)),
     ],
-  });
+  };
 }
 
 async function finalizeSentenceWord(prepared, options, spinner) {
@@ -999,19 +999,14 @@ async function finalizeSentenceWord(prepared, options, spinner) {
     ? 'Creating word notes...'
     : 'Creating sentence note...');
   const audioFilename = await storeAudio(audio.audioPath);
-  let confirmedMainNoteId = null;
+  const steps = [];
   if (shouldCreateSentenceWordMainNote(wordData, selectedMeaning)) {
-    confirmedMainNoteId = await createSentenceWordMainNote({
-      wordData,
-      selectedMeaning,
-      frequencyInfo: current.frequencyInfo,
-      audioFilename: mainAudioFilename,
-      deck: options.deck,
-    });
+    steps.push({ id: 'word', kind: 'basic', payload: buildSentenceWordMainNote({
+      wordData, selectedMeaning, frequencyInfo: current.frequencyInfo,
+      audioFilename: mainAudioFilename, deck: options.deck,
+    }) });
   }
-
-  try {
-  await createNote({
+  const sentencePayload = {
     german: sentenceData.german,
     ipa: sentenceData.ipa,
     russian: sentenceData.russian,
@@ -1043,16 +1038,10 @@ async function finalizeSentenceWord(prepared, options, spinner) {
       ...buildContrastTags(wordData.canonical || getWordLemma(wordData)),
       ...(chosenSentence?.focusForm ? [`word-form-${toTagSlug(chosenSentence.focusForm)}`] : []),
     ],
-  });
-
-  } catch (error) {
-    if (confirmedMainNoteId != null) {
-      const partial = new Error(`Word note saved: nid:${confirmedMainNoteId}. Sentence creation failed: ${error.message}. The failed write may have succeeded; inspect Anki before retrying.`);
-      partial.code = 'partial-note-write';
-      throw partial;
-    }
-    throw error;
-  }
+  };
+  steps.push({ id: 'sentence', kind: 'sentence', payload: sentencePayload });
+  const { startWordNoteSet } = await import('./noteSetService.js');
+  await startWordNoteSet(steps);
 
   spinner.succeed(`Created sentence card for ${wordData.canonical}`);
   console.log(chalk.green(`✓ Added word sentence for ${wordData.canonical}`));
@@ -1072,12 +1061,12 @@ export async function runWordWorkflow(rawInput, options = {}) {
       return false;
     }
     if (prepared.route === 'sentence-form') {
-      return finalizeSentenceWord(prepared, options, spinner);
+      return await finalizeSentenceWord(prepared, options, spinner);
     }
     if (prepared.route === 'cloze-form') {
-      return finalizeLexicalCloze(prepared, options, spinner);
+      return await finalizeLexicalCloze(prepared, options, spinner);
     }
-    return finalizePictureWord(prepared, options, spinner);
+    return await finalizePictureWord(prepared, options, spinner);
   } catch (err) {
     if (err instanceof RecoverableWorkflowError) {
       spinner.stop();

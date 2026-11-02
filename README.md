@@ -65,7 +65,7 @@ The default sentence card is the audio-first comprehension card.
 
 ### Always required
 
-- Node.js
+- Node.js 22.13 or later
 - Anki desktop
 - AnkiConnect add-on
 - eSpeak NG for deterministic local IPA generation
@@ -174,7 +174,7 @@ npm run grammar -- possessive mein
 The lexical workflow is built around actual card types, not just dictionary lookups.
 
 - nouns use the `2. Picture Words` note type for picture cards
-- noun audio includes the article, for example `der Arzt`
+- human pronunciation audio is preferred; TTS is used as a fallback and includes the article for nouns
 - noun back sides can include plural and a short example sentence
 - imageable adjectives stay in picture-word mode
 - non-visual but useful adjectives move into sentence cards instead of being skipped
@@ -185,6 +185,8 @@ If `braveApiKey` is configured, Brave image search is tried first, with Openvers
 
 During sentence previews, use `[R]eview` to tell AI what looks wrong and let it regenerate the draft.
 
+Incomplete word-card sets can be resumed without repeating already saved notes. Recovery checks the active Anki profile and an operation-specific media marker. A full copy of the profile and media can contain the same marker, so select the intended collection before resuming. Missing required media stops recovery. Verb card sets are not yet covered.
+
 ## Commands
 
 | Command | Description |
@@ -194,6 +196,8 @@ During sentence previews, use `[R]eview` to tell AI what looks wrong and let it 
 | `npm run text` | Enter phrases manually in the terminal |
 | `npm run words -- <item>` | Create one lexical note for a noun, adjective, adverb, or verb |
 | `npm run words` | Create lexical notes interactively from mixed input |
+| `npm run resume` | List incomplete word card sets and their resume commands |
+| `npm run resume -- <journal>` | Resume an approved word card set from its journal |
 | `npm run grammar -- <family> <lemma>` | Create grammar cloze notes |
 | `npm run add -- <url> -s 0:10 -e 0:15` | Add one clip manually from YouTube |
 | `npm run process -- <file.json>` | Process a saved markers JSON file |

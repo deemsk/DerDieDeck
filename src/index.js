@@ -219,6 +219,27 @@ program
   .action(processLexicalCommand);
 
 program
+  .command('resume')
+  .description('Resume an approved incomplete card set')
+  .argument('[journal]', 'Path to the saved recovery journal')
+  .action(async (journal) => {
+    try {
+      const { resumeSavedNoteSet, listIncompleteNoteSets } = await import('./noteSetService.js');
+      if (!journal) {
+        const pending = await listIncompleteNoteSets();
+        if (!pending.length) console.log('No incomplete card sets.');
+        else for (const item of pending) console.log(`npm run resume -- "${item.path}"`);
+        return;
+      }
+      const result = await resumeSavedNoteSet(journal);
+      console.log(`Completed card set: ${result.steps.map(step => `nid:${step.noteId}`).join(', ')}`);
+    } catch (error) {
+      console.error(`Could not resume card set: ${error.message}`);
+      process.exitCode = 1;
+    }
+  });
+
+program
   .command('grammar')
   .description('Create grammar cloze notes from a supported grammar family')
   .argument('<family>', 'Grammar family, for example: possessive')

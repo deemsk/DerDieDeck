@@ -66,6 +66,22 @@ const mockSpinnerFactory = jest.fn(() => ({
   fail: jest.fn(),
 }))
 
+jest.unstable_mockModule("../src/noteSetService.js", () => ({
+  startWordNoteSet: async (steps) => {
+    const saved = []
+    try {
+      for (const step of steps) {
+        saved.push(await (step.kind === 'basic' ? mockCreateBasicNote(step.payload) : mockCreateNote(step.payload)))
+      }
+      return { steps: saved.map(noteId => ({ noteId })) }
+    } catch (error) {
+      const failure = new Error(`Saved: ${saved.map(id => `nid:${id}`).join(', ')}. ${error.message}`)
+      failure.code = 'partial-note-write'
+      throw failure
+    }
+  },
+}))
+
 jest.unstable_mockModule("ora", () => ({
   default: mockSpinnerFactory,
 }))
@@ -1092,4 +1108,5 @@ test('reports a saved word note when the following sentence write has an uncerta
   })).rejects.toMatchObject({ code: 'partial-note-write', message: expect.stringContaining('nid:789') })
   expect(mockCreateBasicNote).toHaveBeenCalledTimes(1)
   expect(mockCreateNote).toHaveBeenCalledTimes(1)
+  expect(mockSpinnerFactory.mock.results[0].value.fail).toHaveBeenCalledWith(expect.stringContaining('nid:789'))
 })

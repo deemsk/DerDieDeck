@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Create German Anki cards from clips, text, words, and grammar prompts",
   "type": "module",
+  "engines": { "node": ">=22.13.0" },
   "bin": {
     "derdiedeck": "./src/index.js",
     "yt2anki": "./src/index.js"
@@ -12,6 +13,7 @@
     "clip": "node src/index.js clip",
     "text": "node src/index.js text",
     "words": "node src/index.js words",
+    "resume": "node src/index.js resume",
     "grammar": "node src/index.js grammar",
     "add": "node src/index.js add",
     "process": "node src/index.js process",

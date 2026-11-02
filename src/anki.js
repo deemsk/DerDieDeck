@@ -153,6 +153,27 @@ export async function syncCollection() {
   return ankiConnect('sync');
 }
 
+/** Establish a per-operation marker in this profile's media collection. */
+export async function createRecoveryMarker(operationId) {
+  if (!/^[a-z0-9]+$/.test(operationId)) throw new Error('Invalid recovery operation ID');
+  const profile = await ankiConnect('getActiveProfile');
+  if (typeof profile !== 'string' || !profile.trim()) throw new Error('Cannot determine active Anki profile');
+  const filename = `_derdiedeck_recovery_${operationId}.txt`;
+  const data = Buffer.from(`DerDieDeck recovery ${operationId}`, 'utf8').toString('base64');
+  const stored = await ankiConnect('storeMediaFile', { filename, data });
+  if (stored !== filename) throw new Error('Could not store the recovery marker under its expected name');
+  return { profile, filename, data };
+}
+
+/** A mismatch or unavailable marker must prevent recovery writes. */
+export async function verifyRecoveryMarker(marker) {
+  if (!marker?.profile || !marker.filename || !marker.data) return false;
+  const profile = await ankiConnect('getActiveProfile');
+  if (profile !== marker.profile) return false;
+  const data = await ankiConnect('retrieveMediaFile', { filename: marker.filename });
+  return data === marker.data;
+}
+
 export async function findNotesByQuery(query) {
   return ankiConnect('findNotes', { query });
 }
@@ -228,7 +249,7 @@ export async function storeAudio(audioPath) {
  * @param {Object} data.cefr - CEFR estimation result
  * @param {string} data.deck - Optional deck override
  */
-export async function createNote({
+function buildSentenceAnkiNote({
   german,
   ipa,
   russian,
@@ -272,17 +293,11 @@ export async function createNote({
   }
   tags.push(...extraTags);
 
-  return ankiConnect('addNote', {
-    note: {
-      deckName,
-      modelName: config.ankiNoteType,
-      fields,
-      options: {
-        allowDuplicate: false,
-      },
-      tags,
-    },
-  });
+  return { deckName, modelName: config.ankiNoteType, fields, options: { allowDuplicate: false }, tags };
+}
+
+export async function createNote(data) {
+  return createPreparedNote(buildSentenceAnkiNote(data));
 }
 
 /**
@@ -398,7 +413,7 @@ export async function createPictureWordNote({
   });
 }
 
-export async function createBasicNote({
+function buildBasicAnkiNote({
   front,
   back,
   tags = [],
@@ -416,17 +431,26 @@ export async function createBasicNote({
     fields['Add Reverse'] = '1';
   }
 
-  return ankiConnect('addNote', {
-    note: {
-      deckName,
-      modelName,
-      fields,
-      options: {
-        allowDuplicate: false,
-      },
-      tags,
-    },
-  });
+  return { deckName, modelName, fields, options: { allowDuplicate: false }, tags };
+}
+
+export async function createBasicNote(data) {
+  return createPreparedNote(buildBasicAnkiNote(data));
+}
+
+export function buildRecoverableNote(kind, data) {
+  if (kind === 'basic') return buildBasicAnkiNote(data);
+  if (kind === 'sentence') return buildSentenceAnkiNote(data);
+  throw new Error(`Unsupported note set step: ${kind}`);
+}
+
+export async function createPreparedNote(note) {
+  return ankiConnect('addNote', { note });
+}
+
+export async function recoveryMediaExists(filename) {
+  const result = await ankiConnect('retrieveMediaFile', { filename });
+  return typeof result === 'string' && result.length > 0;
 }
 
 export function resolveClozeFieldMap(fieldNames = []) {
