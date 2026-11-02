@@ -1,7 +1,7 @@
 import { buildSentenceImageMeaning, resolveWordAudioPlan } from "../src/wordMode.js"
 
 describe("word mode sentence image helpers", () => {
-  test("resolveWordAudioPlan keeps noun TTS on the canonical form with article", () => {
+  test("resolveWordAudioPlan prefers human noun audio and retains the article for fallback", () => {
     expect(
       resolveWordAudioPlan({
         lexicalType: "noun",
@@ -11,7 +11,7 @@ describe("word mode sentence image helpers", () => {
     ).toEqual(
       expect.objectContaining({
         spokenText: "der Arzt",
-        preferHumanAudio: false,
+        preferHumanAudio: true,
       })
     )
   })

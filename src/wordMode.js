@@ -79,7 +79,7 @@ function formatWordPreviewSummary(chalk, wordData, translation, cefrLevel = null
 export function resolveWordAudioPlan(wordData = {}) {
   return {
     spokenText: String(wordData.canonical || getWordLemma(wordData) || '').trim(),
-    preferHumanAudio: !isNounWord(wordData),
+    preferHumanAudio: true,
     speed: config.ttsSpeed || 0.9,
   };
 }
@@ -286,13 +286,9 @@ async function buildWordAudio(wordData, spinner) {
     speed: audioPlan.speed,
     ipa: wiktionaryIpa,
   });
-  spinner.succeed(audioPlan.preferHumanAudio
-    ? (wiktionaryIpa
-      ? 'Using Google TTS fallback audio (IPA from Wiktionary)'
-      : 'Using Google TTS fallback audio')
-    : (wiktionaryIpa
-      ? 'Using Google TTS noun audio with article (IPA from Wiktionary)'
-      : 'Using Google TTS noun audio with article'));
+  spinner.succeed(wiktionaryIpa
+    ? 'Using Google TTS fallback audio (IPA from Wiktionary)'
+    : 'Using Google TTS fallback audio');
   return {
     audioPath,
     source: 'Google TTS',

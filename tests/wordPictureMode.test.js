@@ -184,3 +184,34 @@ test('failed noun example validation prevents preview, audio and note creation',
   expect(mockGenerateSimpleSpeech).not.toHaveBeenCalled()
   expect(mockCreatePictureWordNote).not.toHaveBeenCalled()
 })
+
+
+test.each([
+  ['die Hölle', 'Hölle', 'noun'],
+  ['der Papa', 'Papa', 'noun'],
+  ['früh', 'früh', 'adjective'],
+])('uses human pronunciation for %s without synthesizing it', async (canonical, lemma, lexicalType) => {
+  jest.clearAllMocks()
+  mockPrepareNounExample.mockResolvedValue({ german: 'Ein Beispiel.', russian: 'Пример.' })
+  mockResolveWordPronunciation.mockResolvedValueOnce({ ipa: '[test]', audioPath: '/tmp/human.mp3', source: 'Wiktionary/Wikimedia' })
+  const added = await runWordWorkflow(lemma, {
+    learnerProfileContext: false, meaning: 'значение', deck: 'German::Test',
+    analysisResult: { ...schatzAnalysis(), canonical, lemma, lexicalType },
+  })
+  expect(added).toBe(true)
+  expect(mockStoreAudio).toHaveBeenCalledWith('/tmp/human.mp3')
+  expect(mockGenerateSimpleSpeech).not.toHaveBeenCalled()
+  expect(mockCreatePictureWordNote).toHaveBeenCalledWith(expect.objectContaining({ canonical }))
+})
+
+test.each(['missing', 'failed'])('uses TTS for a noun when human audio is %s', async (reason) => {
+  jest.clearAllMocks()
+  mockPrepareNounExample.mockResolvedValue({ german: 'Ein Beispiel.', russian: 'Пример.' })
+  if (reason === 'failed') mockResolveWordPronunciation.mockRejectedValueOnce(new Error('download failed'))
+  else mockResolveWordPronunciation.mockResolvedValueOnce(null)
+  expect(await runWordWorkflow('Papa', {
+    learnerProfileContext: false, meaning: 'папа', deck: 'German::Test',
+    analysisResult: { ...schatzAnalysis(), canonical: 'der Papa', lemma: 'Papa' },
+  })).toBe(true)
+  expect(mockGenerateSimpleSpeech).toHaveBeenCalledWith('der Papa', expect.any(String), expect.any(Object))
+})
