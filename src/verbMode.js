@@ -28,10 +28,6 @@ import { chooseVerbSentence, confirmPictureVerbSelection, confirmSentenceVerbSel
 import { buildVerbGoogleImagesSearch, resolveImageAsset, resolveWordPronunciation } from './lib/wordSources.js';
 import {
   checkConnection,
-  createBasicNote,
-  createClozeNote,
-  createNote,
-  createPictureWordNote,
   ensureDeck,
   findSimilarCards,
   findVerbFormDuplicates,
@@ -390,10 +386,7 @@ function buildDictionaryFormContext(verbData, focusForm = null) {
   return `${form} → ${verbData.infinitive}`;
 }
 
-async function createDictionaryFormNote(
-  verbData, selectedMeaning, focusForm, deck, formExplanation,
-  formPronunciation = null, formAudioFilename = null
-) {
+function buildDictionaryFormPayload(verbData, selectedMeaning, focusForm, deck, formExplanation, formPronunciation = null, formAudioFilename = null) {
   const note = buildVerbDictionaryNote({
     verbData,
     selectedMeaning,
@@ -402,7 +395,7 @@ async function createDictionaryFormNote(
     formPronunciationField: formatPronunciationField(formAudioFilename, formPronunciation?.ipa),
   });
 
-  return createBasicNote({
+  return {
     front: note.front,
     back: note.back,
     deck,
@@ -417,14 +410,14 @@ async function createDictionaryFormNote(
       }),
       ...buildContrastTags(verbData.infinitive),
     ],
-  });
+  };
 }
 
 /**
  * Creates the base lexical note for a strong/irregular verb package.
  */
-async function createVerbLemmaNote(verbData, selectedMeaning, audioFilename, deck, morphology, stageTags = []) {
-  return createBasicNote({
+function buildVerbLemmaPayload(verbData, selectedMeaning, audioFilename, deck, morphology, stageTags = []) {
+  return {
     front: formatPlainWord(verbData.infinitive),
     back: [
       formatPronunciationField(audioFilename, verbData.ipa),
@@ -443,13 +436,13 @@ async function createVerbLemmaNote(verbData, selectedMeaning, audioFilename, dec
       ...buildContrastTags(verbData.infinitive),
       ...buildVerbMorphologyTags(morphology),
     ],
-  });
+  };
 }
 
 /**
  * Creates production and recognition notes for one selected verb form.
  */
-async function createVerbKeyFormNotes(
+function buildVerbKeyFormPayloads(
   verbData,
   selectedMeaning,
   morphology,
@@ -459,8 +452,7 @@ async function createVerbKeyFormNotes(
   recognitionStageTags = [],
   formSentence = null,
   productionAudioFilename = null,
-  lemmaAudioFilename = null,
-  recordNote = () => {}
+  lemmaAudioFilename = null
 ) {
   const sharedTags = [
     'yt2anki',
@@ -470,7 +462,7 @@ async function createVerbKeyFormNotes(
   ];
   const formRussian = formSentence?.formRussian || null;
 
-  const productionId = await createBasicNote({
+  const production = {
     front: buildVerbKeyFormProductionFront(verbData.infinitive, formSpec),
     back: buildVerbKeyFormProductionBack(formSpec, selectedMeaning, productionAudioFilename, formRussian),
     deck,
@@ -483,10 +475,9 @@ async function createVerbKeyFormNotes(
       }),
       ...productionStageTags,
     ],
-  });
+  };
 
-  recordNote(`production ${formSpec.form}`, productionId);
-  const recognitionId = await createBasicNote({
+  const recognition = {
     front: buildVerbKeyFormRecognitionFront(formSpec),
     back: buildVerbKeyFormRecognitionBack(verbData, selectedMeaning, formSpec, formRussian, lemmaAudioFilename),
     deck,
@@ -499,16 +490,16 @@ async function createVerbKeyFormNotes(
       }),
       ...recognitionStageTags,
     ],
-  });
-  recordNote(`recognition ${formSpec.form}`, recognitionId);
+  };
+  return { production, recognition };
 }
 
 /**
  * Creates one sentence card for a selected verb form.
  */
-async function createVerbFormSentenceNote(verbData, sentence, audioFilename, morphology, deck, stageTags = []) {
+function buildVerbFormSentencePayload(verbData, sentence, audioFilename, morphology, deck, stageTags = []) {
   const formSpec = sentence.formSpec;
-  return createNote({
+  return {
     german: sentence.german,
     ipa: sentence.ipa,
     russian: sentence.russian,
@@ -533,20 +524,20 @@ async function createVerbFormSentenceNote(verbData, sentence, audioFilename, mor
       ...buildContrastTags(verbData.infinitive),
       ...buildVerbMorphologyTags(morphology, formSpec),
     ],
-  });
+  };
 }
 
 /**
  * Creates one Cloze note that asks for the selected finite verb form in context.
  */
-async function createVerbFormClozeNote(verbData, sentence, morphology, deck, stageTags = []) {
+function buildVerbFormClozePayload(verbData, sentence, morphology, deck, stageTags = []) {
   const formSpec = sentence.formSpec;
   const text = buildVerbFormClozeText(sentence, formSpec, verbData.infinitive);
   if (!text.includes('{{c1::')) {
     throw new Error(`Could not build verb-form cloze for ${verbData.infinitive} ${formSpec.key}`);
   }
 
-  return createClozeNote({
+  return {
     text,
     extra: buildVerbFormClozeExtra(sentence, formSpec, verbData.infinitive),
     deck,
@@ -562,7 +553,7 @@ async function createVerbFormClozeNote(verbData, sentence, morphology, deck, sta
       ...buildContrastTags(verbData.infinitive),
       ...buildVerbMorphologyTags(morphology, formSpec),
     ],
-  });
+  };
 }
 
 /**
@@ -933,7 +924,7 @@ async function prepareVerb(rawInput, options, spinner) {
   };
 }
 
-async function finalizePictureVerb(prepared, options, spinner, recordNote) {
+async function finalizePictureVerb(prepared, options, spinner) {
   const {
     verbData,
     selectedMeaning,
@@ -1067,48 +1058,27 @@ async function finalizePictureVerb(prepared, options, spinner, recordNote) {
     return true;
   }
 
+  const steps = [];
   if (formExplanation) {
-    spinner.start(`Creating form card for ${verbData.displayForm}...`);
-    try {
-      const formAudioFilename = await storeVerbFormPronunciation(
-        verbData.displayForm, verbData.infinitive, formPronunciation
-      );
-      const formNoteId = await createDictionaryFormNote(
-        verbData, selectedMeaning, verbData.displayForm, options.deck,
-        formExplanation, formPronunciation, formAudioFilename
-      );
-      recordNote(`form ${verbData.displayForm}`, formNoteId);
-      spinner.succeed(`Created form card for ${verbData.displayForm}`);
-      console.log(chalk.green(`✓ Added form card ${verbData.displayForm} → ${verbData.infinitive}. ${ankiBrowseSearch(formNoteId)}`));
-    } catch (err) {
-      spinner.stop();
-      console.log(chalk.red(`Form card not added: ${verbData.displayForm} (${err.message})`));
-      throw err;
-    }
+    const formAudioFilename = await storeVerbFormPronunciation(verbData.displayForm, verbData.infinitive, formPronunciation);
+    steps.push({ id: 'form', kind: 'basic', payload: buildDictionaryFormPayload(
+      verbData, selectedMeaning, verbData.displayForm, options.deck, formExplanation, formPronunciation, formAudioFilename
+    ) });
   } else if (resolveRequestedVerbForm(verbData)) {
     console.log(chalk.dim(`Form card skipped: ${verbData.displayForm}`));
   }
-
-  if (!addInfinitive) {
-    if (existingLemmaNote) console.log(chalk.dim(`Infinitive card ${verbData.infinitive} was already in Anki.`));
-    return Boolean(formExplanation);
-  }
-
-  audio ||= await buildVerbAudio(verbData, spinner);
-  let imageFilename = null;
-  if (imageChoice) {
-    spinner.start('Downloading chosen image...');
-    const imagePath = await resolveImageAsset(imageChoice);
-    spinner.succeed('Image ready');
-    imageFilename = await storeMedia(imagePath);
-  }
-
-  spinner.start('Creating verb note...');
-  const audioFilename = await storeAudio(audio.audioPath);
-  const pronunciationField = formatPronunciationField(audioFilename, verbData.ipa);
-
-  try {
-    const lemmaNoteId = await createPictureWordNote({
+  if (addInfinitive) {
+    audio ||= await buildVerbAudio(verbData, spinner);
+    let imageFilename = null;
+    if (imageChoice) {
+      spinner.start('Downloading chosen image...');
+      const imagePath = await resolveImageAsset(imageChoice);
+      spinner.succeed('Image ready');
+      imageFilename = await storeMedia(imagePath);
+    }
+    const audioFilename = await storeAudio(audio.audioPath);
+    const pronunciationField = formatPronunciationField(audioFilename, verbData.ipa);
+    const lemmaPayload = {
       canonical: verbData.infinitive,
       coloredWord: formatPlainWord(verbData.infinitive),
       imageFilename,
@@ -1129,23 +1099,25 @@ async function finalizePictureVerb(prepared, options, spinner, recordNote) {
         }),
         ...buildContrastTags(verbData.infinitive),
       ],
-    });
-    spinner.succeed(`Created ${verbData.infinitive}`);
-    console.log(chalk.green(`✓ Added ${verbData.infinitive} (${selectedMeaning.russian}). ${ankiBrowseSearch(lemmaNoteId)}`));
-  } catch (err) {
-    spinner.stop();
-    if (formExplanation && /duplicate/i.test(err.message)) {
-      console.log(chalk.dim(`Infinitive card ${verbData.infinitive} was already in Anki.`));
-      return true;
-    }
-    console.log(chalk.red(`Lemma card failed: ${verbData.infinitive} (${err.message})`));
-    throw err;
+    };
+    steps.push({ id: 'lemma', kind: 'picture', payload: lemmaPayload, allowExistingDuplicate: Boolean(formExplanation) });
   }
+  if (!steps.length) return false;
+  spinner.start('Creating verb cards...');
+  const { startVerbNoteSet } = await import('./noteSetService.js');
+  const completed = await startVerbNoteSet(steps);
+  const formStep = completed.steps.find(step => step.id === 'form');
+  if (formStep) console.log(chalk.green(`✓ Added form card ${verbData.displayForm} → ${verbData.infinitive}. ${ankiBrowseSearch(formStep.noteId)}`));
+  const lemmaStep = completed.steps.find(step => step.id === 'lemma');
+  if (lemmaStep?.status === 'existing-duplicate') console.log(chalk.dim(`Infinitive card ${verbData.infinitive} was already in Anki.`));
+  else if (lemmaStep) console.log(chalk.green(`✓ Added ${verbData.infinitive} (${selectedMeaning.russian}). ${ankiBrowseSearch(lemmaStep.noteId)}`));
+  if (existingLemmaNote) console.log(chalk.dim(`Infinitive card ${verbData.infinitive} was already in Anki.`));
+  spinner.succeed(`Created ${verbData.infinitive}`);
 
   return true;
 }
 
-async function finalizeSentenceVerb(prepared, options, spinner, recordNote) {
+async function finalizeSentenceVerb(prepared, options, spinner) {
   let current = prepared;
   let autoPlay = true;
 
@@ -1253,32 +1225,18 @@ async function finalizeSentenceVerb(prepared, options, spinner, recordNote) {
     return true;
   }
 
+  const steps = [];
   if (formExplanation) {
-    try {
-      spinner.start(`Creating form card for ${form}...`);
-      const formAudioFilename = await storeVerbFormPronunciation(
-        form, verbData.infinitive, formPronunciation
-      );
-      const formNoteId = await createDictionaryFormNote(
-        verbData, selectedMeaning, form, options.deck,
-        formExplanation, formPronunciation, formAudioFilename
-      );
-      recordNote(`form ${form}`, formNoteId);
-      spinner.succeed(`Created form card for ${form}`);
-      console.log(chalk.green(`✓ Added form card ${form} → ${verbData.infinitive}. ${ankiBrowseSearch(formNoteId)}`));
-    } catch (err) {
-      spinner.stop();
-      console.log(chalk.red(`Form card not added: ${form} (${err.message})`));
-      throw err;
-    }
+    const formAudioFilename = await storeVerbFormPronunciation(form, verbData.infinitive, formPronunciation);
+    steps.push({ id: 'form', kind: 'basic', payload: buildDictionaryFormPayload(
+      verbData, selectedMeaning, form, options.deck, formExplanation, formPronunciation, formAudioFilename
+    ) });
   } else if (requestedForm) {
     console.log(chalk.dim(`Form card skipped: ${requestedForm}`));
   }
-
   spinner.start('Creating sentence note...');
   const audioFilename = await storeAudio(audio.audioPath);
-  try {
-    const sentenceNoteId = await createNote({
+  const sentencePayload = {
       german: sentenceData.german,
       ipa: sentenceData.ipa,
       russian: sentenceData.russian,
@@ -1302,17 +1260,18 @@ async function finalizeSentenceVerb(prepared, options, spinner, recordNote) {
         }),
         ...buildContrastTags(verbData.infinitive),
       ],
-    });
+  };
+  steps.push({ id: 'sentence', kind: 'sentence', payload: sentencePayload, allowExistingDuplicate: Boolean(formExplanation) });
+  const { startVerbNoteSet } = await import('./noteSetService.js');
+  const completed = await startVerbNoteSet(steps);
+  const formStep = completed.steps.find(step => step.id === 'form');
+  if (formStep) console.log(chalk.green(`✓ Added form card ${form} → ${verbData.infinitive}. ${ankiBrowseSearch(formStep.noteId)}`));
+  const sentenceStep = completed.steps.find(step => step.id === 'sentence');
+  if (sentenceStep?.status === 'existing-duplicate') {
+    spinner.succeed(`Sentence card already exists for ${verbData.infinitive}`);
+  } else {
     spinner.succeed(`Created sentence card for ${verbData.infinitive}`);
-    console.log(chalk.green(`✓ Added verb sentence for ${verbData.infinitive}. ${ankiBrowseSearch(sentenceNoteId)}`));
-  } catch (err) {
-    spinner.stop();
-    if (formExplanation && /duplicate/i.test(err.message)) {
-      console.log(chalk.dim(`Sentence card already exists for ${verbData.infinitive}`));
-      return true;
-    }
-    console.log(chalk.red(`Sentence card failed for ${verbData.infinitive}: ${err.message}`));
-    throw err;
+    console.log(chalk.green(`✓ Added verb sentence for ${verbData.infinitive}. ${ankiBrowseSearch(sentenceStep?.noteId)}`));
   }
 
   return true;
@@ -1321,7 +1280,7 @@ async function finalizeSentenceVerb(prepared, options, spinner, recordNote) {
 /**
  * Creates all notes in an explicit morphology package after one preview confirmation.
  */
-async function finalizeStrongVerbPackage(prepared, options, spinner, recordNote) {
+async function finalizeStrongVerbPackage(prepared, options, spinner) {
   const {
     verbData,
     selectedMeaning,
@@ -1360,62 +1319,38 @@ async function finalizeStrongVerbPackage(prepared, options, spinner, recordNote)
     return true;
   }
 
-  spinner.start('Creating verb morphology package...');
+  spinner.start('Preparing verb morphology package...');
   const lemmaAudioFilename = await storeAudio(audio.audioPath);
   const totalPackageNotes = 1 + (packagePlan.forms.length * 2) + (packagePlan.sentences.length * 2);
   let packageNoteIndex = 0;
-  const lemmaNoteId = await createVerbLemmaNote(
-    verbData,
-    selectedMeaning,
-    lemmaAudioFilename,
-    options.deck,
-    morphology,
+  const steps = [{ id: 'lemma', kind: 'basic', payload: buildVerbLemmaPayload(
+    verbData, selectedMeaning, lemmaAudioFilename, options.deck, morphology,
     buildSiblingStageTags(packageNoteIndex++, totalPackageNotes)
-  );
-
-  recordNote(`lemma ${verbData.infinitive}`, lemmaNoteId);
+  ) }];
   for (let index = 0; index < packagePlan.forms.length; index++) {
     const formSpec = packagePlan.forms[index];
     const keyFormAudio = keyFormAudios[index];
     const keyFormAudioFilename = keyFormAudio ? await storeAudio(keyFormAudio.audioPath) : null;
-    const formSentence = packagePlan.sentences.find((sentence) => sentence.formSpec?.key === formSpec.key) || null;
-    await createVerbKeyFormNotes(
-      verbData,
-      selectedMeaning,
-      morphology,
-      formSpec,
-      options.deck,
+    const formSentence = packagePlan.sentences.find(sentence => sentence.formSpec?.key === formSpec.key) || null;
+    const pair = buildVerbKeyFormPayloads(verbData, selectedMeaning, morphology, formSpec, options.deck,
       buildSiblingStageTags(packageNoteIndex++, totalPackageNotes),
-      buildSiblingStageTags(packageNoteIndex++, totalPackageNotes),
-      formSentence,
-      keyFormAudioFilename,
-      lemmaAudioFilename,
-      recordNote
-    );
+      buildSiblingStageTags(packageNoteIndex++, totalPackageNotes), formSentence,
+      keyFormAudioFilename, lemmaAudioFilename);
+    steps.push({ id: `production${index}`, kind: 'basic', payload: pair.production });
+    steps.push({ id: `recognition${index}`, kind: 'basic', payload: pair.recognition });
   }
-
   for (let index = 0; index < packagePlan.sentences.length; index++) {
     const sentence = packagePlan.sentences[index];
-    const sentenceAudio = sentenceAudios[index];
-    const audioFilename = await storeAudio(sentenceAudio.audioPath);
-    const sentenceNoteId = await createVerbFormSentenceNote(
-      verbData,
-      sentence,
-      audioFilename,
-      morphology,
-      options.deck,
-      buildSiblingStageTags(packageNoteIndex++, totalPackageNotes)
-    );
-    recordNote(`sentence ${sentence.german}`, sentenceNoteId);
-    const clozeNoteId = await createVerbFormClozeNote(
-      verbData,
-      sentence,
-      morphology,
-      options.deck,
-      buildSiblingStageTags(packageNoteIndex++, totalPackageNotes)
-    );
-    recordNote(`cloze ${sentence.german}`, clozeNoteId);
+    const audioFilename = await storeAudio(sentenceAudios[index].audioPath);
+    steps.push({ id: `sentence${index}`, kind: 'sentence', payload: buildVerbFormSentencePayload(
+      verbData, sentence, audioFilename, morphology, options.deck,
+      buildSiblingStageTags(packageNoteIndex++, totalPackageNotes)) });
+    steps.push({ id: `cloze${index}`, kind: 'cloze', payload: buildVerbFormClozePayload(
+      verbData, sentence, morphology, options.deck,
+      buildSiblingStageTags(packageNoteIndex++, totalPackageNotes)) });
   }
+  const { startVerbNoteSet } = await import('./noteSetService.js');
+  await startVerbNoteSet(steps);
 
   spinner.succeed(`Created verb morphology package for ${verbData.infinitive}`);
   console.log(chalk.green(`✓ Added verb morphology package for ${verbData.infinitive}`));
@@ -1424,8 +1359,6 @@ async function finalizeStrongVerbPackage(prepared, options, spinner, recordNote)
 
 export async function runVerbWorkflow(rawInput, options = {}) {
   const spinner = ora();
-  const confirmedNotes = [];
-  const recordNote = (label, id) => confirmedNotes.push({ label, id });
   options = { ...options, learnerProfileContext: await resolveLearnerProfileForInput(rawInput, options, (warning) => console.log(chalk.yellow(warning))) };
 
   try {
@@ -1439,21 +1372,13 @@ export async function runVerbWorkflow(rawInput, options = {}) {
     }
 
     if (prepared.route === 'picture-word') {
-      return await finalizePictureVerb(prepared, options, spinner, recordNote);
+      return await finalizePictureVerb(prepared, options, spinner);
     }
     if (prepared.route === 'strong-verb-package') {
-      return await finalizeStrongVerbPackage(prepared, options, spinner, recordNote);
+      return await finalizeStrongVerbPackage(prepared, options, spinner);
     }
-    return await finalizeSentenceVerb(prepared, options, spinner, recordNote);
+    return await finalizeSentenceVerb(prepared, options, spinner);
   } catch (err) {
-    if (confirmedNotes.length) {
-      spinner.stop();
-      const saved = confirmedNotes.map(({ label, id }) => `${label}: ${id == null ? 'ID unavailable' : `nid:${id}`}`).join(', ');
-      const partial = new Error(`Saved notes: ${saved}. A later step failed: ${err.message}. The failed write may have succeeded; inspect Anki before retrying.`);
-      partial.code = 'partial-note-write';
-      spinner.fail(partial.message);
-      throw partial;
-    }
     if (err instanceof RecoverableWorkflowError) {
       spinner.stop();
       throw err;

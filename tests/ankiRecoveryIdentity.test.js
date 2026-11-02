@@ -29,3 +29,11 @@ test('prepared note retains deck, model and rendered fields after config changes
     expect(prepared.fields.Back).toContain('Hallo')
   } finally { config.ankiDeck = oldDeck; config.ankiNoteType = oldModel }
 })
+test('freezes picture and cloze note models and fields in approved payloads', async () => {
+  const { buildRecoverableNote } = await import('../src/anki.js')
+  const picture = buildRecoverableNote('picture', { canonical: 'gehen', coloredWord: 'gehen', imageFilename: 'walk.jpg', pronunciationField: '[sound:walk.mp3]', modelName: 'Pictures', deck: 'Original' })
+  const cloze = buildRecoverableNote('cloze', { text: 'Du {{c1::gehst}}.', extra: 'идёшь', modelName: 'Cloze', deck: 'Original' })
+  expect(picture).toEqual(expect.objectContaining({ modelName: 'Pictures', deckName: 'Original' }))
+  expect(Object.values(picture.fields).join(' ')).toContain('walk.jpg')
+  expect(cloze).toEqual(expect.objectContaining({ modelName: 'Cloze', deckName: 'Original', fields: expect.objectContaining({ Text: 'Du {{c1::gehst}}.' }) }))
+})

@@ -6,7 +6,7 @@ import { createRecoveryMarker, verifyRecoveryMarker, findNotesByQuery, buildReco
 import { createNoteSetJournal, resumeNoteSet } from './noteSetRecovery.js';
 
 export async function startNoteSet(path, { operationId, steps }) {
-  if (!steps.every(step => ['basic', 'sentence'].includes(step.kind))) throw new Error('Unsupported note set step');
+  if (!steps.every(step => ['basic', 'sentence', 'cloze', 'picture'].includes(step.kind))) throw new Error('Unsupported note set step');
   const prepared = steps.map(step => {
     const note = buildRecoverableNote(step.kind, step.payload);
     const text = JSON.stringify(note);
@@ -14,7 +14,7 @@ export async function startNoteSet(path, { operationId, steps }) {
     for (const filename of [step.payload.audioFilename, step.payload.imageFilename]) {
       if (filename) media.push(filename);
     }
-    return { id: step.id, kind: 'prepared', payload: { note, media: [...new Set(media)] } };
+    return { id: step.id, kind: 'prepared', allowExistingDuplicate: step.allowExistingDuplicate === true, payload: { note, media: [...new Set(media)] } };
   });
   const marker = await createRecoveryMarker(operationId);
   await createNoteSetJournal(path, { operationId, collectionId: JSON.stringify(marker), steps: prepared });
@@ -36,7 +36,14 @@ export async function resumeSavedNoteSet(path) {
         if (!(await recoveryMediaExists(filename))) throw new Error(`Required Anki media is unavailable: ${filename}`);
       }
       const note = step.payload.note;
-      return createPreparedNote({ ...note, tags: [...(note.tags || []), tag] });
+      try {
+        return await createPreparedNote({ ...note, tags: [...(note.tags || []), tag] });
+      } catch (error) {
+        if (/^AnkiConnect error: cannot create note because it is a duplicate$/i.test(error.message)) {
+          error.code = 'anki-note-duplicate';
+        }
+        throw error;
+      }
     },
   });
 }
@@ -54,7 +61,7 @@ export async function listIncompleteNoteSets(directory = recoveryDirectory()) {
     const path = join(directory, name);
     try {
       const journal = JSON.parse(await readFile(path, 'utf8'));
-      if (Array.isArray(journal.steps) && journal.steps.some(step => step.noteId == null)) {
+      if (Array.isArray(journal.steps) && journal.steps.some(step => step.noteId == null && step.status !== 'existing-duplicate')) {
         results.push({ operationId: journal.operationId, path });
       }
     } catch {
@@ -62,6 +69,10 @@ export async function listIncompleteNoteSets(directory = recoveryDirectory()) {
     }
   }
   return results;
+}
+
+export async function startVerbNoteSet(steps) {
+  return startWordNoteSet(steps);
 }
 
 export async function startWordNoteSet(steps) {

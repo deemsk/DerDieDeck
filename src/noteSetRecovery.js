@@ -34,7 +34,7 @@ export async function createNoteSetJournal(path, { operationId, collectionId, st
   if (!validIdentifier(operationId) || typeof collectionId !== 'string' || !collectionId.trim() ||
       !Array.isArray(steps) || !steps.length || steps.some(step => !validIdentifier(step.id)) ||
       new Set(steps.map(step => step.id)).size !== steps.length) throw new Error('Invalid note set plan');
-  const journal = { version: 1, operationId, collectionId, steps: steps.map(step => ({ id: step.id, kind: step.kind, payload: step.payload, noteId: null })) };
+  const journal = { version: 1, operationId, collectionId, steps: steps.map(step => ({ id: step.id, kind: step.kind, payload: step.payload, allowExistingDuplicate: step.allowExistingDuplicate === true, noteId: null })) };
   await writeAtomic(path, journal, true);
   return journal;
 }
@@ -63,6 +63,7 @@ export async function resumeNoteSet(path, { collectionId, find, create }) {
     };
     await verifyCollection();
     for (const step of journal.steps) {
+      if (step.status === 'existing-duplicate' && step.allowExistingDuplicate) continue;
       await verifyCollection();
       const tag = stepTag(journal.operationId, step.id);
       const matches = await find(tag);
@@ -76,7 +77,15 @@ export async function resumeNoteSet(path, { collectionId, find, create }) {
       }
       if (step.noteId != null) throw new Error(`Previously confirmed note for ${step.id} is missing`);
       await verifyCollection();
-      const noteId = await create(step, tag);
+      let noteId;
+      try {
+        noteId = await create(step, tag);
+      } catch (error) {
+        if (!step.allowExistingDuplicate || error.code !== 'anki-note-duplicate') throw error;
+        step.status = 'existing-duplicate';
+        await writeAtomic(path, journal);
+        continue;
+      }
       if (!Number.isSafeInteger(noteId) || noteId <= 0) throw new Error(`Invalid note ID for ${step.id}`);
       step.noteId = noteId;
       await writeAtomic(path, journal);

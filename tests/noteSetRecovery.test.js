@@ -118,3 +118,16 @@ test('stops before the next write when the active collection changes', async () 
   })).rejects.toThrow(/collection/i)
   expect(writes).toBe(1)
 })
+
+test('records an explicitly allowed duplicate companion as complete without retrying it', async () => {
+  const path = join(dir, 'journal.json')
+  await createNoteSetJournal(path, { operationId: 'abc123', collectionId: 'collection-a', steps: [
+    { id: 'form', payload: {} }, { id: 'lemma', payload: {}, allowExistingDuplicate: true },
+  ] })
+  let writes = 0
+  const options = { collectionId: 'collection-a', find: async tag => tag.includes('step-form') ? [42] : [], create: async () => { writes++; const error = new Error('duplicate'); error.code = 'anki-note-duplicate'; throw error } }
+  const result = await resumeNoteSet(path, options)
+  expect(result.steps[1].status).toBe('existing-duplicate')
+  await resumeNoteSet(path, options)
+  expect(writes).toBe(1)
+})

@@ -184,6 +184,28 @@ const mockReviewVerbExamples = jest.fn(async (_target, examples) => examples)
 jest.unstable_mockModule("../src/verbSentenceValidation.js", () => ({ reviewVerbExamples: mockReviewVerbExamples }))
 
 const { enrichVerb: mockProfiledVerb } = await import("../src/verbEnricher.js")
+const mockStartVerbNoteSet = jest.fn(async (steps) => {
+  const saved = []
+  try {
+    for (const step of steps) {
+      try {
+        const noteId = await (step.kind === 'basic' ? mockCreateBasicNote(step.payload) : step.kind === 'cloze' ? mockCreateClozeNote(step.payload) : step.kind === 'picture' ? mockCreatePictureWordNote(step.payload) : mockCreateNote(step.payload))
+        saved.push({ ...step, noteId })
+      } catch (error) {
+        if (!step.allowExistingDuplicate || error.message !== 'AnkiConnect error: cannot create note because it is a duplicate') throw error
+        saved.push({ ...step, status: 'existing-duplicate' })
+      }
+    }
+    return { steps: saved }
+  } catch (error) {
+    if (!saved.length) throw error
+    const partial = new Error(`Saved: ${saved.map(step => `nid:${step.noteId}`).join(', ')}. ${error.message}`)
+    partial.code = 'partial-note-write'
+    throw partial
+  }
+})
+jest.unstable_mockModule('../src/noteSetService.js', () => ({ startVerbNoteSet: mockStartVerbNoteSet }))
+
 const { runVerbWorkflow } = await import("../src/verbMode.js")
 
 describe("verb mode sentence flow", () => {
@@ -264,6 +286,19 @@ describe("verb mode sentence flow", () => {
     })).rejects.toMatchObject({ code: "partial-note-write", message: expect.stringContaining("nid:456") })
     expect(mockCreateBasicNote).toHaveBeenCalledTimes(1)
     expect(mockCreateNote).toHaveBeenCalledTimes(1)
+  })
+
+  test("prepares the complete form and sentence set before writing", async () => {
+    mockStartVerbNoteSet.mockClear()
+    await runVerbWorkflow("gehört", {
+      learnerProfileContext: false,
+      analysisResult: { shouldCreateVerbCard: true, infinitive: "gehören", displayForm: "gehört", ipa: "[ɡəˈhøːʁən]", recommendedMode: "sentence-form", meanings: [{ russian: "принадлежать", english: "belong" }] },
+      meaning: "принадлежать", sentence: "Der Hund gehört meiner Schwester.", deck: "German::Test", skipHeader: true,
+    })
+    expect(mockStartVerbNoteSet).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ id: 'form', kind: 'basic' }),
+      expect.objectContaining({ id: 'sentence', kind: 'sentence' }),
+    ]))
   })
 
   test("runVerbWorkflow uses the confirmed form-card flag when creating sentence-form verb cards", async () => {
@@ -526,6 +561,10 @@ describe("verb mode sentence flow", () => {
 
     expect(added).toBe(true)
     expect(mockChooseVerbSentence).not.toHaveBeenCalled()
+    expect(mockStartVerbNoteSet).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ id: 'lemma', kind: 'basic' }),
+      expect.objectContaining({ id: 'cloze0', kind: 'cloze' }),
+    ]))
     expect(mockCreateBasicNote).toHaveBeenCalledTimes(7)
     expect(mockCreateBasicNote).toHaveBeenCalledWith(expect.objectContaining({
       front: expect.stringContaining("sprechen"),
@@ -860,6 +899,20 @@ describe("verb mode sentence flow", () => {
     }
   )
 
+  test("journals the form and optional infinitive as one approved set", async () => {
+    mockStartVerbNoteSet.mockClear()
+    mockChooseMeaning.mockResolvedValue({ russian: "идти" })
+    mockConfirmPictureVerbSelection.mockResolvedValueOnce({ confirmed: true, addDictionaryForm: true })
+    await runVerbWorkflow("geh", {
+      analysisResult: { shouldCreateVerbCard: true, infinitive: "gehen", displayForm: "geh", recommendedMode: "picture-word", meanings: [{ russian: "идти" }], exampleSentences: [{ german: "Geh bitte nach Hause.", russian: "Иди, пожалуйста, домой." }] },
+      meaning: "идти", deck: "German::Test", skipHeader: true,
+    })
+    expect(mockStartVerbNoteSet).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ id: 'form', kind: 'basic' }),
+      expect.objectContaining({ id: 'lemma', kind: 'picture' }),
+    ]))
+  })
+
   test("keeps the new form when a companion picture note becomes a duplicate", async () => {
     mockChooseMeaning.mockResolvedValue({ russian: "идти" })
     mockConfirmPictureVerbSelection.mockResolvedValueOnce({ confirmed: true, addDictionaryForm: true })
@@ -875,11 +928,9 @@ describe("verb mode sentence flow", () => {
         },
         meaning: "идти", deck: "German::Test", skipHeader: true,
       })
-
       expect(added).toBe(true)
-      expect(mockCreateBasicNote.mock.invocationCallOrder[0]).toBeLessThan(mockCreatePictureWordNote.mock.invocationCallOrder[0])
-      expect(log.mock.calls.flat().join("\n")).toContain("Added form card geh → gehen. Find in Anki Browse: nid:456")
       expect(log.mock.calls.flat().join("\n")).toContain("Infinitive card gehen was already in Anki")
+      expect(mockCreateBasicNote.mock.invocationCallOrder[0]).toBeLessThan(mockCreatePictureWordNote.mock.invocationCallOrder[0])
 
       mockFindVerbFormDuplicates.mockResolvedValueOnce({
         exactMatches: [{ noteId: 456, infinitive: "gehen", form: "geh" }],
@@ -915,7 +966,7 @@ describe("verb mode sentence flow", () => {
         },
         meaning: "идти", deck: "German::Test", skipHeader: true,
       })).rejects.toThrow("disk unavailable")
-      expect(log.mock.calls.flat().join("\n")).toContain("Added form card geh → gehen. Find in Anki Browse: nid:456")
+      expect(mockSpinnerFactory.mock.results[0].value.fail).toHaveBeenCalledWith(expect.stringContaining("nid:456"))
       const spinner = mockSpinnerFactory.mock.results[0].value
       expect(spinner.stop.mock.invocationCallOrder.at(-1)).toBeLessThan(spinner.fail.mock.invocationCallOrder[0])
     } finally {
@@ -1004,7 +1055,7 @@ describe("verb mode sentence flow", () => {
         },
         meaning: "идти", deck: "German::Test", skipHeader: true,
       })).rejects.toThrow("Anki unavailable")
-      expect(log.mock.calls.flat().join("\n")).toContain("Form card not added: geh")
+      expect(mockSpinnerFactory.mock.results[0].value.fail).toHaveBeenCalledWith(expect.stringContaining("Anki unavailable"))
       expect(mockCreatePictureWordNote).not.toHaveBeenCalled()
       expect(mockSpinnerFactory.mock.results[0].value.stop).toHaveBeenCalled()
     } finally {

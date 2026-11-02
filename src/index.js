@@ -232,7 +232,7 @@ program
         return;
       }
       const result = await resumeSavedNoteSet(journal);
-      console.log(`Completed card set: ${result.steps.map(step => `nid:${step.noteId}`).join(', ')}`);
+      console.log(`Completed card set: ${result.steps.map(step => step.status === 'existing-duplicate' ? `${step.id}: already exists` : `nid:${step.noteId}`).join(', ')}`);
     } catch (error) {
       console.error(`Could not resume card set: ${error.message}`);
       process.exitCode = 1;

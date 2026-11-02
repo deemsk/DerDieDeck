@@ -58,3 +58,42 @@ test('does not write a pending note when its approved audio is missing', async (
   await expect(startNoteSet(path, { operationId: 'abc123', steps: [{ id: 'word', kind: 'basic', payload: { front: '[sound:word.mp3]' } }] })).rejects.toThrow(/word.mp3/)
   expect(createPreparedNote).not.toHaveBeenCalled()
 })
+
+test.each([0, 1, 2, 3])('resumes a verb package after a lost response at step %i', async (failIndex) => {
+  const existing = new Map(), writes = []
+  findNotesByQuery.mockImplementation(async query => existing.get(query.slice(4)) || [])
+  verifyRecoveryMarker.mockResolvedValue(true)
+  recoveryMediaExists.mockResolvedValue(true)
+  createPreparedNote.mockImplementation(async note => {
+    const tag = note.tags.at(-1), id = 201 + writes.length
+    writes.push(tag); existing.set(tag, [id])
+    if (writes.length - 1 === failIndex) throw new Error('response lost')
+    return id
+  })
+  const path = join(dir, `package${failIndex}.json`)
+  const steps = [
+    { id: 'lemma', kind: 'basic', payload: { front: 'sprechen' } },
+    { id: 'production0', kind: 'basic', payload: { front: 'sprechen → du' } },
+    { id: 'recognition0', kind: 'basic', payload: { front: 'du sprichst' } },
+    { id: 'cloze0', kind: 'cloze', payload: { text: 'Du {{c1::sprichst}}.' } },
+  ]
+  await expect(startNoteSet(path, { operationId: `abc${failIndex}`, steps })).rejects.toThrow('response lost')
+  const result = await resumeSavedNoteSet(path)
+  expect(result.steps.map(step => step.noteId)).toEqual([201, 202, 203, 204])
+  expect(writes).toHaveLength(4)
+  expect(new Set(writes).size).toBe(4)
+})
+test('only an explicit Anki duplicate may complete an optional companion', async () => {
+  findNotesByQuery.mockResolvedValue([])
+  verifyRecoveryMarker.mockResolvedValue(true)
+  recoveryMediaExists.mockResolvedValue(true)
+  createPreparedNote.mockRejectedValueOnce(new Error('AnkiConnect error: cannot create note because it is a duplicate'))
+  const path = join(dir, 'dup.json')
+  const result = await startNoteSet(path, { operationId: 'abc123', steps: [{ id: 'lemma', kind: 'picture', allowExistingDuplicate: true, payload: { front: 'gehen' } }] })
+  expect(result.steps[0].status).toBe('existing-duplicate')
+  expect(await listIncompleteForTest(dir)).toEqual([])
+})
+async function listIncompleteForTest(directory) {
+  const { listIncompleteNoteSets } = await import('../src/noteSetService.js')
+  return listIncompleteNoteSets(directory)
+}

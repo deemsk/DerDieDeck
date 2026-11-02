@@ -185,7 +185,7 @@ If `braveApiKey` is configured, Brave image search is tried first, with Openvers
 
 During sentence previews, use `[R]eview` to tell AI what looks wrong and let it regenerate the draft.
 
-Incomplete word-card sets can be resumed without repeating already saved notes. Recovery checks the active Anki profile and an operation-specific media marker. A full copy of the profile and media can contain the same marker, so select the intended collection before resuming. Missing required media stops recovery. Verb card sets are not yet covered.
+Incomplete word and verb card sets can be resumed without repeating already saved notes. Recovery checks the active Anki profile and an operation-specific media marker. A full copy of the profile and media can contain the same marker, so select the intended collection before resuming. Missing required media stops recovery.
 
 ## Commands
 
@@ -196,8 +196,8 @@ Incomplete word-card sets can be resumed without repeating already saved notes. 
 | `npm run text` | Enter phrases manually in the terminal |
 | `npm run words -- <item>` | Create one lexical note for a noun, adjective, adverb, or verb |
 | `npm run words` | Create lexical notes interactively from mixed input |
-| `npm run resume` | List incomplete word card sets and their resume commands |
-| `npm run resume -- <journal>` | Resume an approved word card set from its journal |
+| `npm run resume` | List incomplete card sets and their resume commands |
+| `npm run resume -- <journal>` | Resume an approved card set from its journal |
 | `npm run grammar -- <family> <lemma>` | Create grammar cloze notes |
 | `npm run add -- <url> -s 0:10 -e 0:15` | Add one clip manually from YouTube |
 | `npm run process -- <file.json>` | Process a saved markers JSON file |

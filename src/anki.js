@@ -360,7 +360,7 @@ export async function createNotes(cards, audioFilename, options = {}) {
   return noteIds;
 }
 
-export async function createPictureWordNote({
+function buildPictureAnkiNote({
   canonical,
   coloredWord,
   imageFilename,
@@ -400,17 +400,11 @@ export async function createPictureWordNote({
     ...extraTags,
   ];
 
-  return ankiConnect('addNote', {
-    note: {
-      deckName,
-      modelName,
-      fields,
-      options: {
-        allowDuplicate: false,
-      },
-      tags,
-    },
-  });
+  return { deckName, modelName, fields, options: { allowDuplicate: false }, tags };
+}
+
+export async function createPictureWordNote(data) {
+  return createPreparedNote(buildPictureAnkiNote(data));
 }
 
 function buildBasicAnkiNote({
@@ -441,6 +435,8 @@ export async function createBasicNote(data) {
 export function buildRecoverableNote(kind, data) {
   if (kind === 'basic') return buildBasicAnkiNote(data);
   if (kind === 'sentence') return buildSentenceAnkiNote(data);
+  if (kind === 'cloze') return buildClozeAnkiNote(data);
+  if (kind === 'picture') return buildPictureAnkiNote(data);
   throw new Error(`Unsupported note set step: ${kind}`);
 }
 
@@ -465,7 +461,7 @@ export function resolveClozeFieldMap(fieldNames = []) {
   return { textField, extraField };
 }
 
-export async function createClozeNote({
+function buildClozeAnkiNote({
   text,
   extra = '',
   tags = [],
@@ -476,17 +472,11 @@ export async function createClozeNote({
   const deckName = deck || config.ankiDeck;
   const fields = buildClozeNoteFields({ text, extra, fieldMap });
 
-  return ankiConnect('addNote', {
-    note: {
-      deckName,
-      modelName,
-      fields,
-      options: {
-        allowDuplicate: false,
-      },
-      tags,
-    },
-  });
+  return { deckName, modelName, fields, options: { allowDuplicate: false }, tags };
+}
+
+export async function createClozeNote(data) {
+  return createPreparedNote(buildClozeAnkiNote(data));
 }
 
 /**
