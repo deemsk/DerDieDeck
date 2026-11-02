@@ -64,6 +64,10 @@ export async function runWithWorkflowRecovery({
         forcedRoute,
       });
     } catch (error) {
+      if (error?.code === 'anki-collection-busy') {
+        write(`Could not finish "${currentInput}": ${error.message}`);
+        return false;
+      }
       if (isRecoverableWorkflowError(error) && !automaticRetryUsed) {
         automaticRetryUsed = true;
         forcedRoute = error.workflow || forcedRoute;

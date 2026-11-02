@@ -224,7 +224,6 @@ async function resolveLearnerProfileForWord(rawInput, options = {}) {
     const result = await getLearnerProfilePromptContext({
       target: { rawInput, canonical: options.analysisResult?.canonical, lemma: options.analysisResult?.lemma },
       allowRefresh: options.knowledgeProfileRefresh !== false,
-      allowSync: !options.dryRun,
     });
     const warning = consumeLearnerProfileWarning(result);
     if (warning) {

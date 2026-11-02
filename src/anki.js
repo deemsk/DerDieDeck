@@ -110,19 +110,31 @@ async function applyReviewedNoteUpdates(entries, { saveBackup, onResult = () => 
  * Call AnkiConnect API
  */
 async function ankiConnect(action, params = {}) {
-  const response = await fetch(config.ankiConnectUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action, version: 6, params }),
-  });
+  const body = JSON.stringify({ action, version: 6, params });
+  for (let attempt = 0; ; attempt++) {
+    const response = await fetch(config.ankiConnectUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    });
+    const result = await response.json();
+    if (!result.error) return result.result;
 
-  const result = await response.json();
-
-  if (result.error) {
-    throw new Error(`AnkiConnect error: ${result.error}`);
+    // These guards reject the request before its action executes. Do not
+    // retry transport errors or other failures: a write may have succeeded.
+    const collectionBusy = result.error === 'Collection lifecycle operation is active.'
+      || result.error === 'A collection operation is active.';
+    if (!collectionBusy) throw new Error(`AnkiConnect error: ${result.error}`);
+    if (attempt >= 10) {
+      const error = new Error('Anki is still busy. Finish the pending operation or dialog in Anki, then try again.');
+      error.code = 'anki-collection-busy';
+      throw error;
+    }
+    if (attempt === 0) {
+      console.warn('Anki is busy. Waiting for the collection operation to finish (up to 10 seconds)...');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
   }
-
-  return result.result;
 }
 
 /**

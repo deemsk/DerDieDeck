@@ -104,7 +104,7 @@ async function resolveProfile({ allowRefresh, allowSync }) {
   return { ...result, warning: buildWarningForResult(result) };
 }
 
-export async function getLearnerProfilePromptContext({ target = {}, allowRefresh = true, allowSync = true } = {}) {
+export async function getLearnerProfilePromptContext({ target = {}, allowRefresh = true, allowSync = false } = {}) {
   if (config.knowledgeProfileEnabled === false) return { status: 'disabled', profile: null, promptContext: null };
   const key = JSON.stringify([config.ankiConnectUrl, config.knowledgeProfileQuery, config.dataDir,
     config.knowledgeProfileMaxCacheAgeDays, config.knowledgeProfileSyncBeforeRefresh, config.knowledgeProfileRefreshTimeoutMs, allowRefresh, allowSync]);
@@ -132,7 +132,7 @@ export async function resolveLearnerProfileForInput(rawInput, options = {}, onWa
     const analysis = options.analysisResult || {};
     const result = await getLearnerProfilePromptContext({
       target: { rawInput, canonical: analysis.canonical, lemma: analysis.lemma || analysis.infinitive },
-      allowRefresh: options.knowledgeProfileRefresh !== false, allowSync: !options.dryRun,
+      allowRefresh: options.knowledgeProfileRefresh !== false,
     });
     const warning = consumeLearnerProfileWarning(result);
     if (warning) onWarning(warning);

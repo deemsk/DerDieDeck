@@ -32,7 +32,7 @@ test('cache write failure retains live data', async () => {
 test('coalesces requests, expires successes and separates sync options', async () => {
   refresh.mockImplementation(async () => profile())
   await Promise.all([get(), get()]); expect(refresh).toHaveBeenCalledTimes(1)
-  await get({ allowSync: false }); expect(refresh).toHaveBeenCalledTimes(2)
+  await get({ allowSync: true }); expect(refresh).toHaveBeenCalledTimes(2)
   jest.advanceTimersByTime(300001)
   await get(); expect(refresh).toHaveBeenCalledTimes(3)
 })
@@ -73,4 +73,15 @@ test('timed-out refresh cannot overwrite cache when it eventually finishes', asy
   await Promise.resolve()
   expect(write).not.toHaveBeenCalled()
   delete config.knowledgeProfileRefreshTimeoutMs
+})
+
+ test('normal card preparation reads progress without starting a collection sync', async () => {
+  refresh.mockResolvedValue(profile())
+  expect(await resolveLearnerProfileForInput('Krieg')).toContain('Buch')
+  expect(refresh).toHaveBeenCalledWith(expect.objectContaining({ syncBeforeRefresh: false }))
+})
+test('direct progress context reads do not sync unless explicitly requested', async () => {
+  refresh.mockResolvedValue(profile())
+  await get()
+  expect(refresh).toHaveBeenCalledWith(expect.objectContaining({ syncBeforeRefresh: false }))
 })

@@ -57,7 +57,7 @@ When profile refresh fails, the application SHALL use a compatible cache no olde
 ### Requirement: CTX-03 — Warning and synchronization limits
 
 Lexical workflows SHALL display a profile warning at most once per session and
-disable preliminary Anki synchronization when requesting a profile in dry-run.
+disable preliminary Anki synchronization when requesting a profile during card generation, including dry-run. Profile reads SHALL use the local collection so a timed-out progress check cannot leave a background sync blocking card creation.
 
 #### Scenario: Multiple words with an unavailable profile
 
