@@ -255,6 +255,17 @@ describe("verb mode sentence flow", () => {
     expect(mockShowWordDictionarySummary.mock.invocationCallOrder[0]).toBeLessThan(mockChooseVerbSentence.mock.invocationCallOrder[0])
   })
 
+  test("reports a confirmed form when the sentence write fails", async () => {
+    mockCreateNote.mockRejectedValueOnce(new Error("connection lost"))
+    await expect(runVerbWorkflow("gehört", {
+      learnerProfileContext: false,
+      analysisResult: { shouldCreateVerbCard: true, infinitive: "gehören", displayForm: "gehört", ipa: "[ɡəˈhøːʁən]", recommendedMode: "sentence-form", meanings: [{ russian: "принадлежать", english: "belong" }] },
+      meaning: "принадлежать", sentence: "Der Hund gehört meiner Schwester.", deck: "German::Test", skipHeader: true,
+    })).rejects.toMatchObject({ code: "partial-note-write", message: expect.stringContaining("nid:456") })
+    expect(mockCreateBasicNote).toHaveBeenCalledTimes(1)
+    expect(mockCreateNote).toHaveBeenCalledTimes(1)
+  })
+
   test("runVerbWorkflow uses the confirmed form-card flag when creating sentence-form verb cards", async () => {
     const added = await runVerbWorkflow("gehören", {
       analysisResult: {
@@ -443,6 +454,30 @@ describe("verb mode sentence flow", () => {
     expect(mockPrepareDictionary).toHaveBeenCalledWith(expect.objectContaining({ learnerProfileContext: "Familiar vocabulary: Park." }))
     expect(mockPrepareDictionary.mock.invocationCallOrder[0]).toBeLessThan(mockCreatePictureWordNote.mock.invocationCallOrder[0])
     expect(mockCreateBasicNote.mock.calls[0][0].back).toContain("Er läuft im Park.")
+  })
+
+  test("reports lemma and production IDs when package recognition fails", async () => {
+    mockChooseMeaning.mockResolvedValueOnce({ russian: "говорить", english: "speak" })
+    mockResolveVerbMorphology.mockResolvedValueOnce({
+      infinitive: "sprechen", classification: "strong", forms: { du: "sprichst", er: "spricht", ihr: "sprecht" }, isSeparable: false, particle: null, source: "WiktApi", confidence: "high",
+      selectedForms: [
+        { key: "du", pronoun: "du", label: "du", form: "sprichst", displayForm: "sprichst" },
+        { key: "er", pronoun: "er", label: "er/sie/es", form: "spricht", displayForm: "spricht" },
+        { key: "ihr", pronoun: "ihr", label: "ihr", form: "sprecht", displayForm: "sprecht" },
+      ],
+    })
+    mockCreateBasicNote.mockResolvedValueOnce(111).mockResolvedValueOnce(222).mockRejectedValueOnce(new Error("connection lost"))
+    await expect(runVerbWorkflow("sprechen", {
+      learnerProfileContext: false,
+      analysisResult: { shouldCreateVerbCard: true, infinitive: "sprechen", displayForm: "sprechen", recommendedMode: "sentence-form", meanings: [{ russian: "говорить", english: "speak" }] },
+      packageSentences: {
+        du: { german: "Du sprichst mit Maria.", russian: "Ты говоришь с Марией.", focusForm: "sprichst" },
+        er: { german: "Er spricht Deutsch.", russian: "Он говорит по-немецки.", focusForm: "spricht" },
+        ihr: { german: "Ihr sprecht Deutsch.", russian: "Вы говорите по-немецки.", focusForm: "sprecht" },
+      }, skipHeader: true,
+    })).rejects.toMatchObject({ code: "partial-note-write", message: expect.stringMatching(/nid:111.*nid:222/) })
+    expect(mockCreateBasicNote).toHaveBeenCalledTimes(3)
+    expect(mockCreateNote).not.toHaveBeenCalled()
   })
 
   test("runVerbWorkflow creates a strong verb package when trusted morphology is available", async () => {

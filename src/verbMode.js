@@ -459,7 +459,8 @@ async function createVerbKeyFormNotes(
   recognitionStageTags = [],
   formSentence = null,
   productionAudioFilename = null,
-  lemmaAudioFilename = null
+  lemmaAudioFilename = null,
+  recordNote = () => {}
 ) {
   const sharedTags = [
     'yt2anki',
@@ -469,7 +470,7 @@ async function createVerbKeyFormNotes(
   ];
   const formRussian = formSentence?.formRussian || null;
 
-  await createBasicNote({
+  const productionId = await createBasicNote({
     front: buildVerbKeyFormProductionFront(verbData.infinitive, formSpec),
     back: buildVerbKeyFormProductionBack(formSpec, selectedMeaning, productionAudioFilename, formRussian),
     deck,
@@ -484,7 +485,8 @@ async function createVerbKeyFormNotes(
     ],
   });
 
-  await createBasicNote({
+  recordNote(`production ${formSpec.form}`, productionId);
+  const recognitionId = await createBasicNote({
     front: buildVerbKeyFormRecognitionFront(formSpec),
     back: buildVerbKeyFormRecognitionBack(verbData, selectedMeaning, formSpec, formRussian, lemmaAudioFilename),
     deck,
@@ -498,6 +500,7 @@ async function createVerbKeyFormNotes(
       ...recognitionStageTags,
     ],
   });
+  recordNote(`recognition ${formSpec.form}`, recognitionId);
 }
 
 /**
@@ -930,7 +933,7 @@ async function prepareVerb(rawInput, options, spinner) {
   };
 }
 
-async function finalizePictureVerb(prepared, options, spinner) {
+async function finalizePictureVerb(prepared, options, spinner, recordNote) {
   const {
     verbData,
     selectedMeaning,
@@ -1074,6 +1077,7 @@ async function finalizePictureVerb(prepared, options, spinner) {
         verbData, selectedMeaning, verbData.displayForm, options.deck,
         formExplanation, formPronunciation, formAudioFilename
       );
+      recordNote(`form ${verbData.displayForm}`, formNoteId);
       spinner.succeed(`Created form card for ${verbData.displayForm}`);
       console.log(chalk.green(`✓ Added form card ${verbData.displayForm} → ${verbData.infinitive}. ${ankiBrowseSearch(formNoteId)}`));
     } catch (err) {
@@ -1141,7 +1145,7 @@ async function finalizePictureVerb(prepared, options, spinner) {
   return true;
 }
 
-async function finalizeSentenceVerb(prepared, options, spinner) {
+async function finalizeSentenceVerb(prepared, options, spinner, recordNote) {
   let current = prepared;
   let autoPlay = true;
 
@@ -1259,6 +1263,7 @@ async function finalizeSentenceVerb(prepared, options, spinner) {
         verbData, selectedMeaning, form, options.deck,
         formExplanation, formPronunciation, formAudioFilename
       );
+      recordNote(`form ${form}`, formNoteId);
       spinner.succeed(`Created form card for ${form}`);
       console.log(chalk.green(`✓ Added form card ${form} → ${verbData.infinitive}. ${ankiBrowseSearch(formNoteId)}`));
     } catch (err) {
@@ -1316,7 +1321,7 @@ async function finalizeSentenceVerb(prepared, options, spinner) {
 /**
  * Creates all notes in an explicit morphology package after one preview confirmation.
  */
-async function finalizeStrongVerbPackage(prepared, options, spinner) {
+async function finalizeStrongVerbPackage(prepared, options, spinner, recordNote) {
   const {
     verbData,
     selectedMeaning,
@@ -1359,7 +1364,7 @@ async function finalizeStrongVerbPackage(prepared, options, spinner) {
   const lemmaAudioFilename = await storeAudio(audio.audioPath);
   const totalPackageNotes = 1 + (packagePlan.forms.length * 2) + (packagePlan.sentences.length * 2);
   let packageNoteIndex = 0;
-  await createVerbLemmaNote(
+  const lemmaNoteId = await createVerbLemmaNote(
     verbData,
     selectedMeaning,
     lemmaAudioFilename,
@@ -1368,6 +1373,7 @@ async function finalizeStrongVerbPackage(prepared, options, spinner) {
     buildSiblingStageTags(packageNoteIndex++, totalPackageNotes)
   );
 
+  recordNote(`lemma ${verbData.infinitive}`, lemmaNoteId);
   for (let index = 0; index < packagePlan.forms.length; index++) {
     const formSpec = packagePlan.forms[index];
     const keyFormAudio = keyFormAudios[index];
@@ -1383,7 +1389,8 @@ async function finalizeStrongVerbPackage(prepared, options, spinner) {
       buildSiblingStageTags(packageNoteIndex++, totalPackageNotes),
       formSentence,
       keyFormAudioFilename,
-      lemmaAudioFilename
+      lemmaAudioFilename,
+      recordNote
     );
   }
 
@@ -1391,7 +1398,7 @@ async function finalizeStrongVerbPackage(prepared, options, spinner) {
     const sentence = packagePlan.sentences[index];
     const sentenceAudio = sentenceAudios[index];
     const audioFilename = await storeAudio(sentenceAudio.audioPath);
-    await createVerbFormSentenceNote(
+    const sentenceNoteId = await createVerbFormSentenceNote(
       verbData,
       sentence,
       audioFilename,
@@ -1399,13 +1406,15 @@ async function finalizeStrongVerbPackage(prepared, options, spinner) {
       options.deck,
       buildSiblingStageTags(packageNoteIndex++, totalPackageNotes)
     );
-    await createVerbFormClozeNote(
+    recordNote(`sentence ${sentence.german}`, sentenceNoteId);
+    const clozeNoteId = await createVerbFormClozeNote(
       verbData,
       sentence,
       morphology,
       options.deck,
       buildSiblingStageTags(packageNoteIndex++, totalPackageNotes)
     );
+    recordNote(`cloze ${sentence.german}`, clozeNoteId);
   }
 
   spinner.succeed(`Created verb morphology package for ${verbData.infinitive}`);
@@ -1415,6 +1424,8 @@ async function finalizeStrongVerbPackage(prepared, options, spinner) {
 
 export async function runVerbWorkflow(rawInput, options = {}) {
   const spinner = ora();
+  const confirmedNotes = [];
+  const recordNote = (label, id) => confirmedNotes.push({ label, id });
   options = { ...options, learnerProfileContext: await resolveLearnerProfileForInput(rawInput, options, (warning) => console.log(chalk.yellow(warning))) };
 
   try {
@@ -1428,13 +1439,21 @@ export async function runVerbWorkflow(rawInput, options = {}) {
     }
 
     if (prepared.route === 'picture-word') {
-      return await finalizePictureVerb(prepared, options, spinner);
+      return await finalizePictureVerb(prepared, options, spinner, recordNote);
     }
     if (prepared.route === 'strong-verb-package') {
-      return await finalizeStrongVerbPackage(prepared, options, spinner);
+      return await finalizeStrongVerbPackage(prepared, options, spinner, recordNote);
     }
-    return await finalizeSentenceVerb(prepared, options, spinner);
+    return await finalizeSentenceVerb(prepared, options, spinner, recordNote);
   } catch (err) {
+    if (confirmedNotes.length) {
+      spinner.stop();
+      const saved = confirmedNotes.map(({ label, id }) => `${label}: ${id == null ? 'ID unavailable' : `nid:${id}`}`).join(', ');
+      const partial = new Error(`Saved notes: ${saved}. A later step failed: ${err.message}. The failed write may have succeeded; inspect Anki before retrying.`);
+      partial.code = 'partial-note-write';
+      spinner.fail(partial.message);
+      throw partial;
+    }
     if (err instanceof RecoverableWorkflowError) {
       spinner.stop();
       throw err;
