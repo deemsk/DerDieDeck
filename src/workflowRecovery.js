@@ -64,7 +64,7 @@ export async function runWithWorkflowRecovery({
         forcedRoute,
       });
     } catch (error) {
-      if (error?.code === 'anki-collection-busy') {
+      if (error?.code === 'anki-collection-busy' || error?.code === 'partial-note-write') {
         write(`Could not finish "${currentInput}": ${error.message}`);
         return false;
       }

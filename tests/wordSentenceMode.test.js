@@ -1079,3 +1079,17 @@ test('manual adjective example using the lemma is blocked before enrichment/audi
   expect(mockGenerateSimpleSpeech).not.toHaveBeenCalled()
   expect(mockCreateBasicNote).not.toHaveBeenCalled()
 })
+
+test('reports a saved word note when the following sentence write has an uncertain outcome', async () => {
+  jest.clearAllMocks()
+  mockChooseMeaning.mockResolvedValue({ russian: 'сразу', english: 'immediately' })
+  mockChooseWordSentence.mockResolvedValue({ german: 'Komm sofort.', russian: 'Иди немедленно.', focusForm: 'sofort' })
+  mockEnrich.mockResolvedValue({ german: 'Komm sofort.', ipa: '[kɔm]', russian: 'Иди немедленно.' })
+  mockCreateNote.mockRejectedValueOnce(new Error('connection lost'))
+  await expect(runWordWorkflow('sofort', {
+    learnerProfileContext: false, meaning: 'сразу', sentence: 'Komm sofort.', skipHeader: true,
+    analysisResult: { shouldCreateWordCard: false, isImageable: false, recommendedMode: 'sentence-form', lexicalType: 'adverb', canonical: 'sofort', lemma: 'sofort', meanings: [{ russian: 'сразу' }], exampleSentences: [{ german: 'Komm sofort.', russian: 'Иди немедленно.' }] },
+  })).rejects.toMatchObject({ code: 'partial-note-write', message: expect.stringContaining('nid:789') })
+  expect(mockCreateBasicNote).toHaveBeenCalledTimes(1)
+  expect(mockCreateNote).toHaveBeenCalledTimes(1)
+})

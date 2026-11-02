@@ -999,8 +999,9 @@ async function finalizeSentenceWord(prepared, options, spinner) {
     ? 'Creating word notes...'
     : 'Creating sentence note...');
   const audioFilename = await storeAudio(audio.audioPath);
+  let confirmedMainNoteId = null;
   if (shouldCreateSentenceWordMainNote(wordData, selectedMeaning)) {
-    await createSentenceWordMainNote({
+    confirmedMainNoteId = await createSentenceWordMainNote({
       wordData,
       selectedMeaning,
       frequencyInfo: current.frequencyInfo,
@@ -1009,6 +1010,7 @@ async function finalizeSentenceWord(prepared, options, spinner) {
     });
   }
 
+  try {
   await createNote({
     german: sentenceData.german,
     ipa: sentenceData.ipa,
@@ -1042,6 +1044,15 @@ async function finalizeSentenceWord(prepared, options, spinner) {
       ...(chosenSentence?.focusForm ? [`word-form-${toTagSlug(chosenSentence.focusForm)}`] : []),
     ],
   });
+
+  } catch (error) {
+    if (confirmedMainNoteId != null) {
+      const partial = new Error(`Word note saved: nid:${confirmedMainNoteId}. Sentence creation failed: ${error.message}. The failed write may have succeeded; inspect Anki before retrying.`);
+      partial.code = 'partial-note-write';
+      throw partial;
+    }
+    throw error;
+  }
 
   spinner.succeed(`Created sentence card for ${wordData.canonical}`);
   console.log(chalk.green(`✓ Added word sentence for ${wordData.canonical}`));

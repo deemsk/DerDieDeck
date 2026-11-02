@@ -85,3 +85,15 @@ describe('workflow recovery', () => {
     expect(write).toHaveBeenCalledWith('Skipped "über" by user choice.')
   })
 })
+
+test('partial save reports confirmed notes and does not offer a blind workflow retry', async () => {
+  const error = new Error('Sentence creation failed; word note is in Anki: nid:789. The failed write may have succeeded; inspect Anki before retrying.')
+  error.code = 'partial-note-write'
+  const ask = jest.fn()
+  const write = jest.fn()
+  const runAttempt = jest.fn().mockRejectedValue(error)
+  expect(await runWithWorkflowRecovery({ input: 'groß', runAttempt, ask, write })).toBe(false)
+  expect(runAttempt).toHaveBeenCalledTimes(1)
+  expect(ask).not.toHaveBeenCalled()
+  expect(write).toHaveBeenCalledWith(expect.stringContaining('nid:789'))
+})
