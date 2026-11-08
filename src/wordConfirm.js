@@ -30,6 +30,14 @@ function ask(question) {
   });
 }
 
+export async function confirmChangedClozeExample({ askInput = ask } = {}) {
+  while (true) {
+    const answer = String(await askInput('Example changed. Add this cloze? [Y]es, [N]o: ')).trim().toLowerCase();
+    if (['y', 'yes'].includes(answer)) return true;
+    if (['n', 'no'].includes(answer)) return false;
+  }
+}
+
 function label(text) {
   return chalk.cyan(text);
 }
@@ -562,7 +570,7 @@ export async function chooseGoogleImage(wordData, meaning, googleSearch = {}) {
 }
 
 export async function chooseWordSentence(wordData, preferredSentence = null) {
-  const buildSentenceChoice = (german, russian = wordData.meanings?.[0]?.russian || '') => ({
+  const buildSentenceChoice = (german, russian = '') => ({
     german,
     russian,
     focusForm: inferFocusFormFromSentence(german, wordData) || wordData.canonical,
@@ -577,12 +585,12 @@ export async function chooseWordSentence(wordData, preferredSentence = null) {
     return buildSentenceChoice(preferredSentence);
   }
 
-  const sentences = Array.isArray(wordData.exampleSentences) ? wordData.exampleSentences.slice(0, 3) : [];
+  const sentences = Array.isArray(wordData.exampleSentences) ? wordData.exampleSentences.filter(example => example?.german?.trim()).slice(0, 3) : [];
   if (sentences.length === 0) {
     if (wordData.lexicalType === 'adjective' && wordData.canonical) {
       return {
         german: `Das ist ${wordData.canonical}.`,
-        russian: wordData.meanings?.[0]?.russian || '',
+        russian: '',
         focusForm: wordData.canonical,
       };
     }
@@ -649,21 +657,14 @@ export async function confirmWordSelection({
       rows.push(['IPA', `${wordData.ipa}`]);
     }
     if (wordData.lexicalType === 'adjective') {
-      if (wordData.anchorPhrase) {
-        rows.push(['Anchor', `${wordData.anchorPhrase}`]);
-      }
-      if (wordData.opposite) {
-        rows.push(['Contrast', `${wordData.opposite}`]);
-      }
+      if (wordData.opposite) rows.push(['Contrast', `${wordData.opposite}`]);
     } else {
       rows.push(['Plural', `${formatPluralLabel(wordData)}`]);
-      const example = getPrimaryExampleSentence(wordData);
-      if (example.german) {
-        rows.push(['Example', `${example.german}`]);
-        if (example.russian) {
-          rows.push(['Example (RU)', `${example.russian}`]);
-        }
-      }
+    }
+    const example = getPrimaryExampleSentence(wordData);
+    if (example.german) {
+      rows.push(['Example', `${example.german}`]);
+      if (example.russian) rows.push(['Example (RU)', `${example.russian}`]);
     }
     rows.push(['Frequency', `${frequencyInfo.bandLabel}${frequencyInfo.rank ? ` (#${frequencyInfo.rank})` : ''}`]);
     rows.push(['Audio', `${audioSource}`]);

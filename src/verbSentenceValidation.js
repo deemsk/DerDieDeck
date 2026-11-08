@@ -31,6 +31,8 @@ export async function reviewVerbExamples(verbData, examples = []) {
       messages: [
         { role: 'system', content: `Independently validate German verb examples. Return one verdict for each index; never rewrite examples.
 Check the target infinitive, requested form, and supplied meaning in the actual sentence.
+When a Russian translation is provided, independently verify that it is a complete and accurate
+translation of the full German example, not just the target word. Reject a wrong translation.
 If form differs from infinitive, require that exact form in its intended verbal use, not a homograph or substring.
 If form equals infinitive, ordinary conjugated forms of that verb are allowed.
 Resolve separable particles in context. A matching verb token alone is insufficient:
@@ -45,7 +47,7 @@ Reasons must be concise Russian explanations; accepted examples may have an empt
           infinitive: verbData.infinitive,
           form: verbData.displayForm || verbData.infinitive,
           meanings: verbData.meanings || [],
-          examples: examples.map((sentence, index) => ({ index, german: sentence.german })),
+          examples: examples.map((sentence, index) => ({ index, german: sentence.german, russian: sentence.russian || null })),
         }) },
       ],
       response_format: responseFormat,

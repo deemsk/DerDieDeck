@@ -1,3 +1,4 @@
+import { runExamplePipeline, pairEnrichedExample, sameGermanExample } from './examplePipeline.js';
 import { preparePronunciation, prepareSentenceAudio } from './lib/audioPreparation.js';
 import { prepareInfinitiveExample } from './verbFormEnricher.js';
 import { reviewVerbExamples } from './verbSentenceValidation.js';
@@ -263,6 +264,8 @@ function isBareMeaningGloss(value = '', selectedMeaning = null) {
 }
 
 function applyVerbFormSentenceGloss(sentenceData = {}, generatedSentence = {}, selectedMeaning = null) {
+  const paired = pairEnrichedExample(sentenceData, generatedSentence);
+  if (paired.russian !== generatedSentence.russian) return paired;
   const generatedRussian = String(generatedSentence?.russian || '').trim();
   const enrichedRussian = String(sentenceData?.russian || '').trim();
   const shouldKeepEnriched = (
@@ -282,17 +285,32 @@ function applyVerbFormSentenceGloss(sentenceData = {}, generatedSentence = {}, s
 }
 
 function resolveVerbFormRussian(generatedSentence = {}, sentenceData = {}, selectedMeaning = null) {
-  const explicitFormRussian = String(generatedSentence?.formRussian || '').trim();
+  const sameExample = sameGermanExample(generatedSentence?.german, sentenceData?.german);
+  const explicitFormRussian = sameExample ? String(generatedSentence?.formRussian || '').trim() : '';
   if (explicitFormRussian && !isBareMeaningGloss(explicitFormRussian, selectedMeaning)) {
     return explicitFormRussian;
   }
 
-  const sentenceRussian = String(sentenceData?.russian || generatedSentence?.russian || '').trim();
+  const sentenceRussian = String(sentenceData?.russian || (sameExample ? generatedSentence?.russian : '') || '').trim();
   if (sentenceRussian && !isBareMeaningGloss(sentenceRussian, selectedMeaning)) {
     return sentenceRussian;
   }
 
   return null;
+}
+
+async function verifyVerbExamplePair(sentence, verbData, selectedMeaning, focusForm = null, requireExactForm = false) {
+  const example = { ...sentence, focusForm: focusForm || sentence.focusForm || verbData.displayForm || verbData.infinitive };
+  const context = { target: verbData.infinitive, meaning: selectedMeaning?.russian || '', lexicalType: 'verb', requireExactForm };
+  try {
+    return await runExamplePipeline({ context, maxRepairs: 0, prepare: async () => example,
+      validate: async pair => ({ valid: (await reviewVerbExamples({ ...verbData, meanings: [selectedMeaning] }, [pair])).length === 1,
+        reason: 'Example does not match the verb, selected meaning, or Russian translation.' }),
+    });
+  } catch (error) {
+    throw new RecoverableWorkflowError(`Could not verify verb example: ${error.message}`,
+      { code: 'verb-example-mismatch', workflow: 'verb', allowManualSentence: true });
+  }
 }
 
 async function choosePictureVerbImage(prepared, spinner) {
@@ -331,19 +349,16 @@ async function rebuildSentenceVerbPreview(prepared, feedback, options, spinner) 
     extraGuidance: `Keep the sentence short and natural. Preserve the infinitive ${verbData.infinitive} and its intended meaning; do not introduce a separable particle that changes the lemma.`,
   });
 
-  const reviewTarget = { ...verbData, meanings: [prepared.selectedMeaning] };
-  if (!(await reviewVerbExamples(reviewTarget, [reviewed])).length) {
-    throw new RecoverableWorkflowError(`Revised example does not match ${focusForm} from ${verbData.infinitive}.`, {
-      code: 'verb-example-mismatch', workflow: 'verb', allowManualSentence: true,
-    });
-  }
-  const germanChanged = reviewed.german.trim() !== sentenceData.german.trim();
+  const germanChanged = !sameGermanExample(reviewed.german, sentenceData.german);
   const reviewedChosenSentence = {
     ...chosenSentence,
     german: reviewed.german,
-    russian: reviewed.russian || chosenSentence?.russian || sentenceData.russian,
+    russian: reviewed.russian || (germanChanged ? '' : chosenSentence?.russian || sentenceData.russian),
   };
-  const reviewedSentenceData = applyChosenSentenceGloss(reviewed, reviewedChosenSentence);
+  const reviewedSentenceData = await verifyVerbExamplePair(
+    applyChosenSentenceGloss(reviewed, reviewedChosenSentence), verbData, prepared.selectedMeaning, focusForm,
+    Boolean(resolveRequestedVerbForm(verbData))
+  );
   spinner.succeed(`Sentence reviewed: ${reviewedSentenceData.german}`);
 
   let similarCards = currentSimilarCards;
@@ -601,11 +616,18 @@ async function prepareStrongVerbPackage({ verbData, selectedMeaning, route, freq
         }
       }
     }
-    const sentenceData = applyVerbFormSentenceGloss(
-      await enrich(generated.german),
-      generated,
-      selectedMeaning
-    );
+    let sentenceData;
+    try {
+      sentenceData = await verifyVerbExamplePair(
+        applyVerbFormSentenceGloss(await enrich(generated.german), generated, selectedMeaning),
+        { ...verbData, displayForm: formSpec.form }, selectedMeaning, formSpec.form, true
+      );
+    } catch (error) {
+      if (!(error instanceof RecoverableWorkflowError)) throw error;
+      spinner.stop();
+      console.log(chalk.dim(`Verb morphology package skipped: ${error.message}`));
+      return null;
+    }
     spinner.succeed(`Sentence ready: ${sentenceData.german}`);
     sentenceCandidates.push({
       ...sentenceData,
@@ -814,8 +836,34 @@ async function prepareVerb(rawInput, options, spinner) {
   }
 
   if (route === 'picture-word') {
-    const candidates = filterVerbExampleSentences(verbData.exampleSentences, resolveRequestedVerbForm(verbData), Infinity);
-    verbData = { ...verbData, exampleSentences: (await reviewVerbExamples({ ...verbData, meanings: [selectedMeaning] }, candidates)).slice(0, 3) };
+    const requestedForm = resolveRequestedVerbForm(verbData);
+    let candidates;
+    if (options.sentence) {
+      const enriched = await enrich(options.sentence);
+      if (!sameGermanExample(enriched.german, options.sentence)) {
+        throw new RecoverableWorkflowError('The supplied example changed during translation. Please retry or edit it.',
+          { code: 'verb-example-mismatch', workflow: 'verb', allowManualSentence: true });
+      }
+      candidates = [enriched].filter(example => example?.russian?.trim());
+    } else {
+      candidates = filterVerbExampleSentences(verbData.exampleSentences, requestedForm, Infinity).filter(example => example?.russian?.trim());
+    }
+    const reviewed = (await reviewVerbExamples({ ...verbData, meanings: [selectedMeaning] }, candidates)).slice(0, 3);
+    if (!reviewed.length && (!requestedForm || options.sentence)) {
+      throw new RecoverableWorkflowError('No bilingual picture-verb example could be verified.',
+        { code: 'verb-example-mismatch', workflow: 'verb', allowManualSentence: true });
+    }
+    const exampleSentences = await Promise.all(reviewed.map(async example => {
+      await runExamplePipeline({
+        context: { target: verbData.infinitive, meaning: selectedMeaning.russian, requireExactForm: Boolean(requestedForm) },
+        maxRepairs: 0,
+        prepare: async () => ({ ...example, focusForm: requestedForm || example.focusForm || verbData.infinitive }),
+        // The batch review above already checked this exact pair and selected meaning.
+        validate: async () => ({ valid: true }),
+      });
+      return example;
+    }));
+    verbData = { ...verbData, exampleSentences };
     let duplicateInfo = { exactMatches: [], headwordMatches: [] };
     let lemmaLookupFailed = false;
     spinner.start('Checking duplicates...');
@@ -889,16 +937,12 @@ async function prepareVerb(rawInput, options, spinner) {
   }
 
   spinner.start('Preparing example sentence...');
-  const sentenceData = applyChosenSentenceGloss(
-    await enrich(chosenSentence.german),
-    chosenSentence
+  const chosenForPair = isBareMeaningGloss(chosenSentence.russian, selectedMeaning)
+    ? { ...chosenSentence, russian: '' } : chosenSentence;
+  const sentenceData = await verifyVerbExamplePair(
+    applyChosenSentenceGloss(await enrich(chosenSentence.german), chosenForPair),
+    verbData, selectedMeaning, chosenSentence.focusForm, Boolean(resolveRequestedVerbForm(verbData))
   );
-  if (sentenceData.german.trim() !== chosenSentence.german.trim() &&
-    !(await reviewVerbExamples({ ...verbData, meanings: [selectedMeaning] }, [sentenceData])).length) {
-    throw new RecoverableWorkflowError(`Prepared example does not match ${verbData.displayForm} from ${verbData.infinitive}.`, {
-      code: 'verb-example-mismatch', workflow: 'verb', allowManualSentence: true,
-    });
-  }
   spinner.succeed(`Sentence ready: ${sentenceData.german}`);
 
   let similarCards = [];

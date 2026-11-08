@@ -1,8 +1,10 @@
+import { runExamplePipeline, sameGermanExample } from './examplePipeline.js';
+import { reviewExamplePair } from './exampleReview.js';
 import { containsVerbForm } from './cardContent/verbFormExplanation.js';
 import { prepareAdjectiveForm, validateAdjectiveFormSentence } from './adjectiveFormEnricher.js';
 import { reviewClozeAlternatives } from './clozeAlternativeReview.js';
 import { reviewWordDuplicates } from './wordDuplicateReview.js';
-import { prepareNounExample } from './wordExampleEnricher.js';
+import { preparePictureWordExample } from './wordExampleEnricher.js';
 import { createInterface } from 'readline';
 import { join } from 'path';
 import ora from 'ora';
@@ -30,6 +32,7 @@ import {
   chooseMeaning,
   chooseWordSentence,
   confirmSentenceWordSelection,
+  confirmChangedClozeExample,
   confirmWordSelection,
   showWordDictionarySummary,
 } from './wordConfirm.js';
@@ -273,6 +276,27 @@ async function chooseSentenceWordImage(prepared, spinner) {
   return chooseGoogleImage(wordData, selectedMeaning, googleSearch);
 }
 
+async function verifyWordExamplePair(sentence, chosen, wordData, selectedMeaning) {
+  const focusForm = resolveSentenceFocusForm({ ...sentence, focusForm: chosen?.focusForm }, wordData);
+  const example = { ...sentence, focusForm };
+  const context = { target: wordData.lemma || wordData.canonical, requestedForm: wordData.requestedForm || null,
+    lexicalType: wordData.lexicalType, meaning: selectedMeaning?.russian || '', exampleKind: 'sentence' };
+  try {
+    return await runExamplePipeline({ context, maxRepairs: 0, prepare: async () => example,
+      validate: async pair => {
+        if (wordData.requestedForm) {
+          await validateAdjectiveFormSentence(pair, { ...wordData, meanings: [selectedMeaning] });
+          return { valid: true };
+        }
+        return reviewExamplePair(pair, context);
+      },
+    });
+  } catch (error) {
+    throw new RecoverableWorkflowError(`Could not verify the example: ${error.message}`,
+      { code: 'word-example-review-failed', workflow: 'word', allowManualSentence: true });
+  }
+}
+
 async function rebuildSentenceWordPreview(prepared, feedback, options, spinner) {
   const {
     wordData,
@@ -294,15 +318,16 @@ async function rebuildSentenceWordPreview(prepared, feedback, options, spinner) 
     extraGuidance: 'Keep the sentence short, natural, and centered on the target word.',
   });
 
-  const germanChanged = normalizeGermanForCompare(reviewed.german) !== normalizeGermanForCompare(sentenceData.german);
+  const germanChanged = !sameGermanExample(reviewed.german, sentenceData.german);
   const reviewedChosenSentence = {
     ...chosenSentence,
     german: reviewed.german,
-    russian: reviewed.russian || chosenSentence?.russian || sentenceData.russian,
+    russian: reviewed.russian || (germanChanged ? '' : chosenSentence?.russian || sentenceData.russian),
     imageBrief: germanChanged ? null : chosenSentence?.imageBrief || null,
   };
-  const reviewedSentenceData = applyChosenSentenceGloss(reviewed, reviewedChosenSentence);
-  await validateAdjectiveFormSentence(reviewedSentenceData, wordData);
+  const reviewedSentenceData = await verifyWordExamplePair(
+    applyChosenSentenceGloss(reviewed, reviewedChosenSentence), reviewedChosenSentence, wordData, prepared.selectedMeaning
+  );
   spinner.succeed(`Sentence reviewed: ${reviewedSentenceData.german}`);
 
   let similarCards = currentSimilarCards;
@@ -435,16 +460,17 @@ async function prepareWord(rawInput, options, spinner) {
 
     if (await reviewWordDuplicates(duplicateInfo) === 'skip') return { rejected: true };
 
-    if (isNounWord(wordData)) {
+    {
       spinner.start('Preparing an example for the selected meaning...');
       try {
-        const example = await prepareNounExample({ wordData, selectedMeaning, learnerProfileContext });
+        const example = await preparePictureWordExample({ wordData, selectedMeaning, learnerProfileContext });
         wordData.exampleSentences = [example];
+        if (wordData.lexicalType === 'adjective') wordData.anchorPhrase = example.german;
         spinner.succeed('Example meaning checked');
       } catch (error) {
         spinner.stop();
         throw new RecoverableWorkflowError(error.message, {
-          code: 'noun-example-meaning-failed', workflow: 'word',
+          code: 'picture-example-meaning-failed', workflow: 'word',
         });
       }
     }
@@ -482,6 +508,7 @@ async function prepareWord(rawInput, options, spinner) {
       console.log(chalk.yellow('Skipped: no cloze sentence selected'));
       return { rejected: true };
     }
+    const selectedGerman = chosenSentence.german;
 
     spinner.stop();
     const selectedMeaning = await chooseMeaning(wordData, options.meaning, {
@@ -599,10 +626,20 @@ async function prepareWord(rawInput, options, spinner) {
     if (await reviewWordDuplicates(duplicateInfo) === 'skip') return { rejected: true };
 
     spinner.start('Preparing cloze sentence...');
-    const sentenceData = applyChosenSentenceGloss(
-      await enrich(chosenSentence.german),
-      chosenSentence
+    const sentenceData = await verifyWordExamplePair(
+      applyChosenSentenceGloss(await enrich(chosenSentence.german), chosenSentence),
+      chosenSentence, wordData, selectedMeaning
     );
+    if (sentenceData.german.trim() !== chosenSentence.german.trim()) {
+      const updatedHint = await prepareCompactClozeHint(sentenceData, wordData);
+      const finalWordData = { ...wordData, clozeHint: updatedHint };
+      const finalVerdict = validateLexicalClozeSentence(sentenceData, finalWordData)
+        ? await verifyLexicalClozeUniqueness(sentenceData, finalWordData)
+        : { valid: false, reason: 'The changed sentence does not contain the requested form.' };
+      if (!finalVerdict.valid) throw new RecoverableWorkflowError(`Changed cloze needs review: ${finalVerdict.reason || 'not unambiguous'}`,
+        { code: 'cloze-repair-failed', workflow: 'word', allowManualSentence: true });
+      wordData.clozeHint = updatedHint;
+    }
     spinner.succeed(`Cloze sentence ready: ${sentenceData.german}`);
 
     spinner.start('Preparing contextual explanation...');
@@ -631,6 +668,7 @@ async function prepareWord(rawInput, options, spinner) {
       duplicateInfo,
       chosenSentence,
       sentenceData,
+      exampleChanged: !sameGermanExample(sentenceData.german, selectedGerman),
       audio,
     };
   }
@@ -681,8 +719,10 @@ async function prepareSentenceWord({ wordData, frequencyInfo, selectedMeaning, c
   }
   spinner.start('Preparing example sentence...');
   const enrichedSentence = await enrich(chosenSentence.german);
-  const sentenceData = wordData.requestedForm ? enrichedSentence : applyChosenSentenceGloss(enrichedSentence, chosenSentence);
-  await validateAdjectiveFormSentence(sentenceData, wordData);
+  const sentenceData = await verifyWordExamplePair(
+    wordData.requestedForm ? enrichedSentence : applyChosenSentenceGloss(enrichedSentence, chosenSentence),
+    chosenSentence, wordData, selectedMeaning
+  );
   spinner.succeed(`Sentence ready: ${sentenceData.german}`);
 
   let similarCards = [];
@@ -743,13 +783,13 @@ async function finalizePictureWord(prepared, options, spinner) {
   };
 
   const pluralLabel = isNounWord(wordData) ? formatPluralLabel(wordData) : null;
-  const nounExample = isNounWord(wordData) ? getPrimaryExampleSentence(wordData) : { german: null, russian: null };
+  const nounExample = getPrimaryExampleSentence(wordData);
   const contrastHint = wordData.opposite || buildContrastHint(wordData.canonical || getWordLemma(wordData));
   const extraInfoField = buildWordExtraInfo({
     meaning: selectedMeaning.russian,
     plainMeaning: isNounWord(wordData),
     plural: pluralLabel,
-    exampleSentence: nounExample.german || wordData.anchorPhrase,
+    exampleSentence: nounExample.german,
     exampleSentenceTranslation: nounExample.russian,
     contrast: contrastHint,
     metadata,
@@ -860,6 +900,8 @@ async function finalizeLexicalCloze(prepared, options, spinner) {
     console.log(chalk.yellow('\n⚡ DRY RUN: Lexical cloze previewed'));
     return true;
   }
+
+  if (prepared.exampleChanged && !(await confirmChangedClozeExample())) return false;
 
   spinner.start('Creating lexical cloze note...');
   const audioFilename = await storeAudio(audio.audioPath);

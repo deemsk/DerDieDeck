@@ -1,7 +1,17 @@
 import { jest } from "@jest/globals"
-import { chooseMeaning, chooseWordSentence, formatWordDictionarySummary, showWordDictionarySummary } from "../src/wordConfirm.js"
+import { chooseMeaning, chooseWordSentence, confirmChangedClozeExample, formatWordDictionarySummary, showWordDictionarySummary } from "../src/wordConfirm.js"
 
 describe("word confirmation helpers", () => {
+  test('retains a German example until enrichment can translate it', async () => {
+    const example = { german: 'Der Kaffee ist heiß.', russian: '' }
+    expect(await chooseWordSentence({ canonical: 'heiß', lexicalType: 'adjective', exampleSentences: [example] })).toEqual(example)
+  })
+  test('requires an explicit decision on a changed cloze example', async () => {
+    const ask = jest.fn().mockResolvedValueOnce('').mockResolvedValueOnce('n')
+    expect(await confirmChangedClozeExample({ askInput: ask })).toBe(false)
+    expect(ask).toHaveBeenCalledTimes(2)
+    expect(await confirmChangedClozeExample({ askInput: async () => 'y' })).toBe(true)
+  })
   test("formats a short dictionary summary before sentence selection", () => {
     expect(formatWordDictionarySummary({
       canonical: "über",
@@ -168,4 +178,8 @@ test('labels evidence from the lemma without claiming the requested form exists'
   const log = jest.fn()
   await chooseMeaning({ canonical: 'besten', meanings }, null, { guidance, ask: jest.fn().mockResolvedValue('1'), log })
   expect(log.mock.calls.flat().join('\n')).toContain('✓ Lemma in Anki')
+})
+test('does not treat a word gloss as the translation of a manually supplied sentence', async () => {
+  const sentence = await chooseWordSentence({ canonical: 'gut', lexicalType: 'adjective', meanings: [{ russian: 'хороший' }], exampleSentences: [] }, 'Das Essen ist gut.')
+  expect(sentence.russian).toBe('')
 })

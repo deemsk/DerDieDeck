@@ -20,6 +20,7 @@ const mockChooseGoogleImage = jest.fn(async () => ({
 const mockConfirmSentenceWordSelection = jest.fn(async () => ({
   confirmed: true,
 }))
+const mockConfirmChangedClozeExample = jest.fn(async () => true)
 const mockShowWordDictionarySummary = jest.fn()
 
 const mockCheckConnection = jest.fn(async () => true)
@@ -91,6 +92,7 @@ jest.unstable_mockModule("../src/wordConfirm.js", () => ({
   chooseMeaning: mockChooseMeaning,
   chooseWordSentence: mockChooseWordSentence,
   confirmSentenceWordSelection: mockConfirmSentenceWordSelection,
+  confirmChangedClozeExample: mockConfirmChangedClozeExample,
   confirmWordSelection: jest.fn(),
   showWordDictionarySummary: mockShowWordDictionarySummary,
 }))
@@ -164,6 +166,8 @@ jest.unstable_mockModule('../src/adjectiveFormEnricher.js', () => ({
   prepareAdjectiveForm: mockPrepareAdjectiveForm,
   validateAdjectiveFormSentence: mockValidateAdjectiveFormSentence,
 }))
+const mockReviewExamplePair = jest.fn(async () => ({ valid: true, reason: '' }))
+jest.unstable_mockModule('../src/exampleReview.js', () => ({ reviewExamplePair: mockReviewExamplePair }))
 const { runWordWorkflow } = await import("../src/wordMode.js")
 
 describe("word mode sentence flow", () => {
@@ -219,6 +223,17 @@ describe("word mode sentence flow", () => {
     return { analysisResult: { canonical: "je", lemma: "je", lexicalType: "adverb", recommendedMode: "cloze-form",
       shouldCreateWordCard: true, isImageable: false, meanings: [{ russian: "чем" }], exampleSentences: [sentence] }, skipHeader: true }
   }
+
+  test('asks before saving a cloze whose selected German example changed during enrichment', async () => {
+    const options = prepareJe()
+    mockEnrich.mockResolvedValue({ german: 'Je mehr du liest, desto besser verstehst du.', russian: 'Чем больше ты читаешь, тем лучше понимаешь.', ipa: '[jeː]' })
+    mockConfirmChangedClozeExample.mockResolvedValueOnce(false)
+    expect(await runWordWorkflow('je', options)).toBe(false)
+    expect(mockConfirmChangedClozeExample).toHaveBeenCalledTimes(1)
+    expect(mockVerifyLexicalClozeUniqueness).toHaveBeenCalledTimes(2)
+    expect(mockCreateClozeNote).not.toHaveBeenCalled()
+    expect(mockStoreAudio).not.toHaveBeenCalled()
+  })
 
   test("previews the exact contextual rule during dry-run without Anki writes", async () => {
     const options = prepareJe()
@@ -1054,7 +1069,7 @@ test.each(['sentence', 'skip', 'edit'])('niemals synonym ambiguity supports %s w
     expect(mockGenerateSimpleSpeech).not.toHaveBeenCalled()
   } else {
     expect(mockChooseWordSentence.mock.calls[1][1]).toBe('Das mache ich niemals.')
-    expect(mockVerifyLexicalClozeUniqueness).toHaveBeenCalledTimes(2)
+    expect(mockVerifyLexicalClozeUniqueness).toHaveBeenCalledTimes(3)
   }
 })
 
@@ -1063,7 +1078,7 @@ test.each([['besten', 'gut', 'лучший'], ['festen', 'fest', 'твёрдый
   const example = { german: form === 'besten' ? 'Ich nehme den besten Kuchen.' : 'Ich brauche einen festen Plan.', russian: 'Проверенный перевод.', focusForm: form }
   const formData = { canonical: form, lemma, requestedForm: form, lexicalType: 'adjective',
     recommendedMode: 'sentence-form', shouldCreateWordCard: true, isImageable: false,
-    meanings: [{ russian: meaning }], patternHint: 'Проверенная грамматика формы.', ipa: '', exampleSentences: [example] }
+    meanings: [{ russian: 'другое значение' }, { russian: meaning }], patternHint: 'Проверенная грамматика формы.', ipa: '', exampleSentences: [example] }
   mockPrepareAdjectiveForm.mockResolvedValue(formData)
   mockChooseMeaning.mockResolvedValue({ russian: meaning })
   mockChooseWordSentence.mockResolvedValue(example)
@@ -1075,6 +1090,7 @@ test.each([['besten', 'gut', 'лучший'], ['festen', 'fest', 'твёрдый
   }, deck: 'German::Test' })
   expect(mockShowWordDictionarySummary).toHaveBeenCalledWith(expect.objectContaining({ canonical: form, lemma, requestedForm: form }))
   expect(mockChooseWordSentence.mock.calls[0][0].exampleSentences).toEqual([example])
+  expect(mockValidateAdjectiveFormSentence).toHaveBeenCalledWith(expect.objectContaining({ german: example.german }), expect.objectContaining({ meanings: [{ russian: meaning }] }))
   expect(mockFindSentenceWordDuplicates.mock.calls[0][0].canonical).toBe(form)
   expect(mockResolveWordPronunciation).toHaveBeenCalledWith(expect.objectContaining({ canonical: form, lemma: form }), expect.any(Object))
   const saved = mockCreateBasicNote.mock.calls[0][0]
@@ -1109,4 +1125,23 @@ test('reports a saved word note when the following sentence write has an uncerta
   expect(mockCreateBasicNote).toHaveBeenCalledTimes(1)
   expect(mockCreateNote).toHaveBeenCalledTimes(1)
   expect(mockSpinnerFactory.mock.results[0].value.fail).toHaveBeenCalledWith(expect.stringContaining('nid:789'))
+})
+
+test('rejects a sentence whose Russian translation fails bilingual review', async () => {
+  mockReviewExamplePair.mockResolvedValueOnce({ valid: false, reason: 'Wrong translation' })
+  await expect(runWordWorkflow('groß', { learnerProfileContext: false, meaning: 'большой', sentence: 'Das Haus ist groß.', skipHeader: true, analysisResult: {
+    shouldCreateWordCard: true, isImageable: false, recommendedMode: 'sentence-form', lexicalType: 'adjective', canonical: 'groß', lemma: 'groß', meanings: [{ russian: 'большой' }], exampleSentences: [{ german: 'Das Haus ist groß.', russian: 'Дом большой.', focusForm: 'groß' }],
+  } })).rejects.toThrow('Wrong translation')
+})
+test('does not reuse the old Russian translation after a changed review omits it', async () => {
+  jest.clearAllMocks()
+  mockChooseMeaning.mockResolvedValueOnce({ russian: 'большой' })
+  mockChooseWordSentence.mockResolvedValueOnce({ german: 'Das Haus ist groß.', russian: 'Дом большой.', focusForm: 'groß' })
+  mockEnrich.mockResolvedValueOnce({ german: 'Das Haus ist groß.', russian: 'Дом большой.', ipa: '[ipa]' })
+  mockConfirmSentenceWordSelection.mockResolvedValueOnce({ reviewFeedback: 'Change the subject' })
+  mockReviewEnrichedText.mockResolvedValueOnce({ german: 'Der Kaffee ist groß.', russian: '', ipa: '[ipa]' })
+  await expect(runWordWorkflow('groß', { learnerProfileContext: false, meaning: 'большой', skipHeader: true,
+    analysisResult: { shouldCreateWordCard: true, isImageable: false, recommendedMode: 'sentence-form', lexicalType: 'adjective', canonical: 'groß', lemma: 'groß', meanings: [{ russian: 'большой' }], exampleSentences: [] },
+  })).rejects.toThrow(/translation/i)
+  expect(mockCreateNote).not.toHaveBeenCalled()
 })

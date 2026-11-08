@@ -4,6 +4,7 @@ import chalk from 'chalk';
 import { explainVerbForm } from './verbFormEnricher.js';
 import { validateVerbFormExplanation } from './cardContent/verbFormExplanation.js';
 import { askReviewFeedback } from './confirm.js';
+import { runExamplePipeline } from './examplePipeline.js';
 
 export function formatVerbDictionaryPreview({ verbData, selectedMeaning, formExplanation, formPronunciation = null }, {
   chalkRef = chalk, columns = process.stdout.columns || 80,
@@ -87,7 +88,15 @@ export async function prepareVerbDictionaryExplanation({
       log('Preparing dictionary form explanation...');
       const proposed = await generate({ ...context, repairAttempts });
       try {
-        explanation = validateVerbFormExplanation(proposed, context);
+        await runExamplePipeline({
+          context: { target: context.infinitive, meaning: context.meaning },
+          maxRepairs: 0,
+          prepare: async () => ({ ...proposed?.example, focusForm: context.form }),
+          validate: async () => {
+            explanation = validateVerbFormExplanation(proposed, context);
+            return { valid: true };
+          },
+        });
       } catch (error) {
         error.attempts = [...repairAttempts, {
           attempt: repairAttempts.length + 1, explanation: proposed, review: null,

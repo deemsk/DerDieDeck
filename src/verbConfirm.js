@@ -84,7 +84,7 @@ export async function chooseVerbSentence(verbData, preferredSentence = null, { a
       }
       return {
         german: manual,
-        russian: verbData.meanings?.[0]?.russian || '',
+        russian: '',
         focusForm: requestedForm || verbData.displayForm || verbData.infinitive,
       };
     }
@@ -106,12 +106,12 @@ export async function chooseVerbSentence(verbData, preferredSentence = null, { a
 
     return {
       german: preferredSentence,
-      russian: verbData.meanings?.[0]?.russian || '',
+      russian: '',
       focusForm: requestedForm || verbData.displayForm || verbData.infinitive,
     };
   }
 
-  const candidates = filterVerbExampleSentences(verbData.exampleSentences, requestedForm, Infinity);
+  const candidates = filterVerbExampleSentences(verbData.exampleSentences, requestedForm, Infinity).filter(example => example?.russian?.trim());
   if (candidates.length) write(chalk.dim(`Checking example sentences for ${verbData.infinitive}...`));
   const sentences = (await reviewVerbExamples(verbData, candidates)).slice(0, 3);
   if (candidates.length && !sentences.length) {

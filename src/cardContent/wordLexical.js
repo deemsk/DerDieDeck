@@ -1,3 +1,4 @@
+import { pairEnrichedExample } from '../examplePipeline.js';
 import { normalizeGermanForCompare } from './german.js';
 import { DETERMINER_FORM_FAMILIES, POSSESSIVE_STEMS, PRONOUN_FORM_FAMILIES } from '../data/wordForms.js';
 
@@ -7,15 +8,7 @@ export function getWordLemma(wordData = {}) {
 }
 
 export function applyChosenSentenceGloss(sentenceData = {}, chosenSentence = {}) {
-  const chosenRussian = String(chosenSentence?.russian || '').trim();
-  if (!chosenRussian) {
-    return sentenceData;
-  }
-
-  return {
-    ...sentenceData,
-    russian: chosenRussian,
-  };
+  return pairEnrichedExample(sentenceData, chosenSentence);
 }
 
 export function formatPluralLabel(wordData) {

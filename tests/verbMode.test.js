@@ -277,6 +277,36 @@ describe("verb mode sentence flow", () => {
     expect(mockShowWordDictionarySummary.mock.invocationCallOrder[0]).toBeLessThan(mockChooseVerbSentence.mock.invocationCallOrder[0])
   })
 
+  test('offers recovery instead of creating a picture verb without a verified example', async () => {
+    await expect(runVerbWorkflow('laufen', { skipHeader: true, disableStrongVerbPackage: true,
+      analysisResult: { shouldCreateVerbCard: true, infinitive: 'laufen', displayForm: 'laufen', recommendedMode: 'picture-word', meanings: [{ russian: 'бежать' }], exampleSentences: [{ german: 'Er läuft.' }] },
+    })).rejects.toMatchObject({ code: 'verb-example-mismatch', allowManualSentence: true })
+    expect(mockCreatePictureWordNote).not.toHaveBeenCalled()
+  })
+
+  test('enriches and reviews the manually supplied picture-verb example', async () => {
+    mockEnrich.mockResolvedValueOnce({ german: 'Er läuft schnell.', russian: 'Он быстро бежит.' })
+    mockConfirmPictureVerbSelection.mockResolvedValueOnce({ confirmed: false })
+    await runVerbWorkflow('laufen', { skipHeader: true, sentence: 'Er läuft schnell.',
+      analysisResult: { shouldCreateVerbCard: true, infinitive: 'laufen', displayForm: 'laufen', recommendedMode: 'picture-word', meanings: [{ russian: 'бежать' }], exampleSentences: [] },
+    })
+    expect(mockReviewVerbExamples).toHaveBeenCalledWith(expect.anything(), [expect.objectContaining({ german: 'Er läuft schnell.', russian: 'Он быстро бежит.' })])
+    expect(mockConfirmPictureVerbSelection).toHaveBeenCalledWith(expect.objectContaining({ verbData: expect.objectContaining({ exampleSentences: [expect.objectContaining({ german: 'Er läuft schnell.', russian: 'Он быстро бежит.' })] }) }))
+  })
+
+  test('falls back to normal workflow when optional package example fails verification', async () => {
+    mockReviewVerbExamples.mockResolvedValue([])
+    mockChooseVerbSentence.mockResolvedValueOnce(null)
+    const form = { key: 'du', pronoun: 'du', label: 'du', form: 'sprichst', displayForm: 'sprichst' }
+    await runVerbWorkflow('sprechen', { skipHeader: true,
+      analysisResult: { shouldCreateVerbCard: true, infinitive: 'sprechen', displayForm: 'sprechen', recommendedMode: 'sentence-form', meanings: [{ russian: 'говорить' }] },
+      morphologyResult: { confidence: 'high', classification: 'strong', selectedForms: [form] },
+      packageSentences: { du: { german: 'Du sprichst Deutsch.', russian: 'Ты говоришь по-немецки.', focusForm: 'sprichst' } },
+    })
+    expect(mockChooseVerbSentence).toHaveBeenCalled()
+    expect(mockStartVerbNoteSet).not.toHaveBeenCalled()
+  })
+
   test("reports a confirmed form when the sentence write fails", async () => {
     mockCreateNote.mockRejectedValueOnce(new Error("connection lost"))
     await expect(runVerbWorkflow("gehört", {
@@ -299,6 +329,16 @@ describe("verb mode sentence flow", () => {
       expect.objectContaining({ id: 'form', kind: 'basic' }),
       expect.objectContaining({ id: 'sentence', kind: 'sentence' }),
     ]))
+  })
+
+  test("rejects an inaccurate Russian translation before creating a verb sentence", async () => {
+    mockReviewVerbExamples.mockResolvedValueOnce([])
+    await expect(runVerbWorkflow("gehört", {
+      learnerProfileContext: false,
+      analysisResult: { shouldCreateVerbCard: true, infinitive: "gehören", displayForm: "gehört", recommendedMode: "sentence-form", meanings: [{ russian: "принадлежать" }] },
+      meaning: "принадлежать", sentence: "Der Hund gehört meiner Schwester.", skipHeader: true,
+    })).rejects.toThrow(/verify|match/i)
+    expect(mockCreateNote).not.toHaveBeenCalled()
   })
 
   test("runVerbWorkflow uses the confirmed form-card flag when creating sentence-form verb cards", async () => {
@@ -623,6 +663,21 @@ describe("verb mode sentence flow", () => {
       text: expect.stringContaining("{{c1::sprecht::sprechen → ihr}}"),
       tags: expect.arrayContaining(["mode-verb-form-cloze", "verb-pronoun-ihr", "verb-form-sprecht"]),
     }))
+  })
+
+  test("does not reuse a form translation when enrichment changes its example", async () => {
+    mockChooseMeaning.mockResolvedValueOnce({ russian: "говорить" })
+    mockEnrich.mockResolvedValueOnce({ german: "Du sprichst mit Maria.", russian: "Ты говоришь с Марией.", ipa: "[ipa]" })
+    const form = { key: "du", pronoun: "du", label: "du", form: "sprichst", displayForm: "sprichst" }
+    await runVerbWorkflow("sprechen", {
+      skipHeader: true,
+      analysisResult: { shouldCreateVerbCard: true, infinitive: "sprechen", displayForm: "sprechen", recommendedMode: "sentence-form", meanings: [{ russian: "говорить" }] },
+      morphologyResult: { infinitive: "sprechen", classification: "strong", confidence: "high", selectedForms: [form] },
+      packageSentences: { du: { german: "Du sprichst mit Anna.", russian: "Ты говоришь с Анной.", focusForm: "sprichst", formRussian: "ты говоришь с Анной" } },
+    })
+    const production = mockCreateBasicNote.mock.calls.find(([note]) => note.tags.includes("mode-verb-keyform-production"))[0]
+    expect(production.back).toContain("Ты говоришь с Марией.")
+    expect(production.back).not.toContain("Анной")
   })
 
   test("retries a generated form sentence when Russian person and number disagree", async () => {

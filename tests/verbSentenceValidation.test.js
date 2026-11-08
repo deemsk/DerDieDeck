@@ -32,3 +32,11 @@ test('a missing requested surface form is rejected without model approval', asyn
   expect(await reviewVerbExamples(target, [{ german: 'Ich sehe die Tür.' }])).toEqual([])
   expect(create).not.toHaveBeenCalled()
 })
+test('reviews the German sentence and supplied Russian translation together', async () => {
+  const example = { german: 'Sieh nach links.', russian: 'Посмотри налево.' }
+  create.mockResolvedValue(answer([{ index: 0, valid: true, reason: '' }]))
+  expect(await reviewVerbExamples(target, [example])).toEqual([example])
+  const request = create.mock.calls[0][0]
+  expect(JSON.parse(request.messages[1].content).examples[0].russian).toBe('Посмотри налево.')
+  expect(request.messages[0].content).toMatch(/translation/i)
+})

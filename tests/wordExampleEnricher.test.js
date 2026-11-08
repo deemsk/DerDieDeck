@@ -28,3 +28,10 @@ test('rejects examples without the target before semantic review', async () => {
   await expect(prepareNounExample(input)).rejects.toThrow('target')
   expect(create).toHaveBeenCalledTimes(2)
 })
+test('validates an adjective anchor and its Russian translation together', async () => {
+  const { preparePictureWordExample } = await import('../src/wordExampleEnricher.js')
+  const example = { german: 'feste Schraube', russian: 'прочно закреплённый винт', focusForm: 'feste' }
+  create.mockResolvedValueOnce(answer(example)).mockResolvedValueOnce(answer({ valid: true, reason: '' }))
+  expect(await preparePictureWordExample({ wordData: { canonical: 'fest', lemma: 'fest', lexicalType: 'adjective', anchorPhrase: 'feste Schraube' }, selectedMeaning: { russian: 'прочный' } })).toEqual(example)
+  expect(JSON.parse(create.mock.calls[1][0].messages[1].content).example).toEqual(example)
+})

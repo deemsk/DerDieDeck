@@ -46,6 +46,7 @@ jest.unstable_mockModule("../src/wordConfirm.js", () => ({
   chooseMeaning: mockChooseMeaning,
   chooseWordSentence: jest.fn(),
   confirmSentenceWordSelection: jest.fn(),
+  confirmChangedClozeExample: jest.fn(),
   confirmWordSelection: mockConfirmWordSelection,
   showWordDictionarySummary: jest.fn(),
 }))
@@ -104,8 +105,8 @@ jest.unstable_mockModule("../src/cardContent/cefr.js", () => ({
   estimateLexicalCEFR: jest.fn(async () => null),
 }))
 
-const mockPrepareNounExample = jest.fn()
-jest.unstable_mockModule("../src/wordExampleEnricher.js", () => ({ prepareNounExample: mockPrepareNounExample }))
+const mockPrepareNounExample = jest.fn(async () => ({ german: "Ein Beispiel.", russian: "Пример.", focusForm: "Beispiel" }))
+jest.unstable_mockModule("../src/wordExampleEnricher.js", () => ({ prepareNounExample: mockPrepareNounExample, preparePictureWordExample: mockPrepareNounExample }))
 
 const { runWordWorkflow } = await import("../src/wordMode.js")
 
@@ -178,7 +179,7 @@ test('Schatz preview and saved card use the same example for the chosen affectio
 })
 test('failed noun example validation prevents preview, audio and note creation', async () => {
   jest.clearAllMocks()
-  mockPrepareNounExample.mockRejectedValue(new Error('Wrong sense'))
+  mockPrepareNounExample.mockRejectedValueOnce(new Error('Wrong sense'))
   await expect(runWordWorkflow('Schatz', { learnerProfileContext: false, analysisResult: schatzAnalysis() })).rejects.toThrow('Wrong sense')
   expect(mockConfirmWordSelection).not.toHaveBeenCalled()
   expect(mockGenerateSimpleSpeech).not.toHaveBeenCalled()
@@ -231,4 +232,17 @@ test('stores original merged glosses in picture-card metadata', async () => {
   await runWordWorkflow('Schatz', { learnerProfileContext: false, analysisResult: schatzAnalysis(), deck: 'German::Test' })
   const { parseWordMetadataComment } = await import('../src/cardContent/wordMetadata.js')
   expect(parseWordMetadataComment(mockCreatePictureWordNote.mock.calls[0][0].extraInfoField).meaningAlternatives).toEqual(['сокровище', 'клад'])
+})
+test('previews and saves the same bilingual adjective example', async () => {
+  jest.clearAllMocks()
+  const example = { german: 'feste Schraube', russian: 'прочно закреплённый винт', focusForm: 'feste' }
+  mockPrepareNounExample.mockResolvedValueOnce(example)
+  mockChooseMeaning.mockResolvedValueOnce({ russian: 'прочный' })
+  await runWordWorkflow('fest', { learnerProfileContext: false, deck: 'German::Test', analysisResult: {
+    shouldCreateWordCard: true, isImageable: true, recommendedMode: 'picture-word', lexicalType: 'adjective', canonical: 'fest', lemma: 'fest', anchorPhrase: 'feste Schraube', meanings: [{ russian: 'прочный' }], exampleSentences: [],
+  } })
+  expect(mockConfirmWordSelection.mock.calls[0][0].wordData.exampleSentences).toEqual([example])
+  const extra = mockCreatePictureWordNote.mock.calls[0][0].extraInfoField
+  expect(extra).toContain('feste Schraube')
+  expect(extra).toContain('прочно закреплённый винт')
 })

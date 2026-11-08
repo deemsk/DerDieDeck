@@ -118,8 +118,8 @@ describe("verb preview helpers", () => {
 })
 
 test('rejects another lemma before showing choices and validates manual replacement', async () => {
-  const wrong = { german: 'Sieh bitte nach, ob die Tür zu ist.' }
-  const right = { german: 'Sieh nach links.' }
+  const wrong = { german: 'Sieh bitte nach, ob die Tür zu ist.', russian: 'Проверь, закрыта ли дверь.' }
+  const right = { german: 'Sieh nach links.', russian: 'Посмотри налево.' }
   const write = jest.fn()
   mockReviewExamples.mockReset().mockImplementation(async (_target, examples) => examples.filter(e => e.german === right.german))
   const result = await chooseVerbSentence({ infinitive: 'sehen', displayForm: 'sieh', exampleSentences: [wrong, right] }, null, { write, askInput: async () => { throw new Error('Only one valid example') } })
@@ -137,8 +137,8 @@ test('preferred sentence is not exempt from lexical identity review', async () =
 })
 
 test('semantic filtering happens before the three-example display limit', async () => {
-  const wrong = { german: 'Sieh bitte nach, ob die Tür zu ist.' }
-  const right = { german: 'Sieh nach links.' }
+  const wrong = { german: 'Sieh bitte nach, ob die Tür zu ist.', russian: 'Проверь, закрыта ли дверь.' }
+  const right = { german: 'Sieh nach links.', russian: 'Посмотри налево.' }
   mockReviewExamples.mockReset().mockImplementation(async (_target, examples) => examples.filter(e => e.german === right.german))
   const result = await chooseVerbSentence({ infinitive: 'sehen', displayForm: 'sieh', exampleSentences: [wrong, wrong, wrong, right] }, null, {
     write: () => {}, askInput: async () => { throw new Error('The fourth candidate is valid') },
