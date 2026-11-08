@@ -423,4 +423,47 @@ describe("word note helpers", () => {
       }),
     ])
   })
+  test("treats an original gloss as an exact duplicate of a merged selection", async () => {
+    global.fetch = async (_url, request) => {
+      const { action } = JSON.parse(request.body)
+      if (action === 'findNotes') return { json: async () => ({ result: [42], error: null }) }
+      if (action === 'notesInfo') return { json: async () => ({ result: [{ noteId: 42, fields: { Word: { value: 'der Schatz' }, 'Gender, Personal Connection, Extra Info (Back side)': { value: buildWordExtraInfo({ meaning: 'клад', metadata: { canonical: 'der Schatz', meaning: 'клад', lexicalType: 'noun' } }) } } }], error: null }) }
+      throw new Error(action)
+    }
+    const result = await findWordDuplicates({ canonical: 'der Schatz', meaning: 'сокровище; клад', meaningAlternatives: ['сокровище', 'клад'], lexicalType: 'noun' })
+    expect(result.exactMatches).toEqual([expect.objectContaining({ noteId: 42, meaning: 'клад' })])
+    expect(result.headwordMatches).toEqual([])
+  })
+
+})
+
+test('matches a selected original gloss against an earlier merged card', async () => {
+  const previous = global.fetch
+  try {
+    global.fetch = async (_url, request) => {
+      const { action } = JSON.parse(request.body)
+      if (action === 'findNotes') return { json: async () => ({ result: [42], error: null }) }
+      if (action === 'notesInfo') return { json: async () => ({ result: [{ noteId: 42, fields: { Word: { value: 'der Schatz' }, 'Gender, Personal Connection, Extra Info (Back side)': { value: buildWordExtraInfo({ meaning: 'сокровище; клад', metadata: { canonical: 'der Schatz', meaning: 'сокровище; клад', meaningAlternatives: ['сокровище', 'клад'], lexicalType: 'noun' } }) } } }], error: null }) }
+      throw new Error(action)
+    }
+    expect((await findWordDuplicates({ canonical: 'der Schatz', meaning: 'клад', lexicalType: 'noun' })).exactMatches).toEqual([expect.objectContaining({ noteId: 42 })])
+  } finally { global.fetch = previous }
+})
+
+test('recognizes a previously merged semicolon-separated gloss without metadata components', async () => {
+  const previous = global.fetch
+  try {
+    global.fetch = async (_url, request) => {
+      const { action } = JSON.parse(request.body)
+      if (action === 'findNotes') return { json: async () => ({ result: [43], error: null }) }
+      if (action === 'notesInfo') return { json: async () => ({ result: [{ noteId: 43, fields: { Word: { value: 'der Schatz' }, 'Gender, Personal Connection, Extra Info (Back side)': { value: buildWordExtraInfo({ meaning: 'сокровище; клад', metadata: { canonical: 'der Schatz', meaning: 'сокровище; клад', lexicalType: 'noun' } }) } } }], error: null }) }
+      throw new Error(action)
+    }
+    expect((await findWordDuplicates({ canonical: 'der Schatz', meaning: 'клад', lexicalType: 'noun' })).exactMatches).toEqual([expect.objectContaining({ noteId: 43 })])
+  } finally { global.fetch = previous }
+})
+
+test('does not split legacy semicolons inside parenthesized qualifiers', async () => {
+  const { splitLegacyMeaningAlternatives } = await import('../src/cardContent/wordMetadata.js')
+  expect(splitLegacyMeaningAlternatives('значение (контекст; пояснение); другое')).toEqual(['значение (контекст; пояснение)', 'другое'])
 })

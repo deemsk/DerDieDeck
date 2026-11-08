@@ -202,3 +202,9 @@ describe("lexical cloze templates", () => {
     expect(extra).toContain("yt2anki-word")
   })
 })
+
+test('stores component glosses in lexical cloze metadata', async () => {
+  const { parseWordMetadataComment } = await import('../src/cardContent/wordMetadata.js')
+  const extra = buildLexicalClozeExtra({ wordData: { canonical: 'deshalb', lexicalType: 'adverb' }, selectedMeaning: { russian: 'поэтому; по этой причине', duplicateMeanings: ['поэтому', 'по этой причине'] } })
+  expect(parseWordMetadataComment(extra).meaningAlternatives).toEqual(['поэтому', 'по этой причине'])
+})

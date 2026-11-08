@@ -1,6 +1,7 @@
 import { formatCardPreview } from './cardPreview.js';
 import { createInterface } from 'readline';
 import chalk from 'chalk';
+import ora from 'ora';
 import { mkdir, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
@@ -331,6 +332,8 @@ export async function chooseMeaning(wordData, preferredMeaning = null, promptOve
   const manualPrompt = promptOverrides.manualPrompt || 'Enter the intended meaning/gloss for this word, or press Enter to skip: ';
   const editPrompt = promptOverrides.editPrompt || 'Enter the intended meaning/gloss: ';
   const allowBlank = Boolean(promptOverrides.allowBlank);
+  const askInput = promptOverrides.ask || ask;
+  const log = promptOverrides.log || console.log;
 
   if (!wordData.meanings?.length) {
     if (preferredMeaning) {
@@ -349,7 +352,7 @@ export async function chooseMeaning(wordData, preferredMeaning = null, promptOve
       };
     }
 
-    const manual = await ask(manualPrompt);
+    const manual = await askInput(manualPrompt);
     if (!manual) {
       return null;
     }
@@ -378,33 +381,56 @@ export async function chooseMeaning(wordData, preferredMeaning = null, promptOve
     return wordData.meanings[0];
   }
 
-  console.log();
-  console.log(`Meanings for ${wordData.canonical}:`);
-  wordData.meanings.forEach((meaning, index) => {
-    console.log(`  ${index + 1}. ${meaning.russian}`);
+  let guidance = promptOverrides.guidance;
+  if (!guidance) {
+    const spinner = ora('Checking meanings and Anki...').start();
+    try {
+      guidance = await (await import('./meaningSelection.js')).buildMeaningGuidance({ word: wordData, ...(promptOverrides.skipAnki ? { lookup: async () => { throw new Error('Anki lookup disabled'); } } : {}) });
+    } finally { spinner.stop(); }
+  }
+  const options = guidance.options;
+  log('');
+  log(`${chalk.cyan('┌─')} ${chalk.bold('Choose meaning')} · ${chalk.cyan(wordData.canonical)}`);
+  log(chalk.cyan('│'));
+  options.forEach((option, index) => {
+    const flags = [];
+    if (option.status === 'existing') flags.push(chalk.dim(option.evidence?.length && option.evidence.every(item => item.sourceForm) ? '✓ Lemma in Anki' : '✓ In Anki'));
+    if (option.status === 'possible') flags.push(chalk.yellow('? Possible match'));
+    if (guidance.recommendedIndex === index) flags.push(chalk.green('★ Recommended'));
+    log(`${chalk.cyan('│')}  ${chalk.yellow(String(index + 1))}  ${option.meaning.russian}${flags.length ? `  ${flags.join('  ')}` : ''}`);
   });
-
+  if (!guidance.collectionAvailable) log(`${chalk.cyan('│')}  ${chalk.dim(promptOverrides.skipAnki ? 'Anki check skipped (dry run)' : 'Anki check unavailable')}`);
+  else if (!guidance.assessmentAvailable) log(`${chalk.cyan('│')}  ${chalk.dim('Meaning guidance unavailable')}`);
+  log(chalk.cyan('└─'));
+  const hasInfo = Boolean(guidance.reason || options.some(option => option.noteIds?.length));
+  log(`  ${chalk.yellow(`[1–${options.length}]`)} Select${hasInfo ? `   ${chalk.yellow('[I]')} Info` : ''}${guidance.originals ? `   ${chalk.yellow('[V]')} Original meanings` : ''}   ${chalk.yellow('[E]')} Edit   ${chalk.yellow('[S]')} Skip`);
   while (true) {
-    const answer = await ask('Choose meaning [1-3, Enter=1, E=edit]: ');
-    const normalized = answer.toLowerCase();
-
-    if (normalized === '') {
-      return wordData.meanings[0];
+    const defaultIndex = Number.isInteger(guidance.recommendedIndex) ? guidance.recommendedIndex : null;
+    const answer = String(await askInput(defaultIndex == null ? 'Choose: ' : `Choose [${defaultIndex + 1}]: `)).trim().toLowerCase();
+    if (!answer && defaultIndex != null) return options[defaultIndex].meaning;
+    if (answer === 's' || answer === 'skip') return null;
+    if ((answer === 'v' || answer === 'view') && guidance.originals) {
+      guidance.originals.forEach((meaning, index) => log(`  ${index + 1}. ${meaning.russian}`));
+      const original = String(await askInput(`Choose original [1-${guidance.originals.length}, Enter=back]: `)).trim();
+      if (/^\d+$/.test(original) && Number(original) >= 1 && Number(original) <= guidance.originals.length) return guidance.originals[Number(original) - 1];
+      continue;
     }
-
-    if (normalized === 'e' || normalized === 'edit') {
-      const edited = await ask(editPrompt);
+    if ((answer === 'i' || answer === 'info') && hasInfo) {
+      if (guidance.reason) log(guidance.reason);
+      options.forEach((option, index) => option.noteIds?.forEach(id => {
+        const evidence = option.evidence?.find(item => item.noteId === id);
+        log(`  ${index + 1}: ${evidence?.sourceForm ? `${evidence.sourceForm} · ` : ''}${evidence?.meaning ? `${evidence.meaning} · ` : ''}Find in Anki Browse: nid:${id}`);
+      }));
+      continue;
+    }
+    if (answer === 'e' || answer === 'edit') {
+      const edited = await askInput(editPrompt);
       if (!edited) continue;
-      return {
-        russian: edited,
-        english: wordData.meanings[0].english || getWordLemma(wordData),
-        imageSearchTerms: [getWordLemma(wordData)],
-      };
+      return { russian: edited, english: wordData.meanings[0].english || getWordLemma(wordData), imageSearchTerms: [getWordLemma(wordData)] };
     }
-
-    const index = parseInt(normalized, 10);
-    if (!Number.isNaN(index) && index >= 1 && index <= wordData.meanings.length) {
-      return wordData.meanings[index - 1];
+    if (/^\d+$/.test(answer)) {
+      const index = Number(answer) - 1;
+      if (index >= 0 && index < options.length) return options[index].meaning;
     }
   }
 }

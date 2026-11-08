@@ -633,6 +633,7 @@ async function prepareStrongVerbPackage({ verbData, selectedMeaning, route, freq
         findWordDuplicates({
           canonical: verbData.infinitive,
           meaning: selectedMeaning.russian,
+          ...(selectedMeaning.duplicateMeanings?.length > 1 ? { meaningAlternatives: selectedMeaning.duplicateMeanings } : {}),
           modelName: DEFAULT_WORD_NOTE_TYPE,
         }),
         findVerbLemmaDuplicates({
@@ -721,9 +722,12 @@ async function prepareVerb(rawInput, options, spinner) {
     {
       canonical: verbData.infinitive,
       bareNoun: verbData.infinitive,
+      lemma: verbData.infinitive,
+      lexicalType: 'verb',
       meanings: verbData.meanings,
     },
-    options.meaning
+    options.meaning,
+    { skipAnki: options.dryRun }
   );
   if (!selectedMeaning) {
     console.log(chalk.yellow('Skipped: no meaning selected'));
@@ -758,6 +762,7 @@ async function prepareVerb(rawInput, options, spinner) {
           findWordDuplicates({
             canonical: verbData.infinitive,
             meaning: selectedMeaning.russian,
+            ...(selectedMeaning.duplicateMeanings?.length > 1 ? { meaningAlternatives: selectedMeaning.duplicateMeanings } : {}),
             lexicalType: 'verb',
             modelName: DEFAULT_WORD_NOTE_TYPE,
           }),
@@ -818,6 +823,7 @@ async function prepareVerb(rawInput, options, spinner) {
       duplicateInfo = await findWordDuplicates({
         canonical: verbData.infinitive,
         meaning: selectedMeaning.russian,
+        ...(selectedMeaning.duplicateMeanings?.length > 1 ? { meaningAlternatives: selectedMeaning.duplicateMeanings } : {}),
         modelName: DEFAULT_WORD_NOTE_TYPE,
       });
     } catch (err) {
@@ -1024,6 +1030,7 @@ async function finalizePictureVerb(prepared, options, spinner) {
   const metadata = {
     canonical: verbData.infinitive,
     meaning: selectedMeaning.russian,
+    ...(selectedMeaning.duplicateMeanings?.length > 1 ? { meaningAlternatives: selectedMeaning.duplicateMeanings } : {}),
     lemma: verbData.infinitive,
     lexicalType: 'verb',
     contrast: buildContrastHint(verbData.infinitive),

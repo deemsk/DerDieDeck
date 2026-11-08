@@ -40,3 +40,21 @@ export function extractWordLexicalType(extraInfo = '') {
   const metadata = parseWordMetadataComment(extraInfo);
   return metadata?.lexicalType ? String(metadata.lexicalType).trim() : null;
 }
+
+/** Split legacy gloss alternatives without splitting semicolons inside qualifiers. */
+export function splitLegacyMeaningAlternatives(value = '') {
+  const parts = [];
+  let current = '';
+  const stack = [];
+  const pairs = { ')': '(', ']': '[', '}': '{' };
+  for (const char of String(value || '')) {
+    if ('([{'.includes(char)) stack.push(char);
+    else if (pairs[char] && stack.at(-1) === pairs[char]) stack.pop();
+    if (char === ';' && !stack.length) {
+      if (current.trim()) parts.push(current.trim());
+      current = '';
+    } else current += char;
+  }
+  if (current.trim()) parts.push(current.trim());
+  return parts;
+}

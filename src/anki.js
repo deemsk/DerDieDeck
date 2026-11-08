@@ -11,7 +11,7 @@ import {
 import { buildClozeNoteFields } from './templates/grammar/clozeNote.js';
 import { escapeHtml } from './cardContent/html.js';
 import { normalizeGermanForCompare, toTagSlug } from './cardContent/german.js';
-import { extractCanonicalWord, extractWordLexicalType, extractWordMeaning, parseWordMetadataComment } from './cardContent/wordMetadata.js';
+import { extractCanonicalWord, extractWordLexicalType, extractWordMeaning, parseWordMetadataComment, splitLegacyMeaningAlternatives } from './cardContent/wordMetadata.js';
 import { buildLearningIntentTags, buildSiblingStageTags } from './cardContent/learningDesign.js';
 import { hasCurrentDerDieDeckStyles, mergeDerDieDeckStyles } from './templates/shared/styles.js';
 import { parseGrammarMetadataComment } from './grammar/utils.js';
@@ -109,13 +109,15 @@ async function applyReviewedNoteUpdates(entries, { saveBackup, onResult = () => 
 /**
  * Call AnkiConnect API
  */
-async function ankiConnect(action, params = {}) {
+async function ankiConnect(action, params = {}, { signal } = {}) {
   const body = JSON.stringify({ action, version: 6, params });
   for (let attempt = 0; ; attempt++) {
+    signal?.throwIfAborted();
     const response = await fetch(config.ankiConnectUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body,
+      ...(signal ? { signal } : {}),
     });
     const result = await response.json();
     if (!result.error) return result.result;
@@ -133,7 +135,16 @@ async function ankiConnect(action, params = {}) {
     if (attempt === 0) {
       console.warn('Anki is busy. Waiting for the collection operation to finish (up to 10 seconds)...');
     }
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    if (signal) {
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => { signal.removeEventListener('abort', abort); resolve(); }, 1000);
+        const abort = () => { clearTimeout(timer); reject(signal.reason); };
+        signal.addEventListener('abort', abort, { once: true });
+        if (signal.aborted) abort();
+      });
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
   }
 }
 
@@ -174,16 +185,16 @@ export async function verifyRecoveryMarker(marker) {
   return data === marker.data;
 }
 
-export async function findNotesByQuery(query) {
-  return ankiConnect('findNotes', { query });
+export async function findNotesByQuery(query, options = {}) {
+  return ankiConnect('findNotes', { query }, options);
 }
 
-export async function getNotesInfo(noteIds = []) {
+export async function getNotesInfo(noteIds = [], options = {}) {
   if (!noteIds.length) {
     return [];
   }
 
-  return ankiConnect('notesInfo', { notes: noteIds });
+  return ankiConnect('notesInfo', { notes: noteIds }, options);
 }
 
 export async function findCardsByQuery(query) {
@@ -758,15 +769,16 @@ export async function findSimilarCards(germanText, threshold = 70) {
   return similar;
 }
 
-export async function findWordDuplicates({ canonical, meaning = null, lexicalType = null,
-  modelName = config.wordNoteType || PICTURE_WORD_MODEL }) {
+export async function findWordDuplicates({ canonical, meaning = null, meaningAlternatives = [], lexicalType = null,
+  modelName = config.wordNoteType || PICTURE_WORD_MODEL, signal } = {}) {
   const noteIds = await ankiConnect('findNotes', {
     query: `(note:"${modelName}" or tag:mode-word or tag:mode-word-main or tag:mode-word-sentence or tag:mode-lexical-cloze)`,
-  });
+  }, { signal });
   if (!noteIds.length) return { exactMatches: [], headwordMatches: [] };
-  const notes = await ankiConnect('notesInfo', { notes: noteIds });
+  const notes = await ankiConnect('notesInfo', { notes: noteIds }, { signal });
   const exactMatches = [];
   const headwordMatches = [];
+  const acceptedMeanings = new Set([meaning, ...(Array.isArray(meaningAlternatives) ? meaningAlternatives : [])].filter(Boolean).map(normalizeGerman));
   for (const note of notes) {
     const extra = note.fields?.[PICTURE_WORD_FIELDS.extra]?.value || '';
     const metadata = extractWordMetadataFromSentenceNote(note);
@@ -778,7 +790,10 @@ export async function findWordDuplicates({ canonical, meaning = null, lexicalTyp
       lexicalType: metadata?.lexicalType || extractWordLexicalType(extra),
       meaning: metadata?.meaning || extractWordMeaning(extra),
     };
-    if (meaning && duplicate.meaning && normalizeGerman(meaning) === normalizeGerman(duplicate.meaning) &&
+    const storedMeanings = Array.isArray(metadata?.meaningAlternatives)
+      ? [duplicate.meaning, ...metadata.meaningAlternatives]
+      : [duplicate.meaning, ...splitLegacyMeaningAlternatives(duplicate.meaning)];
+    if (storedMeanings.filter(Boolean).some(value => acceptedMeanings.has(normalizeGerman(value))) &&
         (!lexicalType || !duplicate.lexicalType || lexicalType === duplicate.lexicalType)) exactMatches.push(duplicate);
     else headwordMatches.push(duplicate);
   }
@@ -789,17 +804,18 @@ export async function findWordDuplicates({ canonical, meaning = null, lexicalTyp
 export async function findVerbLemmaDuplicates({
   infinitive,
   modelName = config.ankiNoteType,
+  signal,
 }) {
   const normalizedInfinitive = normalizeGerman(infinitive);
   const noteIds = await ankiConnect('findNotes', {
     query: `note:"${modelName}" tag:mode-verb-lemma tag:lemma-${toTagSlug(infinitive)}`,
-  });
+  }, { signal });
 
   if (noteIds.length === 0) {
     return { exactMatches: [] };
   }
 
-  const notes = await ankiConnect('notesInfo', { notes: noteIds });
+  const notes = await ankiConnect('notesInfo', { notes: noteIds }, { signal });
   const exactMatches = notes
     .filter((note) => normalizeGerman(note.fields?.Front?.value || '') === normalizedInfinitive)
     .map((note) => ({
@@ -812,10 +828,11 @@ export async function findVerbLemmaDuplicates({
 
 export async function findVerbSentenceDuplicates({
   infinitive,
+  signal,
 }) {
   const noteIds = await ankiConnect('findNotes', {
     query: `tag:mode-verb-sentence tag:lemma-${toTagSlug(infinitive)}`,
-  });
+  }, { signal });
 
   return {
     exactMatches: noteIds.map((noteId) => ({

@@ -129,3 +129,43 @@ test('verb form summary labels lemma meaning and pronunciation explicitly', () =
     meanings: [{ russian: 'идти' }],
   })).toBe(['ging · verb', 'Infinitive: gehen', 'Infinitive meaning: идти', 'Infinitive IPA: [ˈɡeːən]'].join('\n'))
 })
+
+test('meaning selector shows compact statuses and explains recommendation on request', async () => {
+  const ask = jest.fn().mockResolvedValueOnce('i').mockResolvedValueOnce('')
+  const log = jest.fn()
+  const meanings = [{ russian: 'клад' }, { russian: 'дорогой' }]
+  const guidance = { options: [{ meaning: meanings[0], status: 'existing', noteIds: [123] }, { meaning: meanings[1], status: 'unknown', noteIds: [] }], recommendedIndex: 1, collectionAvailable: true, reason: 'The first meaning is already in Anki.', assessmentAvailable: true }
+  expect(await chooseMeaning({ canonical: 'der Schatz', meanings }, null, { ask, log, guidance })).toEqual(meanings[1])
+  const output = log.mock.calls.flat().join('\n')
+  expect(output).toContain('✓ In Anki')
+  expect(output).toContain('★ Recommended')
+  expect(output).toContain('nid:123')
+  expect(output).toContain('The first meaning is already in Anki.')
+})
+test('no confident recommendation requires an explicit choice and supports skip', async () => {
+  const ask = jest.fn().mockResolvedValueOnce('').mockResolvedValueOnce('s')
+  const meanings = [{ russian: 'клад' }, { russian: 'дорогой' }]
+  const guidance = { options: meanings.map(meaning => ({ meaning, status: 'unknown', noteIds: [] })), recommendedIndex: null, collectionAvailable: false, reason: null }
+  expect(await chooseMeaning({ canonical: 'Schatz', meanings }, null, { ask, log: jest.fn(), guidance })).toBeNull()
+  expect(ask).toHaveBeenCalledTimes(2)
+})
+test('a merged choice can be expanded to select an original meaning unchanged', async () => {
+  const originals = [{ russian: 'клад', english: 'treasure' }, { russian: 'сокровище', english: 'valuable object' }, { russian: 'дорогой', english: 'darling' }]
+  const guidance = { options: [{ meaning: { russian: 'клад; сокровище' }, status: 'unknown', noteIds: [] }, { meaning: originals[2], status: 'unknown', noteIds: [] }], originals, recommendedIndex: null, collectionAvailable: true, assessmentAvailable: true }
+  const ask = jest.fn().mockResolvedValueOnce('v').mockResolvedValueOnce('2')
+  expect(await chooseMeaning({ canonical: 'Schatz', meanings: originals }, null, { guidance, ask, log: jest.fn() })).toEqual(originals[1])
+})
+test('distinguishes a skipped Anki check during dry run from an unavailable service', async () => {
+  const meanings = [{ russian: 'клад' }, { russian: 'дорогой' }]
+  const log = jest.fn()
+  const guidance = { options: meanings.map(meaning => ({ meaning, status: 'unknown', noteIds: [] })), recommendedIndex: null, collectionAvailable: false, assessmentAvailable: false }
+  await chooseMeaning({ canonical: 'Schatz', meanings }, null, { ask: jest.fn().mockResolvedValue('1'), log, guidance, skipAnki: true })
+  expect(log.mock.calls.flat().join('\n')).toContain('Anki check skipped (dry run)')
+})
+test('labels evidence from the lemma without claiming the requested form exists', async () => {
+  const meanings = [{ russian: 'хороший' }, { russian: 'лучший' }]
+  const guidance = { options: [{ meaning: meanings[0], status: 'existing', noteIds: [91], evidence: [{ noteId: 91, meaning: 'хороший', sourceForm: 'gut' }] }, { meaning: meanings[1], status: 'unknown', noteIds: [] }], recommendedIndex: null, collectionAvailable: true, assessmentAvailable: true }
+  const log = jest.fn()
+  await chooseMeaning({ canonical: 'besten', meanings }, null, { guidance, ask: jest.fn().mockResolvedValue('1'), log })
+  expect(log.mock.calls.flat().join('\n')).toContain('✓ Lemma in Anki')
+})

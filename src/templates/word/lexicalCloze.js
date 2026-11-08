@@ -51,6 +51,7 @@ export function buildLexicalClozeExtra({
   const metadata = buildWordMetadataComment({
     canonical: wordData.canonical,
     meaning,
+    ...(selectedMeaning.duplicateMeanings?.length > 1 ? { meaningAlternatives: selectedMeaning.duplicateMeanings } : {}),
     lemma: wordData.lemma || wordData.canonical,
     lexicalType: wordData.lexicalType,
     contrast: buildContrastHint(wordData.canonical || wordData.lemma),

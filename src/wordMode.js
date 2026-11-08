@@ -88,6 +88,7 @@ function buildWordMetadata(wordData, selectedMeaning, frequencyInfo) {
   return {
     canonical: wordData.canonical,
     meaning: selectedMeaning.russian,
+    ...(selectedMeaning.duplicateMeanings?.length > 1 ? { meaningAlternatives: selectedMeaning.duplicateMeanings } : {}),
     lemma: frequencyInfo.lemma,
     lexicalType: wordData.lexicalType || 'noun',
     gender: wordData.gender || null,
@@ -411,13 +412,15 @@ async function prepareWord(rawInput, options, spinner) {
   const frequencyInfo = getWordFrequencyInfo(getWordLemma(wordData));
 
   if (route === 'picture-word') {
-    const selectedMeaning = await chooseMeaning(wordData, options.meaning);
+    const selectedMeaning = await chooseMeaning(wordData, options.meaning, { skipAnki: options.dryRun });
+    if (!selectedMeaning) return { rejected: true };
     let duplicateInfo = { exactMatches: [], headwordMatches: [] };
     spinner.start('Checking duplicates...');
     try {
       duplicateInfo = await findWordDuplicates({
         canonical: wordData.canonical,
         meaning: selectedMeaning.russian,
+        ...(selectedMeaning.duplicateMeanings?.length > 1 ? { meaningAlternatives: selectedMeaning.duplicateMeanings } : {}),
         lexicalType: wordData.lexicalType || 'noun',
         modelName: DEFAULT_WORD_NOTE_TYPE,
       });
@@ -482,6 +485,7 @@ async function prepareWord(rawInput, options, spinner) {
 
     spinner.stop();
     const selectedMeaning = await chooseMeaning(wordData, options.meaning, {
+      skipAnki: options.dryRun,
       manualPrompt: `Enter the intended meaning/gloss for "${wordData.canonical}" (not an example sentence), or press Enter to skip: `,
       editPrompt: 'Enter the intended meaning/gloss (not an example sentence): ',
       allowBlank: true,
@@ -518,7 +522,8 @@ async function prepareWord(rawInput, options, spinner) {
         if (choice.action === 'skip') return { rejected: true };
         if (choice.action === 'sentence') {
           wordData.skipMainCard = true;
-          return prepareSentenceWord({ wordData, frequencyInfo, selectedMeaning, chosenSentence }, options, spinner);
+          if (!selectedMeaning) return { rejected: true };
+  return prepareSentenceWord({ wordData, frequencyInfo, selectedMeaning, chosenSentence }, options, spinner);
         }
         chosenSentence = await chooseWordSentence(wordData, choice.german);
         spinner.start('Checking the edited cloze...');
@@ -579,6 +584,7 @@ async function prepareWord(rawInput, options, spinner) {
       duplicateInfo = await findLexicalClozeDuplicates({
         canonical: wordData.canonical,
         meaning: selectedMeaning.russian,
+        ...(selectedMeaning.duplicateMeanings?.length > 1 ? { meaningAlternatives: selectedMeaning.duplicateMeanings } : {}),
         lexicalType: wordData.lexicalType,
       });
     } catch (err) {
@@ -636,11 +642,13 @@ async function prepareWord(rawInput, options, spinner) {
   }
 
   const selectedMeaning = await chooseMeaning(wordData, options.meaning, {
+    skipAnki: options.dryRun,
     manualPrompt: `Enter the intended meaning/gloss for "${wordData.canonical}" (not an example sentence), or press Enter to skip: `,
     editPrompt: 'Enter the intended meaning/gloss (not an example sentence): ',
     allowBlank: true,
   });
 
+  if (!selectedMeaning) return { rejected: true };
   return prepareSentenceWord({ wordData, frequencyInfo, selectedMeaning, chosenSentence }, options, spinner);
 }
 
@@ -651,6 +659,7 @@ async function prepareSentenceWord({ wordData, frequencyInfo, selectedMeaning, c
     duplicateInfo = await findSentenceWordDuplicates({
       canonical: wordData.canonical,
       meaning: selectedMeaning.russian,
+      ...(selectedMeaning.duplicateMeanings?.length > 1 ? { meaningAlternatives: selectedMeaning.duplicateMeanings } : {}),
       lexicalType: wordData.lexicalType || 'adjective',
     });
   } catch (err) {
@@ -894,6 +903,7 @@ function buildSentenceWordMainNote({
   const metadata = buildWordMetadataComment({
     canonical: wordData.canonical,
     meaning: selectedMeaning.russian,
+    ...(selectedMeaning.duplicateMeanings?.length > 1 ? { meaningAlternatives: selectedMeaning.duplicateMeanings } : {}),
     lemma: getWordLemma(wordData),
     lexicalType: wordData.lexicalType || 'adjective',
     contrast: wordData.opposite || buildContrastHint(wordData.canonical || getWordLemma(wordData)),
@@ -904,7 +914,7 @@ function buildSentenceWordMainNote({
     back: wordData.requestedForm ? buildWordExtraInfo({
       meaning: selectedMeaning.russian, grammar: wordData.patternHint,
       dictionaryForm: wordData.lemma, metadata: { canonical: wordData.canonical, lemma: wordData.lemma,
-        meaning: selectedMeaning.russian, lexicalType: wordData.lexicalType },
+        meaning: selectedMeaning.russian, ...(selectedMeaning.duplicateMeanings?.length > 1 ? { meaningAlternatives: selectedMeaning.duplicateMeanings } : {}), lexicalType: wordData.lexicalType },
     }) : `${escapeHtml(selectedMeaning.russian)}${metadata}`,
     deck,
     addReversed: !wordData.requestedForm,
@@ -1022,6 +1032,7 @@ async function finalizeSentenceWord(prepared, options, spinner) {
     metadata: {
       canonical: wordData.canonical,
       meaning: selectedMeaning.russian || null,
+      ...(selectedMeaning.duplicateMeanings?.length > 1 ? { meaningAlternatives: selectedMeaning.duplicateMeanings } : {}),
       lemma: getWordLemma(wordData),
       lexicalType: wordData.lexicalType || 'adjective',
     },

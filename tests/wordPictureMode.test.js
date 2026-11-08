@@ -215,3 +215,20 @@ test.each(['missing', 'failed'])('uses TTS for a noun when human audio is %s', a
   })).toBe(true)
   expect(mockGenerateSimpleSpeech).toHaveBeenCalledWith('der Papa', expect.any(String), expect.any(Object))
 })
+test('checks all original glosses when a merged meaning is selected', async () => {
+  jest.clearAllMocks()
+  const selected = { russian: 'сокровище; клад', duplicateMeanings: ['сокровище', 'клад'] }
+  mockChooseMeaning.mockResolvedValueOnce(selected)
+  mockPrepareNounExample.mockResolvedValueOnce({ german: 'Das ist ein Schatz.', russian: 'Это сокровище.' })
+  await runWordWorkflow('Schatz', { learnerProfileContext: false, analysisResult: schatzAnalysis(), deck: 'German::Test' })
+  expect(mockFindWordDuplicates).toHaveBeenCalledWith(expect.objectContaining({ meaning: 'сокровище; клад', meaningAlternatives: ['сокровище', 'клад'] }))
+})
+
+test('stores original merged glosses in picture-card metadata', async () => {
+  jest.clearAllMocks()
+  mockChooseMeaning.mockResolvedValueOnce({ russian: 'сокровище; клад', duplicateMeanings: ['сокровище', 'клад'] })
+  mockPrepareNounExample.mockResolvedValueOnce({ german: 'Das ist ein Schatz.', russian: 'Это сокровище.' })
+  await runWordWorkflow('Schatz', { learnerProfileContext: false, analysisResult: schatzAnalysis(), deck: 'German::Test' })
+  const { parseWordMetadataComment } = await import('../src/cardContent/wordMetadata.js')
+  expect(parseWordMetadataComment(mockCreatePictureWordNote.mock.calls[0][0].extraInfoField).meaningAlternatives).toEqual(['сокровище', 'клад'])
+})
