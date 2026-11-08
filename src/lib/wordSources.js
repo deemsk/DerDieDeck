@@ -308,70 +308,6 @@ async function searchOpenverseImages(query, pageSize = 6) {
   })).filter((item) => item.previewUrl && item.downloadUrl);
 }
 
-function getRawBraveApiKey() {
-  return config.braveApiKey || process.env.BRAVE_SEARCH_API_KEY || '';
-}
-
-function hasBraveImageConfig() {
-  return Boolean(getRawBraveApiKey());
-}
-
-async function searchBraveImages(query, pageSize = 6, queryEntry = {}) {
-  if (!hasBraveImageConfig()) {
-    return [];
-  }
-
-  const { resolveSecret } = await import('./secrets.js');
-  const apiKey = await resolveSecret(getRawBraveApiKey());
-
-  const url = new URL('https://api.search.brave.com/res/v1/images/search');
-  url.searchParams.set('q', query);
-  url.searchParams.set('count', String(Math.min(pageSize, 20)));
-  const locale = queryEntry.locale || 'en';
-  url.searchParams.set('search_lang', locale === 'de' ? 'de' : 'en');
-  url.searchParams.set('country', locale === 'de' ? 'de' : 'us');
-  url.searchParams.set('spellcheck', '1');
-  url.searchParams.set('safesearch', 'strict');
-
-  const payload = await fetchJson(url, {
-    headers: {
-      'Accept-Encoding': 'gzip',
-      'X-Subscription-Token': apiKey,
-    },
-  });
-  const results = payload.results || payload.images?.results || [];
-
-  return results.map((item) => ({
-    source: 'Brave Images',
-    title: item.title || query,
-    creator: item.source || item.page_fetched || item.profile?.name || 'Brave Images',
-    license: 'varies',
-    previewUrl: cleanUrl(
-      item.thumbnail?.src ||
-      item.thumbnail?.url ||
-      item.thumbnail_url ||
-      item.thumbnail ||
-      item.properties?.thumbnail ||
-      item.url
-    ),
-    downloadUrl: cleanUrl(
-      item.properties?.url ||
-      item.image_url ||
-      item.url ||
-      item.page_url ||
-      item.thumbnail?.src ||
-      item.thumbnail_url
-    ),
-    detailUrl: cleanUrl(
-      item.page_url ||
-      item.url ||
-      item.source_url ||
-      item.profile?.url ||
-      item.properties?.url
-    ),
-  })).filter((item) => item.previewUrl && item.downloadUrl);
-}
-
 async function searchWikimediaImages(query, limit = 6) {
   const url = new URL('https://commons.wikimedia.org/w/api.php');
   url.searchParams.set('action', 'query');
@@ -504,7 +440,10 @@ function isPlaceOrInstitution(wordData, selectedMeaning) {
 }
 
 function hasAnyTerm(text, terms) {
-  return terms.some((term) => text.includes(term));
+  return terms.some((term) => {
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(?:^|[^\\p{L}\\p{N}])${escaped}(?=$|[^\\p{L}\\p{N}])`, 'u').test(text);
+  });
 }
 
 function getGermanArticleAdjective(article = '') {
@@ -732,12 +671,9 @@ function buildAdjectiveEntries(wordData, selectedMeaning) {
   const specificTerms = dedupeTerms(selectedMeaning?.imageSearchTerms || []);
   const entries = [];
 
-  pushQueryEntries(
-    entries,
-    specificTerms.filter((term) => looksGermanQueryTerm(term, lemma)),
-    null,
-    'de'
-  );
+  for (const term of specificTerms) {
+    pushQueryEntries(entries, [term], null, looksGermanQueryTerm(term, lemma) ? 'de' : 'en');
+  }
 
   if (wordData?.anchorPhrase) {
     pushQueryEntries(entries, [wordData.anchorPhrase], 'prototype', 'de');
@@ -799,11 +735,16 @@ function buildWordImageQueryEntries(wordData, selectedMeaning) {
     entries.push(...buildDocumentEntries(wordData));
   } else if (conceptClass === 'scene') {
     entries.push(...buildSceneEntries(wordData));
-  } else {
+  }
+
+  if (conceptClass === 'object') {
+    for (const term of specificTerms) {
+      pushQueryEntries(entries, [term], null, looksGermanQueryTerm(term, getWordLemma(wordData)) ? 'de' : 'en');
+    }
     entries.push(...buildObjectEntries(wordData));
   }
 
-  if (conceptClass !== 'adjective' && conceptClass !== 'adverb') {
+  if (conceptClass !== 'object' && conceptClass !== 'adjective' && conceptClass !== 'adverb') {
     pushQueryEntries(
       entries,
       specificTerms.filter((term) => looksGermanQueryTerm(term, getWordLemma(wordData))),
@@ -812,12 +753,14 @@ function buildWordImageQueryEntries(wordData, selectedMeaning) {
     );
   }
 
-  pushQueryEntries(
-    entries,
-    specificTerms.filter((term) => !looksGermanQueryTerm(term, getWordLemma(wordData))),
-    null,
-    'en'
-  );
+  if (conceptClass !== 'object' && conceptClass !== 'adjective') {
+    pushQueryEntries(
+      entries,
+      specificTerms.filter((term) => !looksGermanQueryTerm(term, getWordLemma(wordData))),
+      null,
+      'en'
+    );
+  }
 
   pushQueryEntries(entries, englishFallbackTerms, 'generic', 'en');
 
@@ -826,7 +769,7 @@ function buildWordImageQueryEntries(wordData, selectedMeaning) {
       ...entry,
       bucket: entry.bucket || classifyImageQueryBucket(entry.term, englishGlossValue),
     })),
-    (entry) => `${entry.bucket}:${entry.term.toLowerCase()}`
+    (entry) => ['object', 'adjective'].includes(conceptClass) ? entry.term.toLowerCase() : `${entry.bucket}:${entry.term.toLowerCase()}`
   );
 }
 
@@ -1087,10 +1030,6 @@ function rankImageResult(result, context = {}) {
     score += 12;
   }
 
-  if (result.source === 'Brave Images') {
-    score += 6;
-  }
-
   if (result.queryLocale === 'de') {
     score += 8;
   }
@@ -1217,10 +1156,6 @@ function rankVerbImageResult(result, context = {}) {
   score += Math.min(wordCount, 4) * 10;
   score -= (result.queryPriority || 0) * 5;
   score -= (result.resultPriority || 0);
-
-  if (result.source === 'Brave Images') {
-    score += 6;
-  }
 
   if (result.queryLocale === 'de') {
     score += 8;
@@ -1381,13 +1316,12 @@ export async function searchWordImages(wordData, selectedMeaning, options = {}) 
   const pageSize = options.pageSize || 6;
   const searchTerms = buildWordImageQueryEntries(wordData, selectedMeaning);
 
-  const [brave, openverse, commons] = await Promise.all([
-    searchFirstAvailable(searchBraveImages, searchTerms, pageSize),
+  const [openverse, commons] = await Promise.all([
     searchFirstAvailable(searchOpenverseImages, searchTerms, pageSize),
     searchFirstAvailable(searchWikimediaImages, searchTerms, pageSize),
   ]);
 
-  const combined = [...brave, ...openverse, ...commons]
+  const combined = [...openverse, ...commons]
     .map((result) => ({
       ...result,
       rankScore: rankImageResult(result, { wordData, selectedMeaning }),
@@ -1407,13 +1341,12 @@ export async function searchVerbImages(verbData, selectedMeaning, options = {}) 
   const pageSize = options.pageSize || 6;
   const searchTerms = buildVerbImageQueryEntries(verbData, selectedMeaning);
 
-  const [brave, openverse, commons] = await Promise.all([
-    searchFirstAvailable(searchBraveImages, searchTerms, pageSize),
+  const [openverse, commons] = await Promise.all([
     searchFirstAvailable(searchOpenverseImages, searchTerms, pageSize),
     searchFirstAvailable(searchWikimediaImages, searchTerms, pageSize),
   ]);
 
-  const combined = [...brave, ...openverse, ...commons]
+  const combined = [...openverse, ...commons]
     .map((result) => ({
       ...result,
       rankScore: rankVerbImageResult(result, { verbData, selectedMeaning }),

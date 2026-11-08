@@ -181,7 +181,7 @@ The lexical workflow is built around actual card types, not just dictionary look
 - adverbs are routed into sentence-form notes with short scene-based examples
 - verbs are routed into picture-word or sentence mode depending on how learnable they are from a single image
 
-If `braveApiKey` is configured, Brave image search is tried first, with Openverse and Wikimedia as fallbacks.
+For picture cards, the CLI opens Google Images and accepts an image URL or local path.
 
 During sentence previews, use `[R]eview` to tell AI what looks wrong and let it regenerate the draft.
 
@@ -297,7 +297,6 @@ Edit `~/.derdiedeck.json`:
   "googleTtsKeyFile": "",
   "googleApiKey": "",
   "googleTtsVoices": ["de-DE-Neural2-B", "de-DE-Neural2-C"],
-  "braveApiKey": "",
   "whisperModel": "base",
   "ttsSpeed": 0.9,
   "ttsNormalRate": 0.9,

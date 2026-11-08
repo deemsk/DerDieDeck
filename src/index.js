@@ -11,7 +11,7 @@ import { cutClip, parseTimestamp } from './lib/clipper.js';
 import { transcribe } from './lib/transcriber.js';
 import { enrich, reviewEnrichedText } from './enricher.js';
 import { checkConnection, ensureDeck, storeAudio, createNote, createNotes, getNoteTypes, getNoteFields, findSimilarCards, ensureDerDieDeckStyling } from './anki.js';
-import { config, CONFIG_PATH_DISPLAY, ACTIVE_CONFIG_PATH_DISPLAY, LEGACY_CONFIG_PATH_DISPLAY } from './lib/config.js';
+import { config, CONFIG_PATH_DISPLAY, ACTIVE_CONFIG_PATH_DISPLAY, LEGACY_CONFIG_PATH_DISPLAY, removeRetiredConfigSettings } from './lib/config.js';
 import { confirmCard, confirmCardSet } from './confirm.js';
 import { analyzeSentence, selectCards } from './analyzer.js';
 import { generateCards } from './cardTypes.js';
@@ -506,7 +506,7 @@ async function testIntegrations(options) {
   }
 
   // 1. Test yt-dlp
-  console.log(chalk.bold.blue('\n[1/8] yt-dlp'));
+  console.log(chalk.bold.blue('\n[1/7] yt-dlp'));
   try {
     const version = execSync('yt-dlp --version', { stdio: 'pipe' }).toString().trim();
     pass(`yt-dlp installed (${version})`);
@@ -526,7 +526,7 @@ async function testIntegrations(options) {
   }
 
   // 2. Test ffmpeg
-  console.log(chalk.bold.blue('\n[2/8] ffmpeg'));
+  console.log(chalk.bold.blue('\n[2/7] ffmpeg'));
   try {
     const version = execSync('ffmpeg -version', { stdio: 'pipe' }).toString().split('\n')[0];
     pass(`ffmpeg installed (${version.replace('ffmpeg version ', '').split(' ')[0]})`);
@@ -543,7 +543,7 @@ async function testIntegrations(options) {
   }
 
   // 3. Test whisper-cli
-  console.log(chalk.bold.blue('\n[3/8] whisper-cli'));
+  console.log(chalk.bold.blue('\n[3/7] whisper-cli'));
   try {
     execSync('which whisper-cli', { stdio: 'pipe' });
     pass('whisper-cli installed');
@@ -562,7 +562,7 @@ async function testIntegrations(options) {
   }
 
   // 4. Test eSpeak NG fallback IPA
-  console.log(chalk.bold.blue('\n[4/8] eSpeak NG fallback IPA'));
+  console.log(chalk.bold.blue('\n[4/7] eSpeak NG fallback IPA'));
   try {
     const ipaBinary = config.ipaBinary || 'espeak-ng';
     const version = execFileSync(ipaBinary, ['--version'], { stdio: 'pipe' }).toString().split('\n')[0];
@@ -580,7 +580,7 @@ async function testIntegrations(options) {
   }
 
   // 5. Test OpenAI API
-  console.log(chalk.bold.blue('\n[5/8] OpenAI API'));
+  console.log(chalk.bold.blue('\n[5/7] OpenAI API'));
   const rawOpenAiKey = config.openaiApiKey || process.env.OPENAI_API_KEY;
   if (!rawOpenAiKey) {
     fail('OpenAI API key not set', `Add to ${CONFIG_PATH_DISPLAY} or set OPENAI_API_KEY env var`);
@@ -614,7 +614,7 @@ async function testIntegrations(options) {
   }
 
   // 6. Test AnkiConnect
-  console.log(chalk.bold.blue('\n[6/8] AnkiConnect'));
+  console.log(chalk.bold.blue('\n[6/7] AnkiConnect'));
   if (await checkConnection()) {
     pass('AnkiConnect is running');
 
@@ -679,35 +679,8 @@ async function testIntegrations(options) {
     console.log(chalk.dim('  3. Restart Anki'));
   }
 
-  // 7. Test Brave Search API
-  console.log(chalk.bold.blue('\n[7/8] Brave Search API'));
-  const rawBraveKey = config.braveApiKey || process.env.BRAVE_SEARCH_API_KEY;
-  if (!rawBraveKey) {
-    console.log(chalk.dim('  ⚠ Brave API key not set (optional — used for image search in word mode)'));
-    console.log(chalk.dim(`  Add braveApiKey to ${CONFIG_PATH_DISPLAY} or set BRAVE_SEARCH_API_KEY`));
-  } else {
-    pass('Brave API key found');
-
-    try {
-      const apiKey = await resolveSecret(rawBraveKey);
-      const url = new URL('https://api.search.brave.com/res/v1/images/search');
-      url.searchParams.set('q', 'Hund');
-      url.searchParams.set('count', '1');
-      const response = await fetch(url, {
-        headers: { 'Accept-Encoding': 'gzip', 'X-Subscription-Token': apiKey },
-      });
-      if (response.ok) {
-        pass('Brave Search API connected');
-      } else {
-        fail(`Brave Search API error: HTTP ${response.status}`, 'Check your API key at https://api.search.brave.com/');
-      }
-    } catch (err) {
-      fail(`Brave Search API error: ${err.message}`);
-    }
-  }
-
-  // 8. Test Google TTS
-  console.log(chalk.bold.blue('\n[8/8] Google TTS'));
+  // 7. Test Google TTS
+  console.log(chalk.bold.blue('\n[7/7] Google TTS'));
   try {
     const { TextToSpeechClient } = await import('@google-cloud/text-to-speech');
     let clientOptions = {};
@@ -796,7 +769,6 @@ async function initConfig() {
     ipaBinary: 'espeak-ng',
     ipaVoice: 'de',
     ipaFallbackToModel: true,
-    braveApiKey: '',
     whisperModel: 'base',
   };
 
@@ -804,7 +776,7 @@ async function initConfig() {
   if (LEGACY_CONFIG_PATH_DISPLAY !== configPath) {
     try {
       const legacyContent = await readFile(LEGACY_CONFIG_PATH_DISPLAY, 'utf-8');
-      initialConfig = { ...defaultConfig, ...JSON.parse(legacyContent) };
+      initialConfig = { ...defaultConfig, ...removeRetiredConfigSettings(JSON.parse(legacyContent)) };
       console.log(chalk.dim(`Migrating settings from legacy config: ${LEGACY_CONFIG_PATH_DISPLAY}`));
     } catch {
       // No legacy config or unreadable legacy config; keep defaults.
@@ -829,7 +801,6 @@ async function initConfig() {
   console.log(chalk.dim('  ipaBinary     - IPA command (default: espeak-ng)'));
   console.log(chalk.dim('  ipaVoice      - eSpeak voice for IPA (default: de)'));
   console.log(chalk.dim('  ipaFallbackToModel - Use model IPA if eSpeak is unavailable (default: true)'));
-  console.log(chalk.dim('  braveApiKey   - Brave Search API key for image search (optional)'));
   console.log(chalk.dim('  whisperModel  - Whisper model size (default: base)'));
   console.log(chalk.dim('  dataDir       - Cache folder for audio (default: system temp)\n'));
 }
@@ -849,10 +820,6 @@ async function showConfig() {
   if (displayConfig.openaiApiKey) {
     const k = displayConfig.openaiApiKey;
     displayConfig.openaiApiKey = k.startsWith('op://') ? k : k.slice(0, 7) + '...' + k.slice(-4);
-  }
-  if (displayConfig.braveApiKey) {
-    const k = displayConfig.braveApiKey;
-    displayConfig.braveApiKey = k.startsWith('op://') ? k : k.slice(0, 7) + '...' + k.slice(-4);
   }
 
   for (const [key, value] of Object.entries(displayConfig)) {

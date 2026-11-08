@@ -8,6 +8,11 @@ const OPENAI_ROLE_MODEL_KEYS = [
   'openaiUtilityModel',
 ];
 
+export function removeRetiredConfigSettings(userConfig = {}) {
+  const { braveApiKey: _retiredImageKey, ...supported } = userConfig;
+  return supported;
+}
+
 export function migrateLegacyOpenAIModelSettings(userConfig = {}) {
   const migrated = { ...userConfig };
   const legacyModel = String(migrated.openaiModel || '').trim();
@@ -76,8 +81,6 @@ const defaults = {
   googleApiKey: '',                                        // 1Password reference, e.g. op://Personal/Google TTS Key/credential
   googleTtsVoices: ['de-DE-Neural2-B', 'de-DE-Neural2-C'],  // Male, Female
 
-  // Brave Search API (optional)
-  braveApiKey: '',
 
   // Audio
   audioFormat: 'mp3',
@@ -112,7 +115,7 @@ function loadConfig() {
     }
   }
 
-  return { ...defaults, ...migrateLegacyOpenAIModelSettings(userConfig) };
+  return { ...defaults, ...migrateLegacyOpenAIModelSettings(removeRetiredConfigSettings(userConfig)) };
 }
 
 /**

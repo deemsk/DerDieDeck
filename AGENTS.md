@@ -106,7 +106,7 @@ Audio/pronunciation:
 
 Images:
 - Imageable lexical cards use `resolveImageAsset` after user confirmation.
-- Brave image search is preferred when configured, with Openverse/Wikimedia fallbacks in `wordSources`.
+- The interactive workflow opens Google Images. Openverse and Wikimedia search helpers are available in `wordSources`.
 
 Config:
 - Preferred config is `~/.derdiedeck.json`; legacy `~/.yt2anki.json` may still be read.

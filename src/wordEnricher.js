@@ -150,8 +150,9 @@ Rules:
 - Russian glosses should be concise and represent a single intended sense.
 - Russian glosses must preserve distinctions from common German near-synonyms. Add a concise qualifier when a broad direct translation would hide differences in meaning, usage, register, argument structure, state versus action, direction, or typical construction.
 - English glosses are metadata and may be used only as a fallback for search.
-- imageSearchTerms must be written primarily in German, ordered from best visual search to broadest fallback.
-- Use English search phrases only as a last resort when there is no natural German phrase.
+- imageSearchTerms should describe concrete visible scenes that communicate the selected meaning, ordered by visual usefulness.
+- For abstract concepts use recognizable visual metaphors, e.g. Vertrauen: "trust fall photography", "child holding parent hand photography", or equivalent German queries.
+- Use German or English according to which yields a useful visual scene. Prefer photographs; avoid searches likely to return text, vocabulary cards, definitions or diagrams.
 - Prefer prototypical everyday depictions over scenic/background scenes, unless the noun itself is a scene or natural phenomenon like "der Himmel".
 - For substances like water, milk, coffee, beer, etc., prefer container/use views such as "Glas Wasser", "Flasche Wasser", or "Leitungswasser", not landscapes or lakes.
 - For adjectives, imageSearchTerms should describe concrete scenes or contrasts, not just the dictionary label.

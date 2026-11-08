@@ -4,9 +4,14 @@ import {
   OPENAI_MODEL_ROLES,
   withOpenAIModel,
 } from '../src/lib/openaiModels.js'
-import { migrateLegacyOpenAIModelSettings } from '../src/lib/config.js'
+import { migrateLegacyOpenAIModelSettings, removeRetiredConfigSettings } from '../src/lib/config.js'
 
 describe('OpenAI model roles', () => {
+  test('drops the retired image search key without changing other settings', () => {
+    const original = { braveApiKey: 'old-secret', ankiDeck: 'Deutsch' }
+    expect(removeRetiredConfigSettings(original)).toEqual({ ankiDeck: 'Deutsch' })
+    expect(original.braveApiKey).toBe('old-secret')
+  })
   test('maps content, validation, and utility work to separate GPT-5.6 tiers', () => {
     expect(getOpenAIModel(OPENAI_MODEL_ROLES.generation)).toBe('gpt-5.6-terra')
     expect(getOpenAIModel(OPENAI_MODEL_ROLES.validation)).toBe('gpt-5.6-sol')

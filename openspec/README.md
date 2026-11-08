@@ -69,7 +69,7 @@ original languages when they are part of the behavior being specified.
 | GAP-04 | Packages have no shared transaction | [anki.js](../src/anki.js), [verbMode.js](../src/verbMode.js), and [grammarMode.js](../src/grammarMode.js) write notes sequentially. Errors may leave partial packages and uploaded media. Automatic completion of a partial package is not guaranteed; an early lemma check may stop a retry. |
 | GAP-05 | The lexical batch summary counts successful source units | [processLexicalCommand](../src/lexicalMode.js) increments its counter once per successful workflow, even when that workflow creates multiple notes. The “lexical notes” label does not represent the actual note or card count. |
 | GAP-06 | Sibling-stage tags do not schedule cards | [learningDesign.js](../src/cardContent/learningDesign.js) generates stage tags. Adding a package does not itself postpone cards or distribute them across days. |
-| GAP-07 | Image selection in the current user workflow is manual | [chooseGoogleImage](../src/wordConfirm.js) opens Google Images and accepts a URL or local path. Brave/Openverse/Wikimedia helpers in [wordSources.js](../src/lib/wordSources.js) do not mean that the primary CLI automatically displays their results. |
+| GAP-07 | Image selection in the current user workflow is manual | [chooseGoogleImage](../src/wordConfirm.js) opens Google Images and accepts a URL or local path. Openverse/Wikimedia helpers in [wordSources.js](../src/lib/wordSources.js) do not mean that the primary CLI automatically displays their results. |
 
 These observations are not implementation tasks within the initial specification.
 Changing any of them requires a separate change.

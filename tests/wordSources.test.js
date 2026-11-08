@@ -2,17 +2,31 @@ import { config } from "../src/lib/config.js"
 import { buildGoogleImagesUrl, buildVerbGoogleImagesSearch, buildVerbImageSearchTerms, buildWordGoogleImagesSearch, buildWordImageSearchTerms, resolveWordPronunciation, searchVerbImages, searchWordImages } from "../src/lib/wordSources.js"
 
 describe("word image sources", () => {
-  const originalFetch = global.fetch
-  let originalBraveSearchApiKey
-
-  beforeEach(() => {
-    originalBraveSearchApiKey = config.braveApiKey
-    config.braveApiKey = ""
+  test('uses visual scenes for trust without mistaking confidence for an ID document', () => {
+    const search = buildWordGoogleImagesSearch({ bareNoun: 'Vertrauen' }, {
+      english: 'trust, confidence', imageSearchTerms: ['trust fall photography', 'child holding parent hand photography'],
+    })
+    expect(search.query).toBe('trust fall photography')
+    expect(search.queryVariants).not.toContain('Vertrauen ausfüllen')
   })
+
+  test('does not repeat a visual scene for any image provider', async () => {
+    const requests = []
+    global.fetch = async url => {
+      requests.push(new URL(url))
+      return { ok: true, async json() { return { results: [], query: { pages: [] } } } }
+    }
+    const scene = 'child holding parent hand photography'
+    await searchWordImages({ bareNoun: 'Vertrauen' }, { english: 'trust', imageSearchTerms: [scene] })
+    for (const [host, param] of [['api.openverse.org', 'q'], ['commons.wikimedia.org', 'gsrsearch']]) {
+      expect(requests.filter(url => url.hostname === host && url.searchParams.get(param) === scene)).toHaveLength(1)
+    }
+  })
+
+  const originalFetch = global.fetch
 
   afterEach(() => {
     global.fetch = originalFetch
-    config.braveApiKey = originalBraveSearchApiKey
   })
 
   test("buildWordImageSearchTerms prefers specific visual queries before broad fallbacks", () => {
@@ -146,6 +160,15 @@ describe("word image sources", () => {
     expect(terms).toContain("big")
   })
 
+  test('opens the first adjective scene regardless of its language without repeating it', () => {
+    const word = { lexicalType: 'adjective', canonical: 'groß', lemma: 'groß', anchorPhrase: 'großer Hund' }
+    const scene = 'large dog next to small dog'
+    const meaning = { english: 'big', imageSearchTerms: [scene, 'großer Hund neben kleinem Hund'] }
+    const search = buildWordGoogleImagesSearch(word, meaning)
+    expect(search.query).toBe(scene)
+    expect(buildWordImageSearchTerms(word, meaning).filter(term => term === scene)).toHaveLength(1)
+  })
+
   test("buildVerbImageSearchTerms keeps German action queries ahead of fallbacks", () => {
     const terms = buildVerbImageSearchTerms(
       { infinitive: "laufen", displayForm: "läuft" },
@@ -163,14 +186,6 @@ describe("word image sources", () => {
   test("searchWordImages prefers prototypical specific results over scenic broad matches", async () => {
     global.fetch = async (url) => {
       const parsed = new URL(url)
-      if (parsed.hostname === "api.search.brave.com") {
-        return {
-          ok: true,
-          async json() {
-            return { results: [] }
-          },
-        }
-      }
       const openverseQuery = parsed.searchParams.get("q")
       const commonsQuery = parsed.searchParams.get("gsrsearch")
       const query = openverseQuery || commonsQuery
@@ -396,121 +411,13 @@ describe("word image sources", () => {
     )
   })
 
-  test("searchWordImages includes Brave image results first when configured", async () => {
-    global.fetch = async (url) => {
-      const parsed = new URL(url)
 
-      if (parsed.hostname === "api.search.brave.com") {
-        return {
-          ok: true,
-          async json() {
-            return {
-              results: [
-                {
-                  title: "Glass of water in a bottle and cup",
-                  source: "images.example.com",
-                  page_url: "https://images.example.com/water",
-                  thumbnail: {
-                    src: "https://img.example/brave-water-thumb.jpg",
-                  },
-                  properties: {
-                    url: "https://img.example/brave-water.jpg",
-                  },
-                },
-              ],
-            }
-          },
-        }
-      }
-
-      if (parsed.hostname === "api.openverse.org") {
-        return {
-          ok: true,
-          async json() {
-            return { results: [] }
-          },
-        }
-      }
-
-      return {
-        ok: true,
-        async json() {
-          return { query: { pages: [] } }
-        },
-      }
-    }
-
-    config.braveApiKey = "test-key"
-
-    const results = await searchWordImages(
-      { bareNoun: "Wasser" },
-      {
-        english: "water",
-        imageSearchTerms: ["Glas Wasser", "Wasser"],
-      },
-      { pageSize: 6, total: 6 }
-    )
-
-    expect(results[0]).toEqual(
-      expect.objectContaining({
-        source: "Brave Images",
-        title: "Glass of water in a bottle and cup",
-      })
-    )
-  })
-
-  test("searchWordImages uses German Brave locale for German Apotheke queries", async () => {
-    const braveRequests = []
-
-    global.fetch = async (url) => {
-      const parsed = new URL(url)
-
-      if (parsed.hostname === "api.search.brave.com") {
-        braveRequests.push({
-          q: parsed.searchParams.get("q"),
-          search_lang: parsed.searchParams.get("search_lang"),
-          country: parsed.searchParams.get("country"),
-        })
-        return {
-          ok: true,
-          async json() {
-            return { results: [] }
-          },
-        }
-      }
-
-      return {
-        ok: true,
-        async json() {
-          return { query: { pages: [] }, results: [] }
-        },
-      }
-    }
-
-    config.braveApiKey = "test-key"
-
-    await searchWordImages(
-      { bareNoun: "Apotheke" },
-      {
-        english: "pharmacy",
-        imageSearchTerms: ["Apotheke"],
-      },
-      { pageSize: 6, total: 6 }
-    )
-
-    const apothekeRequest = braveRequests.find((request) => request.q === "Apotheke Schild")
-    expect(apothekeRequest).toEqual({
-      q: "Apotheke Schild",
-      search_lang: "de",
-      country: "de",
-    })
-  })
 
   test("searchWordImages prefers German Apotheke imagery over generic pharmacy results", async () => {
     global.fetch = async (url) => {
       const parsed = new URL(url)
 
-      if (parsed.hostname === "api.search.brave.com") {
+      if (parsed.hostname === "api.openverse.org") {
         const query = parsed.searchParams.get("q")
 
         if (query === "Apotheke Schild") {
@@ -523,15 +430,15 @@ describe("word image sources", () => {
                     title: "Apotheke Schild in Berlin",
                     source: "apotheke.de",
                     page_url: "https://www.apotheke.de/berlin",
-                    thumbnail: { src: "https://img.example/apotheke-sign.jpg" },
-                    properties: { url: "https://img.example/apotheke-sign-full.jpg" },
+                    thumbnail: "https://img.example/apotheke-sign.jpg",
+                    url: "https://img.example/apotheke-sign-full.jpg",
                   },
                   {
                     title: "Pharmacy storefront",
                     source: "walgreens.com",
                     page_url: "https://www.walgreens.com/storelocator",
-                    thumbnail: { src: "https://img.example/pharmacy-store.jpg" },
-                    properties: { url: "https://img.example/pharmacy-store-full.jpg" },
+                    thumbnail: "https://img.example/pharmacy-store.jpg",
+                    url: "https://img.example/pharmacy-store-full.jpg",
                   },
                 ],
               }
@@ -555,7 +462,6 @@ describe("word image sources", () => {
       }
     }
 
-    config.braveApiKey = "test-key"
 
     const results = await searchWordImages(
       { bareNoun: "Apotheke" },
@@ -578,7 +484,7 @@ describe("word image sources", () => {
     global.fetch = async (url) => {
       const parsed = new URL(url)
 
-      if (parsed.hostname === "api.search.brave.com") {
+      if (parsed.hostname === "api.openverse.org") {
         const query = parsed.searchParams.get("q")
 
         if (query === "Montag Kalender deutsch") {
@@ -591,15 +497,15 @@ describe("word image sources", () => {
                     title: "Montag Kalenderblatt auf deutsch",
                     source: "kalender.example.de",
                     page_url: "https://kalender.example.de/montag",
-                    thumbnail: { src: "https://img.example/montag.jpg" },
-                    properties: { url: "https://img.example/montag-full.jpg" },
+                    thumbnail: "https://img.example/montag.jpg",
+                    url: "https://img.example/montag-full.jpg",
                   },
                   {
                     title: "Monday calendar page printable",
                     source: "calendar.example.com",
                     page_url: "https://calendar.example.com/monday",
-                    thumbnail: { src: "https://img.example/monday.jpg" },
-                    properties: { url: "https://img.example/monday-full.jpg" },
+                    thumbnail: "https://img.example/monday.jpg",
+                    url: "https://img.example/monday-full.jpg",
                   },
                 ],
               }
@@ -623,7 +529,6 @@ describe("word image sources", () => {
       }
     }
 
-    config.braveApiKey = "test-key"
 
     const results = await searchWordImages(
       { bareNoun: "Montag" },
@@ -646,7 +551,7 @@ describe("word image sources", () => {
     global.fetch = async (url) => {
       const parsed = new URL(url)
 
-      if (parsed.hostname === "api.search.brave.com") {
+      if (parsed.hostname === "api.openverse.org") {
         const query = parsed.searchParams.get("q")
         if (query === "Mann läuft") {
           return {
@@ -658,15 +563,15 @@ describe("word image sources", () => {
                     title: "Mann läuft im Park",
                     source: "laufen.example.de",
                     page_url: "https://laufen.example.de/park",
-                    thumbnail: { src: "https://img.example/laufen.jpg" },
-                    properties: { url: "https://img.example/laufen-full.jpg" },
+                    thumbnail: "https://img.example/laufen.jpg",
+                    url: "https://img.example/laufen-full.jpg",
                   },
                   {
                     title: "Run icon symbol",
                     source: "icons.example.com",
                     page_url: "https://icons.example.com/run",
-                    thumbnail: { src: "https://img.example/run-icon.jpg" },
-                    properties: { url: "https://img.example/run-icon-full.jpg" },
+                    thumbnail: "https://img.example/run-icon.jpg",
+                    url: "https://img.example/run-icon-full.jpg",
                   },
                 ],
               }
@@ -690,7 +595,6 @@ describe("word image sources", () => {
       }
     }
 
-    config.braveApiKey = "test-key"
 
     const results = await searchVerbImages(
       { infinitive: "laufen", displayForm: "läuft" },
@@ -712,15 +616,6 @@ describe("word image sources", () => {
   test("searchWordImages diversifies first-page milk results across visual archetypes", async () => {
     global.fetch = async (url) => {
       const parsed = new URL(url)
-
-      if (parsed.hostname === "api.search.brave.com") {
-        return {
-          ok: true,
-          async json() {
-            return { results: [] }
-          },
-        }
-      }
 
       if (parsed.hostname === "api.openverse.org") {
         const query = parsed.searchParams.get("q")

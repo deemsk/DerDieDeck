@@ -37,7 +37,7 @@ describe("verb note helpers", () => {
       }),
       frequencyBand: "core",
       lemma: "laufen",
-      imageSource: "Brave Images",
+      imageSource: "Google Images",
       audioSource: "Google TTS",
       lexicalType: "verb",
       modelName: "2. Picture Words",
