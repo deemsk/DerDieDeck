@@ -1,7 +1,20 @@
 import { jest } from "@jest/globals"
-import { chooseMeaning, chooseWordSentence, confirmChangedClozeExample, formatWordDictionarySummary, showWordDictionarySummary } from "../src/wordConfirm.js"
+import { chooseMeaning, chooseWordSentence, confirmChangedClozeExample, confirmWordSelection, confirmSentenceWordSelection, formatWordDictionarySummary, showWordDictionarySummary } from "../src/wordConfirm.js"
 
 describe("word confirmation helpers", () => {
+  test.each(['picture', 'sentence'])('does not dismiss the %s preview for an invalid choice', async (route) => {
+    const askInput = jest.fn().mockResolvedValueOnce('ф').mockResolvedValueOnce('a')
+    const log = jest.spyOn(console, 'log').mockImplementation(() => {})
+    const common = { wordData: { canonical: 'Gefängnis', lexicalType: 'noun' }, selectedMeaning: { russian: 'тюрьма' }, duplicateInfo: { headwordMatches: [] }, autoPlay: false, askInput }
+    try {
+      const result = route === 'picture'
+        ? await confirmWordSelection({ ...common, frequencyInfo: { bandLabel: 'Core' }, audioSource: 'test' })
+        : await confirmSentenceWordSelection({ ...common, sentenceData: { german: 'Das Gefängnis ist groß.' } })
+      expect(result.confirmed).toBe(true)
+      expect(askInput).toHaveBeenCalledTimes(2)
+      expect(log.mock.calls.flat()).toContain('Unrecognized choice. Please try again.')
+    } finally { log.mockRestore() }
+  })
   test('retains a German example until enrichment can translate it', async () => {
     const example = { german: 'Der Kaffee ist heiß.', russian: '' }
     expect(await chooseWordSentence({ canonical: 'heiß', lexicalType: 'adjective', exampleSentences: [example] })).toEqual(example)

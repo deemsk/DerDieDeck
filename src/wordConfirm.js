@@ -646,6 +646,7 @@ export async function confirmWordSelection({
   audioPath,
   theme,
   autoPlay = true,
+  askInput = ask,
 }) {
   let personalConnection = null;
 
@@ -698,7 +699,7 @@ export async function confirmWordSelection({
 
   while (true) {
     await showPreview();
-    const answer = await ask('[A]dd, [L]isten, [P]ersonal connection, [D]ismiss: ');
+    const answer = await askInput('[A]dd, [L]isten, [P]ersonal connection, [D]ismiss: ');
     const normalized = answer.toLowerCase();
 
     if (normalized === '' || normalized === 'a' || normalized === 'add') {
@@ -716,12 +717,13 @@ export async function confirmWordSelection({
     }
 
     if (normalized === 'p' || normalized === 'personal') {
-      const connection = await ask('Personal connection (optional, Enter clears): ');
+      const connection = await askInput('Personal connection (optional, Enter clears): ');
       personalConnection = connection || null;
       continue;
     }
 
-    return { confirmed: false, personalConnection: null };
+    if (normalized === 'd' || normalized === 'dismiss') return { confirmed: false, personalConnection: null };
+    console.log('Unrecognized choice. Please try again.');
   }
 }
 
@@ -736,6 +738,7 @@ export async function confirmSentenceWordSelection({
   audioPath,
   similarCards = [],
   autoPlay = true,
+  askInput = ask,
 }) {
   if (autoPlay && audioPath) {
     try {
@@ -788,7 +791,7 @@ export async function confirmSentenceWordSelection({
       });
     }
 
-    const answer = await ask('[A]dd, [L]isten, [R]eview, [D]ismiss: ');
+    const answer = await askInput('[A]dd, [L]isten, [R]eview, [D]ismiss: ');
     const normalized = answer.toLowerCase();
 
     if (normalized === '' || normalized === 'a' || normalized === 'add') {
@@ -813,6 +816,7 @@ export async function confirmSentenceWordSelection({
       return { confirmed: false, reviewFeedback: feedback };
     }
 
-    return { confirmed: false };
+    if (normalized === 'd' || normalized === 'dismiss') return { confirmed: false };
+    console.log('Unrecognized choice. Please try again.');
   }
 }

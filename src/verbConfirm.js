@@ -272,7 +272,8 @@ export async function confirmPictureVerbSelection({
       continue;
     }
 
-    return { confirmed: false, personalConnection: null, addDictionaryForm: false };
+    if (normalized === 'd' || normalized === 'dismiss') return { confirmed: false, personalConnection: null, addDictionaryForm: false };
+    write('Unrecognized choice. Please try again.');
   }
 }
 
@@ -357,7 +358,8 @@ export async function confirmSentenceVerbSelection({
       return { confirmed: false, addDictionaryForm: dictionaryFormEnabled, reviewFeedback: feedback };
     }
 
-    return { confirmed: false, addDictionaryForm: false };
+    if (normalized === 'd' || normalized === 'dismiss') return { confirmed: false, addDictionaryForm: false };
+    write('Unrecognized choice. Please try again.');
   }
 }
 

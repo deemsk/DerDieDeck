@@ -12,6 +12,17 @@ jest.unstable_mockModule("../src/verbSentenceValidation.js", () => ({ reviewVerb
 const { chooseVerbSentence, confirmPictureVerbSelection, confirmSentenceVerbSelection, filterVerbExampleSentences, formatExistingInfinitiveNotice, formatVerbPreviewSummary, resolveVerbFocusForm } = await import("../src/verbConfirm.js")
 
 describe("verb preview helpers", () => {
+  test.each(['picture', 'sentence'])('does not dismiss the %s preview for an invalid choice', async route => {
+    const askInput = jest.fn().mockResolvedValueOnce('ф').mockResolvedValueOnce('a')
+    const write = jest.fn()
+    const common = { verbData: { infinitive: 'gehen' }, selectedMeaning: { russian: 'идти' }, autoPlay: false, askInput, write }
+    const result = route === 'picture'
+      ? await confirmPictureVerbSelection({ ...common, frequencyInfo: { bandLabel: 'Core' }, duplicateInfo: { headwordMatches: [] } })
+      : await confirmSentenceVerbSelection({ ...common, sentenceData: { german: 'Ich gehe.' } })
+    expect(result.confirmed).toBe(true)
+    expect(askInput).toHaveBeenCalledTimes(2)
+    expect(write).toHaveBeenCalledWith('Unrecognized choice. Please try again.')
+  })
   beforeEach(() => { mockPlayAudio.mockClear(); mockReviewExamples.mockReset().mockImplementation(async (_target, examples) => examples) })
   const fakeChalk = {
     bold: {
