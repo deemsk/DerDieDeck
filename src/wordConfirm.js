@@ -382,6 +382,7 @@ export async function chooseMeaning(wordData, preferredMeaning = null, promptOve
       russian: preferredMeaning,
       english: wordData.meanings[0].english || getWordLemma(wordData),
       imageSearchTerms: [getWordLemma(wordData)],
+      userProvided: true,
     };
   }
 
@@ -434,7 +435,7 @@ export async function chooseMeaning(wordData, preferredMeaning = null, promptOve
     if (answer === 'e' || answer === 'edit') {
       const edited = await askInput(editPrompt);
       if (!edited) continue;
-      return { russian: edited, english: wordData.meanings[0].english || getWordLemma(wordData), imageSearchTerms: [getWordLemma(wordData)] };
+      return { russian: edited, english: wordData.meanings[0].english || getWordLemma(wordData), imageSearchTerms: [getWordLemma(wordData)], userProvided: true };
     }
     if (/^\d+$/.test(answer)) {
       const index = Number(answer) - 1;
@@ -529,15 +530,9 @@ export async function chooseImage(wordData, meaning, candidates) {
 export async function chooseGoogleImage(wordData, meaning, googleSearch = {}) {
   const searchUrl = googleSearch.url;
   const query = googleSearch.query || wordData.canonical;
-  const variants = Array.isArray(googleSearch.queryVariants)
-    ? googleSearch.queryVariants.filter(Boolean)
-    : [];
 
   console.log();
   console.log(`Opening Google Images for ${wordData.canonical}${meaning?.russian ? ` (${meaning.russian})` : ''}: ${query}`);
-  if (variants.length > 1) {
-    console.log(chalk.dim(`Other useful queries: ${variants.slice(1, 4).join(' · ')}`));
-  }
 
   if (searchUrl) {
     try {

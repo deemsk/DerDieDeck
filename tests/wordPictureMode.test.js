@@ -6,6 +6,8 @@ const mockChooseMeaning = jest.fn(async () => ({
 }))
 
 const mockChooseGoogleImage = jest.fn(async () => null)
+const mockPrepareImageSearch = jest.fn(async ({ target }) => ({ query: target, url: 'https://images.google.com/search' }))
+jest.unstable_mockModule('../src/contextualImageSearch.js', () => ({ prepareContextualImageSearch: mockPrepareImageSearch, senseSpecificFallback: m => m.imageSearchTerms?.[0] || m.english || '' }))
 const mockBuildWordGoogleImagesSearch = jest.fn(() => ({
   query: "ziemlich",
   url: "https://images.google.com/search?tbm=isch&q=ziemlich",
@@ -141,10 +143,7 @@ describe("word mode picture flow", () => {
     expect(mockConfirmWordSelection.mock.invocationCallOrder[0]).toBeLessThan(
       mockChooseGoogleImage.mock.invocationCallOrder[0]
     )
-    expect(mockBuildWordGoogleImagesSearch).toHaveBeenCalledWith(
-      expect.objectContaining({ canonical: "ziemlich" }),
-      expect.objectContaining({ russian: "довольно" })
-    )
+    expect(mockPrepareImageSearch).toHaveBeenCalledWith(expect.objectContaining({ target: 'ziemlich', meaning: 'довольно' }))
     expect(mockChooseGoogleImage).toHaveBeenCalled()
     expect(mockStoreMedia).not.toHaveBeenCalled()
     expect(mockStoreAudio).toHaveBeenCalled()

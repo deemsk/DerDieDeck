@@ -1,5 +1,6 @@
 import { runExamplePipeline, sameGermanExample } from './examplePipeline.js';
 import { reviewExamplePair } from './exampleReview.js';
+import { prepareContextualImageSearch, senseSpecificFallback } from './contextualImageSearch.js';
 import { containsVerbForm } from './cardContent/verbFormExplanation.js';
 import { prepareAdjectiveForm, validateAdjectiveFormSentence } from './adjectiveFormEnricher.js';
 import { reviewClozeAlternatives } from './clozeAlternativeReview.js';
@@ -36,7 +37,7 @@ import {
   confirmWordSelection,
   showWordDictionarySummary,
 } from './wordConfirm.js';
-import { buildWordGoogleImagesSearch, resolveImageAsset } from './lib/wordSources.js';
+import { resolveImageAsset } from './lib/wordSources.js';
 import { resolveLearnerProfileForInput } from './knowledgeProfile/index.js';
 import { preparePronunciation, prepareSentenceAudio } from './lib/audioPreparation.js';
 import {
@@ -260,7 +261,8 @@ async function buildWordSentenceAudio(sentence, spinner) {
 
 async function choosePictureWordImage(prepared, spinner) {
   const { wordData, selectedMeaning } = prepared;
-  const googleSearch = buildWordGoogleImagesSearch(wordData, selectedMeaning);
+  const googleSearch = await prepareContextualImageSearch({ target: wordData.canonical, meaning: selectedMeaning.russian,
+    example: getPrimaryExampleSentence(wordData), fallbackQuery: senseSpecificFallback(selectedMeaning, wordData.canonical, getPrimaryExampleSentence(wordData)), spinner });
   const imageChoice = await chooseGoogleImage(wordData, selectedMeaning, googleSearch);
   if (!imageChoice) {
     console.log(chalk.dim('Continuing without image.'));
@@ -270,9 +272,12 @@ async function choosePictureWordImage(prepared, spinner) {
 }
 
 async function chooseSentenceWordImage(prepared, spinner) {
-  const { wordData, selectedMeaning, chosenSentence } = prepared;
-  const imageSearchMeaning = buildSentenceImageMeaning(selectedMeaning, chosenSentence, wordData);
-  const googleSearch = buildWordGoogleImagesSearch(wordData, imageSearchMeaning);
+  const { wordData, selectedMeaning } = prepared;
+  const chosen = prepared.chosenSentence;
+  const fallbackQuery = sameGermanExample(chosen?.german, prepared.sentenceData?.german)
+    ? chosen?.imageBrief?.searchQuery || prepared.sentenceData?.german : prepared.sentenceData?.german;
+  const googleSearch = await prepareContextualImageSearch({ target: wordData.canonical, meaning: selectedMeaning.russian,
+    example: prepared.sentenceData, fallbackQuery, spinner });
   return chooseGoogleImage(wordData, selectedMeaning, googleSearch);
 }
 

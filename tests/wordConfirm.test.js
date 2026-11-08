@@ -196,3 +196,15 @@ test('does not treat a word gloss as the translation of a manually supplied sent
   const sentence = await chooseWordSentence({ canonical: 'gut', lexicalType: 'adjective', meanings: [{ russian: 'хороший' }], exampleSentences: [] }, 'Das Essen ist gut.')
   expect(sentence.russian).toBe('')
 })
+
+test('marks an unmatched preferred sense as user-provided', async () => {
+  const result = await chooseMeaning({ canonical: 'Schatz', meanings: [{ russian: 'клад', english: 'treasure' }] }, 'дорогой')
+  expect(result).toMatchObject({ russian: 'дорогой', userProvided: true })
+})
+
+test('marks an edited sense as user-provided', async () => {
+  const meanings = [{ russian: 'клад', english: 'treasure' }, { russian: 'сокровище', english: 'valuable' }]
+  const guidance = { options: meanings.map(meaning => ({ meaning, status: 'unknown', noteIds: [] })), recommendedIndex: null, collectionAvailable: true, assessmentAvailable: true }
+  const ask = jest.fn().mockResolvedValueOnce('e').mockResolvedValueOnce('дорогой')
+  expect(await chooseMeaning({ canonical: 'Schatz', meanings }, null, { guidance, ask, log: jest.fn() })).toMatchObject({ russian: 'дорогой', userProvided: true })
+})

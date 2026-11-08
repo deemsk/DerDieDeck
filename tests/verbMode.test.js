@@ -1,5 +1,8 @@
 import { jest } from "@jest/globals"
 
+const mockPrepareImageSearch = jest.fn(async ({ target }) => ({ query: target }))
+jest.unstable_mockModule('../src/contextualImageSearch.js', () => ({ prepareContextualImageSearch: mockPrepareImageSearch, senseSpecificFallback: m => m.imageSearchTerms?.[0] || m.english || '' }))
+
 const mockShowWordDictionarySummary = jest.fn()
 
 const mockChooseMeaning = jest.fn(async () => ({
@@ -966,6 +969,9 @@ describe("verb mode sentence flow", () => {
       expect.objectContaining({ id: 'form', kind: 'basic' }),
       expect.objectContaining({ id: 'lemma', kind: 'picture' }),
     ]))
+    expect(mockPrepareImageSearch).toHaveBeenCalledWith(expect.objectContaining({
+      example: { german: 'Ich möchte gehen.', russian: 'Я хочу это сделать.' },
+    }))
   })
 
   test("keeps the new form when a companion picture note becomes a duplicate", async () => {

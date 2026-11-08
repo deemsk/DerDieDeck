@@ -1,4 +1,5 @@
 import { runExamplePipeline, pairEnrichedExample, sameGermanExample } from './examplePipeline.js';
+import { prepareContextualImageSearch, senseSpecificFallback } from './contextualImageSearch.js';
 import { preparePronunciation, prepareSentenceAudio } from './lib/audioPreparation.js';
 import { prepareInfinitiveExample } from './verbFormEnricher.js';
 import { reviewVerbExamples } from './verbSentenceValidation.js';
@@ -26,7 +27,7 @@ import { enrichVerb, generateVerbFormSentence, hasStructuredVerbAnalysis, should
 import { shouldSuggestVerbInfinitive, suggestVerbInfinitives } from './verbCorrection.js';
 import { chooseGoogleImage, chooseMeaning, showWordDictionarySummary } from './wordConfirm.js';
 import { chooseVerbSentence, confirmPictureVerbSelection, confirmSentenceVerbSelection, confirmStrongVerbPackage, filterVerbExampleSentences, formatExistingInfinitiveNotice, formatVerbPreviewSummary, resolveVerbFocusForm } from './verbConfirm.js';
-import { buildVerbGoogleImagesSearch, resolveImageAsset, resolveWordPronunciation } from './lib/wordSources.js';
+import { resolveImageAsset, resolveWordPronunciation } from './lib/wordSources.js';
 import {
   checkConnection,
   ensureDeck,
@@ -313,9 +314,11 @@ async function verifyVerbExamplePair(sentence, verbData, selectedMeaning, focusF
   }
 }
 
-async function choosePictureVerbImage(prepared, spinner) {
+async function choosePictureVerbImage(prepared, spinner, exampleOverride = null) {
   const { verbData, selectedMeaning } = prepared;
-  const googleSearch = buildVerbGoogleImagesSearch(verbData, selectedMeaning);
+  const googleSearch = await prepareContextualImageSearch({ target: verbData.infinitive, meaning: selectedMeaning.russian,
+    example: exampleOverride || verbData.exampleSentences?.[0] || null,
+    fallbackQuery: senseSpecificFallback(selectedMeaning, verbData.infinitive, exampleOverride || verbData.exampleSentences?.[0]), spinner });
   const imageChoice = await chooseGoogleImage(
     { canonical: verbData.infinitive },
     selectedMeaning,
@@ -1059,7 +1062,7 @@ async function finalizePictureVerb(prepared, options, spinner) {
         addInfinitive = optional.confirmed;
         if (addInfinitive) {
           confirmation = { ...optional, addDictionaryForm: true };
-          imageChoice = await choosePictureVerbImage(prepared, spinner);
+          imageChoice = await choosePictureVerbImage(prepared, spinner, infinitiveExample);
         }
       } catch (error) {
         spinner.stop();

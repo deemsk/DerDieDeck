@@ -1,5 +1,8 @@
 import { jest } from "@jest/globals"
 
+const mockPrepareContextualImageSearch = jest.fn(async ({ target }) => ({ query: target }))
+jest.unstable_mockModule('../src/contextualImageSearch.js', () => ({ prepareContextualImageSearch: mockPrepareContextualImageSearch, senseSpecificFallback: m => m.imageSearchTerms?.[0] || m.english || '' }))
+
 const mockChooseMeaning = jest.fn(async () => ({
   russian: "большой",
   english: "big",
@@ -946,7 +949,10 @@ describe("word mode sentence flow", () => {
       "Use coffee instead.",
       expect.not.objectContaining({ includeImageBrief: true })
     )
-    expect(mockBuildWordGoogleImagesSearch).toHaveBeenCalledTimes(1)
+    expect(mockPrepareContextualImageSearch).toHaveBeenCalledTimes(1)
+    expect(mockPrepareContextualImageSearch).toHaveBeenCalledWith(expect.objectContaining({
+      example: expect.objectContaining({ german: 'Der Kaffee ist groß.' }), fallbackQuery: 'Der Kaffee ist groß.',
+    }))
     expect(mockChooseGoogleImage).toHaveBeenCalledTimes(1)
     expect(mockConfirmSentenceWordSelection.mock.invocationCallOrder[1]).toBeLessThan(
       mockChooseGoogleImage.mock.invocationCallOrder[0]
@@ -987,7 +993,7 @@ describe("word mode sentence flow", () => {
     })
 
     expect(added).toBe(true)
-    expect(mockBuildWordGoogleImagesSearch).toHaveBeenCalledTimes(1)
+    expect(mockPrepareContextualImageSearch).toHaveBeenCalledTimes(1)
     expect(mockChooseGoogleImage).toHaveBeenCalledTimes(1)
     expect(mockConfirmSentenceWordSelection.mock.invocationCallOrder[1]).toBeLessThan(
       mockChooseGoogleImage.mock.invocationCallOrder[0]

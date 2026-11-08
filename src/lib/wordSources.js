@@ -436,7 +436,7 @@ function isPlaceOrInstitution(wordData, selectedMeaning) {
     return true;
   }
 
-  return PLACE_OR_INSTITUTION_ENGLISH.some((term) => english.includes(term));
+  return PLACE_OR_INSTITUTION_ENGLISH.some((term) => english === term);
 }
 
 function hasAnyTerm(text, terms) {
@@ -788,7 +788,8 @@ export function buildGoogleImagesUrl(query = '') {
 }
 
 export function buildWordGoogleImagesSearch(wordData, selectedMeaning) {
-  const terms = buildWordImageSearchTerms(wordData, selectedMeaning);
+  const sceneTerms = dedupeTerms(selectedMeaning?.imageSearchTerms || []).filter(term => /\s/.test(term.trim()));
+  const terms = dedupeTerms([...sceneTerms, ...buildWordImageSearchTerms(wordData, selectedMeaning)]);
   const fallback = getWordLemma(wordData);
   const query = terms.find(Boolean) || fallback;
 

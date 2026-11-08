@@ -2,6 +2,18 @@ import { config } from "../src/lib/config.js"
 import { buildGoogleImagesUrl, buildVerbGoogleImagesSearch, buildVerbImageSearchTerms, buildWordGoogleImagesSearch, buildWordImageSearchTerms, resolveWordPronunciation, searchVerbImages, searchWordImages } from "../src/lib/wordSources.js"
 
 describe("word image sources", () => {
+  test('prioritizes a selected school class scene over institution templates', () => {
+    const word = { canonical: 'die Klasse', lemma: 'Klasse', lexicalType: 'noun' }
+    const meaning = { russian: 'школьный класс (группа учеников)', english: 'school class', imageSearchTerms: ['Schüler lernen gemeinsam im Klassenzimmer', 'group of schoolchildren in classroom'] }
+    const search = buildWordGoogleImagesSearch(word, meaning)
+    expect(search.query).toBe('Schüler lernen gemeinsam im Klassenzimmer')
+    expect(search.queryVariants).not.toContain('Klasse Schild')
+  })
+
+  test('does not infer an institution from the word school inside a different sense', () => {
+    const search = buildWordGoogleImagesSearch({ canonical: 'die Klasse', lemma: 'Klasse' }, { english: 'school class', imageSearchTerms: [] })
+    expect(search.queryVariants).not.toContain('Klasse Schild')
+  })
   test('uses visual scenes for trust without mistaking confidence for an ID document', () => {
     const search = buildWordGoogleImagesSearch({ bareNoun: 'Vertrauen' }, {
       english: 'trust, confidence', imageSearchTerms: ['trust fall photography', 'child holding parent hand photography'],
